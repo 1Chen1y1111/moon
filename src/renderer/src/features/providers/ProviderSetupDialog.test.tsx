@@ -1,6 +1,6 @@
 import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ProviderSetupDialog } from './ProviderSetupDialog'
 import { useSettingsStore } from '@renderer/lib/stores/settings-store'

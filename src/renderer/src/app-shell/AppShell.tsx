@@ -1,3 +1,6 @@
+import { ProviderSetupDialog } from '@renderer/features/providers/ProviderSetupDialog'
+import { SettingsDialog } from '@renderer/features/settings/SettingsDialog'
+
 import { LeftRail } from './LeftRail'
 import { WindowChrome } from './WindowChrome'
 
@@ -9,6 +12,8 @@ export function AppShell({ children }: { children: React.ReactNode }): React.JSX
         <LeftRail />
         <main className="min-h-0 flex-1 overflow-auto">{children}</main>
       </div>
+      <ProviderSetupDialog />
+      <SettingsDialog />
       <div id="modal-root" />
       <div id="popover-root" />
     </div>
