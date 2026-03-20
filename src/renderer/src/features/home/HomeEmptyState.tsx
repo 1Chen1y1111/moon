@@ -55,20 +55,14 @@ export function HomeEmptyState(): React.JSX.Element {
       </div>
 
       <div className="mx-auto flex w-full max-w-3xl justify-center">
-        <div className="w-full max-w-2xl rounded-[28px] border border-zinc-800/80 bg-zinc-900/75 p-3 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur">
-          <label className="sr-only" htmlFor="home-empty-composer">
-            Message composer
-          </label>
-          <textarea
-            id="home-empty-composer"
-            aria-label="Message composer"
-            className="min-h-24 w-full resize-none border-0 bg-transparent px-3 py-2 text-sm leading-6 text-zinc-300 outline-none placeholder:text-zinc-500"
-            placeholder="Message Moon..."
-            readOnly
-          />
+        <div
+          aria-hidden="true"
+          className="w-full max-w-2xl rounded-[28px] border border-zinc-800/80 bg-zinc-900/75 p-3 shadow-[0_24px_80px_rgba(0,0,0,0.45)] backdrop-blur"
+        >
+          <div className="min-h-24 px-3 py-2 text-sm leading-6 text-zinc-500">Message Moon...</div>
           <div className="flex items-center justify-between px-3 pb-1 pt-2 text-xs text-zinc-500">
             <span>Moon is ready when you are.</span>
-            <span>Enter to send</span>
+            <span>Composer coming soon</span>
           </div>
         </div>
       </div>

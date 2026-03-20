@@ -1,41 +1,56 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
+import { AppShell } from '@renderer/app-shell/AppShell'
 import { Button } from '@renderer/components/ui/button'
 import { HomeEmptyState } from './HomeEmptyState'
 
+function renderInShell(): void {
+  render(
+    <AppShell>
+      <HomeEmptyState />
+    </AppShell>
+  )
+}
+
 describe('HomeEmptyState', () => {
   it('renders the alma-style empty state actions and copy', () => {
-    render(<HomeEmptyState />)
+    renderInShell()
+    const section = screen.getByRole('region', { name: 'Home empty state' })
+    const scoped = within(section)
 
-    expect(screen.getByText('Moon')).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'How can I help you today?' })).toBeInTheDocument()
+    expect(scoped.getByText('Moon')).toBeInTheDocument()
+    expect(scoped.getByRole('heading', { name: 'How can I help you today?' })).toBeInTheDocument()
     expect(
-      screen.getByText('Start a fresh conversation, connect a provider, or adjust settings.')
+      scoped.getByText('Start a fresh conversation, connect a provider, or adjust settings.')
     ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'New Chat' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'New Chat' })).toHaveAttribute('type', 'button')
-    expect(screen.getByRole('button', { name: 'Configure Provider' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Configure Provider' })).toHaveAttribute(
+    expect(scoped.getByRole('button', { name: 'New Chat' })).toBeInTheDocument()
+    expect(scoped.getByRole('button', { name: 'New Chat' })).toHaveAttribute('type', 'button')
+    expect(scoped.getByRole('button', { name: 'Configure Provider' })).toBeInTheDocument()
+    expect(scoped.getByRole('button', { name: 'Configure Provider' })).toHaveAttribute(
       'type',
       'button'
     )
-    expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Settings' })).toHaveAttribute('type', 'button')
+    expect(scoped.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
+    expect(scoped.getByRole('button', { name: 'Settings' })).toHaveAttribute('type', 'button')
   })
 
-  it('uses shell-sized layout with centered content and a bottom composer', () => {
-    render(<HomeEmptyState />)
+  it('embeds into the app shell with a decorative bottom composer and no right rail', () => {
+    renderInShell()
 
     const section = screen.getByRole('region', { name: 'Home empty state' })
-    const composer = screen.getByRole('textbox', { name: 'Message composer' })
+    const shellMain = screen.getByRole('main')
+    const rails = screen.getAllByRole('complementary')
 
     expect(section).toHaveClass('min-h-full')
     expect(section).not.toHaveClass('min-h-screen')
     expect(section).not.toHaveClass('w-screen')
-    expect(composer).toHaveAttribute('placeholder', 'Message Moon...')
-    expect(composer).toHaveAttribute('readonly')
-    expect(screen.queryByRole('complementary')).not.toBeInTheDocument()
+    expect(shellMain).toContainElement(section)
+    expect(rails).toHaveLength(1)
+    expect(screen.getByRole('complementary', { name: 'Workspace navigation' })).toBeInTheDocument()
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+    expect(screen.getByText('Message Moon...')).toBeInTheDocument()
+    expect(screen.queryByText('Enter to send')).not.toBeInTheDocument()
   })
 
   it('defaults Button type to button when type is not provided', () => {
