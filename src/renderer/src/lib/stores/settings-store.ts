@@ -13,7 +13,6 @@ type SettingsState = {
     claude: ProviderDraft
   }
   setActiveSettingsSection: (section: SettingsSection) => void
-  updateProviderDraftField: (provider: 'claude', field: keyof ProviderDraft, value: string) => void
   saveProviderDraft: (provider: 'claude', draft: ProviderDraft) => void
 }
 
@@ -26,16 +25,6 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     }
   },
   setActiveSettingsSection: (section) => set({ activeSettingsSection: section }),
-  updateProviderDraftField: (provider, field, value) =>
-    set((state) => ({
-      providerDrafts: {
-        ...state.providerDrafts,
-        [provider]: {
-          ...state.providerDrafts[provider],
-          [field]: value
-        }
-      }
-    })),
   saveProviderDraft: (provider, draft) =>
     set((state) => ({
       providerDrafts: {

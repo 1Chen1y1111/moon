@@ -18,29 +18,47 @@ export function ProviderSetupDialog({
   onSubmit
 }: ProviderSetupDialogProps): React.JSX.Element | null {
   const isOpen = useUiStore((state) => state.isProviderSetupDialogOpen)
-  const closeDialog = useUiStore((state) => state.closeProviderSetupDialog)
   const claudeDraft = useSettingsStore((state) => state.providerDrafts.claude)
-  const updateProviderDraftField = useSettingsStore((state) => state.updateProviderDraftField)
-  const saveProviderDraft = useSettingsStore((state) => state.saveProviderDraft)
-  const [errors, setErrors] = useState<FormErrors>({})
 
   if (!isOpen) {
     return null
   }
 
+  return <ProviderSetupDialogContent initialValues={claudeDraft} onSubmit={onSubmit} />
+}
+
+type ProviderSetupDialogContentProps = ProviderSetupDialogProps & {
+  initialValues: {
+    apiKey: string
+    model: string
+  }
+}
+
+function ProviderSetupDialogContent({
+  initialValues,
+  onSubmit
+}: ProviderSetupDialogContentProps): React.JSX.Element {
+  const closeDialog = useUiStore((state) => state.closeProviderSetupDialog)
+  const saveProviderDraft = useSettingsStore((state) => state.saveProviderDraft)
+  const [values, setValues] = useState<ProviderFormValues>({
+    provider: 'claude',
+    apiKey: initialValues.apiKey,
+    model: initialValues.model
+  })
+  const [errors, setErrors] = useState<FormErrors>({})
+
   function updateField(field: 'apiKey' | 'model', value: string): void {
-    updateProviderDraftField('claude', field, value)
+    setValues((current) => ({ ...current, [field]: value }))
     setErrors((current) => ({ ...current, [field]: undefined }))
+  }
+
+  function handleDismiss(): void {
+    setErrors({})
+    closeDialog()
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>): void {
     event.preventDefault()
-
-    const values: ProviderFormValues = {
-      provider: 'claude',
-      apiKey: claudeDraft.apiKey,
-      model: claudeDraft.model
-    }
 
     const parsed = providerFormSchema.safeParse(values)
     if (!parsed.success) {
@@ -62,7 +80,7 @@ export function ProviderSetupDialog({
       model: parsed.data.model
     })
     onSubmit?.(parsed.data)
-    closeDialog()
+    handleDismiss()
   }
 
   return (
@@ -82,7 +100,7 @@ export function ProviderSetupDialog({
               session until IPC wiring lands.
             </p>
           </div>
-          <Button variant="secondary" onClick={closeDialog}>
+          <Button variant="secondary" onClick={handleDismiss}>
             Close
           </Button>
         </div>
@@ -114,7 +132,7 @@ export function ProviderSetupDialog({
             <input
               aria-label="API Key"
               type="password"
-              value={claudeDraft.apiKey}
+              value={values.apiKey}
               onChange={(event) => updateField('apiKey', event.target.value)}
               className={inputClassName}
               placeholder="sk-ant-..."
@@ -128,7 +146,7 @@ export function ProviderSetupDialog({
             Model
             <input
               aria-label="Model"
-              value={claudeDraft.model}
+              value={values.model}
               onChange={(event) => updateField('model', event.target.value)}
               className={inputClassName}
               placeholder="claude-3-7-sonnet-latest"
@@ -139,7 +157,7 @@ export function ProviderSetupDialog({
           </label>
 
           <div className="flex items-center justify-end gap-3 border-t border-zinc-800 pt-5">
-            <Button variant="secondary" onClick={closeDialog}>
+            <Button variant="secondary" onClick={handleDismiss}>
               Cancel
             </Button>
             <Button type="submit">Save Provider</Button>

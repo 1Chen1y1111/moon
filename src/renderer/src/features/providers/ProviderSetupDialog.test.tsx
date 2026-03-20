@@ -1,4 +1,4 @@
-import { render, screen, within } from '@testing-library/react'
+import { act, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -78,5 +78,45 @@ describe('ProviderSetupDialog', () => {
     expect(screen.getByText('Model is required.')).toBeInTheDocument()
     expect(onSubmit).not.toHaveBeenCalled()
     expect(useUiStore.getState().isProviderSetupDialogOpen).toBe(true)
+  })
+
+  it('discards unsaved values and stale validation errors after cancel and reopen', async () => {
+    const user = userEvent.setup()
+
+    useSettingsStore.setState({
+      providerDrafts: {
+        claude: {
+          apiKey: 'persisted-key',
+          model: 'claude-3-7-sonnet-latest'
+        }
+      },
+      activeSettingsSection: 'general'
+    })
+
+    useUiStore.getState().openProviderSetupDialog()
+    renderDialog()
+
+    await user.clear(screen.getByLabelText('API Key'))
+    await user.type(screen.getByLabelText('API Key'), 'temporary-key')
+    await user.clear(screen.getByLabelText('Model'))
+    await user.click(screen.getByRole('button', { name: 'Save Provider' }))
+
+    expect(screen.getByText('Model is required.')).toBeInTheDocument()
+    expect(useSettingsStore.getState().providerDrafts.claude).toEqual({
+      apiKey: 'persisted-key',
+      model: 'claude-3-7-sonnet-latest'
+    })
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    expect(useUiStore.getState().isProviderSetupDialogOpen).toBe(false)
+
+    act(() => {
+      useUiStore.getState().openProviderSetupDialog()
+    })
+
+    expect(screen.getByLabelText('API Key')).toHaveValue('persisted-key')
+    expect(screen.getByLabelText('Model')).toHaveValue('claude-3-7-sonnet-latest')
+    expect(screen.queryByText('Model is required.')).not.toBeInTheDocument()
   })
 })
