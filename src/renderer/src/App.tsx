@@ -1,6 +1,7 @@
 import { RouterProvider } from '@tanstack/react-router'
 
-import { AppProviders, useAppRouterContext } from './app/providers'
+import { AppProviders } from './app/providers'
+import { useAppRouterContext } from './app/router-context'
 import { appRouter } from './app/router'
 
 function RouterHost(): React.JSX.Element {

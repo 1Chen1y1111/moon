@@ -19,6 +19,15 @@ describe('HomeEmptyState', () => {
     expect(screen.getByRole('button', { name: 'Settings' })).toHaveAttribute('type', 'button')
   })
 
+  it('uses shell-sized layout instead of claiming the full viewport', () => {
+    render(<HomeEmptyState />)
+
+    const section = screen.getByRole('region', { name: 'Home empty state' })
+
+    expect(section).toHaveClass('min-h-full')
+    expect(section).not.toHaveClass('min-h-screen')
+  })
+
   it('defaults Button type to button when type is not provided', () => {
     render(<Button>Quick Action</Button>)
 

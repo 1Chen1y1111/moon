@@ -1,8 +1,7 @@
-import { Outlet, createRootRouteWithContext, createRoute, createRouter } from '@tanstack/react-router'
+import { createRootRouteWithContext, createRoute, createRouter } from '@tanstack/react-router'
 
-import { HomeEmptyState } from '@renderer/features/home/HomeEmptyState'
-import type { AppRouterContext } from './providers'
-import { AppShell } from '@renderer/app-shell/AppShell'
+import type { AppRouterContext } from './router-context'
+import { ChatRoute, HomeRoute, RootLayout } from './route-hosts'
 
 const rootRoute = createRootRouteWithContext<AppRouterContext>()({
   component: RootLayout
@@ -34,24 +33,4 @@ declare module '@tanstack/react-router' {
   interface Register {
     router: typeof appRouter
   }
-}
-
-function RootLayout(): React.JSX.Element {
-  return (
-    <AppShell>
-      <Outlet />
-    </AppShell>
-  )
-}
-
-function HomeRoute(): React.JSX.Element {
-  return <HomeEmptyState />
-}
-
-function ChatRoute(): React.JSX.Element {
-  return (
-    <section className="flex min-h-full items-center justify-center p-6 text-sm text-zinc-400">
-      Chat View
-    </section>
-  )
 }
