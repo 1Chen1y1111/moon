@@ -1,6 +1,10 @@
 import { Button } from '@renderer/components/ui/button'
+import { useUiStore } from '@renderer/lib/stores/ui-store'
 
 export function HomeEmptyState(): React.JSX.Element {
+  const openProviderSetupDialog = useUiStore((state) => state.openProviderSetupDialog)
+  const openSettingsDialog = useUiStore((state) => state.openSettingsDialog)
+
   return (
     <section
       aria-label="Home empty state"
@@ -39,6 +43,7 @@ export function HomeEmptyState(): React.JSX.Element {
                 variant="secondary"
                 size="lg"
                 className="h-11 rounded-full border border-zinc-800 bg-zinc-900/80 text-zinc-100 hover:bg-zinc-800"
+                onClick={openProviderSetupDialog}
               >
                 Configure Provider
               </Button>
@@ -46,6 +51,7 @@ export function HomeEmptyState(): React.JSX.Element {
                 variant="ghost"
                 size="lg"
                 className="h-11 rounded-full border border-transparent text-zinc-400 hover:border-zinc-800 hover:bg-zinc-900 hover:text-zinc-100"
+                onClick={openSettingsDialog}
               >
                 Settings
               </Button>

@@ -1,8 +1,10 @@
 import { render, screen, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import userEvent from '@testing-library/user-event'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 import { AppShell } from '@renderer/app-shell/AppShell'
 import { Button } from '@renderer/components/ui/button'
+import { useUiStore } from '@renderer/lib/stores/ui-store'
 import { HomeEmptyState } from './HomeEmptyState'
 
 function renderInShell(): void {
@@ -14,6 +16,13 @@ function renderInShell(): void {
 }
 
 describe('HomeEmptyState', () => {
+  beforeEach(() => {
+    useUiStore.setState({
+      isProviderSetupDialogOpen: false,
+      isSettingsDialogOpen: false
+    })
+  })
+
   it('renders the alma-style empty state actions and copy', () => {
     renderInShell()
     const section = screen.getByRole('region', { name: 'Home empty state' })
@@ -57,5 +66,22 @@ describe('HomeEmptyState', () => {
     render(<Button>Quick Action</Button>)
 
     expect(screen.getByRole('button', { name: 'Quick Action' })).toHaveAttribute('type', 'button')
+  })
+
+  it('opens the mounted provider and settings dialogs from the home surface ctas', async () => {
+    const user = userEvent.setup()
+
+    renderInShell()
+    const section = screen.getByRole('region', { name: 'Home empty state' })
+    const scoped = within(section)
+
+    await user.click(scoped.getByRole('button', { name: 'Configure Provider' }))
+
+    expect(screen.getByRole('dialog', { name: 'Configure Provider' })).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: 'Close' }))
+    await user.click(scoped.getByRole('button', { name: 'Settings' }))
+
+    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument()
   })
 })

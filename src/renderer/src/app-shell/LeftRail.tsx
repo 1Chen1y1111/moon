@@ -1,4 +1,8 @@
+import { useUiStore } from '@renderer/lib/stores/ui-store'
+
 export function LeftRail(): React.JSX.Element {
+  const openSettingsDialog = useUiStore((state) => state.openSettingsDialog)
+
   return (
     <aside
       aria-label="Workspace navigation"
@@ -22,6 +26,7 @@ export function LeftRail(): React.JSX.Element {
           type="button"
           aria-label="Settings"
           className="h-10 w-10 rounded-md border border-zinc-700 bg-zinc-900 text-xs text-zinc-100"
+          onClick={openSettingsDialog}
         >
           S
         </button>
