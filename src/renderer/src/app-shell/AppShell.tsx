@@ -5,7 +5,7 @@ import { LeftRail } from './LeftRail'
 
 export function AppShell({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
-    <div className="flex min-h-screen bg-moon-app-bg text-white">
+    <div className="flex min-h-screen bg-moon-app-bg text-moon-text-primary">
       <LeftRail />
       <main className="flex min-h-screen min-w-0 flex-1 overflow-hidden">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-auto">{children}</div>

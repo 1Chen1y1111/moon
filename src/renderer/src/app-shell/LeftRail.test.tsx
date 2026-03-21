@@ -51,8 +51,9 @@ describe('LeftRail', () => {
     expect(screen.queryByRole('button', { name: 'Show External Chats' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '更多操作' })).toHaveClass('bg-transparent')
     expect(screen.getByRole('button', { name: '更新' })).toHaveClass(
-      'bg-[#31475f]',
-      'border-[#3f6687]'
+      'bg-moon-button-update-bg',
+      'border-moon-button-update-border',
+      'text-moon-button-update-fg'
     )
 
     await user.hover(screen.getByRole('button', { name: '更多操作' }))

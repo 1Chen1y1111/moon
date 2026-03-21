@@ -2,10 +2,10 @@ import { PanelLeftClose, Search, SquarePen } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@shadcn/ui/tooltip'
 
 const utilityCardClassName =
-  'flex h-6 w-6 cursor-default select-none items-center justify-center rounded-sm text-moon-text-secondary transition-[background-color,border-color,color,box-shadow,transform] duration-200 ease-out group-hover:bg-[#3f6687] group-hover:border-[#4d7392] group-hover:text-white group-hover:shadow-[0_18px_40px_rgba(46,87,124,0.38)]'
+  'flex h-6 w-6 cursor-default select-none items-center justify-center rounded-sm text-moon-text-secondary transition-[background-color,border-color,color,box-shadow,transform] duration-200 ease-out group-hover:bg-moon-menu-item-bg-hover group-hover:border-moon-menu-item-border-hover group-hover:text-moon-fg-inverse group-hover:shadow-[var(--moon-shadow-menu-hover)]'
 
 const trafficLightButtonClassName =
-  'h-3 w-3 rounded-full transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50'
+  'h-3 w-3 rounded-full transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-ring-subtle'
 
 export function WindowChrome(): React.JSX.Element {
   const handleClose = (): void => {
@@ -26,19 +26,19 @@ export function WindowChrome(): React.JSX.Element {
         <button
           type="button"
           aria-label="关闭窗口"
-          className={`${trafficLightButtonClassName} bg-[#ff5f57]`}
+          className={`${trafficLightButtonClassName} bg-moon-window-control-close`}
           onClick={handleClose}
         />
         <button
           type="button"
           aria-label="最小化窗口"
-          className={`${trafficLightButtonClassName} bg-[#ffbd2e]`}
+          className={`${trafficLightButtonClassName} bg-moon-window-control-minimize`}
           onClick={handleMinimize}
         />
         <button
           type="button"
           aria-label="切换缩放窗口"
-          className={`${trafficLightButtonClassName} bg-[#28c840]`}
+          className={`${trafficLightButtonClassName} bg-moon-window-control-maximize`}
           onClick={handleToggleMaximize}
         />
       </div>
@@ -56,7 +56,7 @@ export function WindowChrome(): React.JSX.Element {
             <TooltipContent
               side="bottom"
               sideOffset={8}
-              className="rounded-lg border border-white/10 bg-[#262b34] px-4 py-1 text-xs font-medium text-white shadow-[0_18px_50px_rgba(6,9,14,0.45)]"
+              className="rounded-lg border border-moon-tooltip-border bg-moon-tooltip-bg px-4 py-1 text-xs font-medium text-moon-tooltip-fg shadow-[var(--moon-shadow-tooltip)]"
             >
               折叠侧边栏
             </TooltipContent>
@@ -73,7 +73,7 @@ export function WindowChrome(): React.JSX.Element {
             <TooltipContent
               side="bottom"
               sideOffset={8}
-              className="rounded-lg border border-white/10 bg-[#262b34] px-4 py-1 text-xs font-medium text-white shadow-[0_18px_50px_rgba(6,9,14,0.45)]"
+              className="rounded-lg border border-moon-tooltip-border bg-moon-tooltip-bg px-4 py-1 text-xs font-medium text-moon-tooltip-fg shadow-[var(--moon-shadow-tooltip)]"
             >
               搜索
             </TooltipContent>
@@ -90,7 +90,7 @@ export function WindowChrome(): React.JSX.Element {
             <TooltipContent
               side="bottom"
               sideOffset={8}
-              className="rounded-lg border border-white/10 bg-[#262b34] px-4 py-1 text-xs font-medium text-white shadow-[0_18px_50px_rgba(6,9,14,0.45)]"
+              className="rounded-lg border border-moon-tooltip-border bg-moon-tooltip-bg px-4 py-1 text-xs font-medium text-moon-tooltip-fg shadow-[var(--moon-shadow-tooltip)]"
             >
               新建聊天
             </TooltipContent>

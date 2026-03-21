@@ -25,7 +25,7 @@ export function HomeEmptyState(): React.JSX.Element {
           <Button
             type="button"
             size="lg"
-            className="h-12 w-full rounded-full bg-moon-accent text-moon-accent-text shadow-[0_20px_60px_rgba(97,175,240,0.22)] hover:brightness-105"
+            className="h-12 w-full rounded-full bg-moon-button-primary-bg text-moon-button-primary-fg shadow-[var(--moon-shadow-accent)] hover:bg-moon-button-primary-bg-hover"
           >
             新建聊天
           </Button>
@@ -34,7 +34,7 @@ export function HomeEmptyState(): React.JSX.Element {
               type="button"
               variant="secondary"
               size="lg"
-              className="h-12 rounded-full border border-moon-panel-border bg-white/[0.04] text-moon-text-primary hover:bg-white/[0.08]"
+              className="h-12 rounded-full border border-moon-button-secondary-border bg-moon-button-secondary-bg text-moon-text-primary hover:bg-moon-button-secondary-bg-hover"
             >
               配置提供商
             </Button>
@@ -42,7 +42,7 @@ export function HomeEmptyState(): React.JSX.Element {
               type="button"
               variant="secondary"
               size="lg"
-              className="h-12 rounded-full border border-moon-panel-border bg-white/[0.04] text-moon-text-primary hover:bg-white/[0.08]"
+              className="h-12 rounded-full border border-moon-button-secondary-border bg-moon-button-secondary-bg text-moon-text-primary hover:bg-moon-button-secondary-bg-hover"
             >
               设置
             </Button>
