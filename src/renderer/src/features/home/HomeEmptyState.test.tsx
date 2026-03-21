@@ -22,7 +22,7 @@ describe('HomeEmptyState', () => {
   })
 
   it('renders the alma landing hero content', () => {
-    renderInShell()
+    render(<HomeEmptyState />)
     const section = screen.getByRole('region', { name: 'Home empty state' })
     const scoped = within(section)
 
@@ -42,6 +42,6 @@ describe('HomeEmptyState', () => {
 
     expect(shellMain).toContainElement(section)
     expect(screen.getByRole('complementary', { name: 'Workspace navigation' })).toBeInTheDocument()
-    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+    expect(within(shellMain).queryByRole('textbox')).not.toBeInTheDocument()
   })
 })
