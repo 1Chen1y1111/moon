@@ -157,7 +157,7 @@ function ProviderSetupDialogContent({
           </label>
 
           <div className="flex items-center justify-end gap-3 border-t border-zinc-800 pt-5">
-            <Button variant="secondary" onClick={handleDismiss}>
+            <Button type="button" variant="secondary" onClick={handleDismiss}>
               Cancel
             </Button>
             <Button type="submit">Save Provider</Button>

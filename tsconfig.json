@@ -1,4 +1,18 @@
 {
   "files": [],
-  "references": [{ "path": "./tsconfig.node.json" }, { "path": "./tsconfig.web.json" }]
+  "references": [{ "path": "./tsconfig.node.json" }, { "path": "./tsconfig.web.json" }],
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@renderer": ["src/renderer/src"],
+      "@renderer/*": ["src/renderer/src/*"],
+      "@shared": ["src/shared"],
+      "@shared/*": ["src/shared/*"],
+      "@shadcn": ["src/shadcn"],
+      "@shadcn/ui": ["src/shadcn/ui"],
+      "@shadcn/lib": ["src/shadcn/lib"],
+      "@shadcn/lib/utils": ["src/shadcn/lib/utils.ts"],
+      "@shadcn/*": ["src/shadcn/*"]
+    }
+  }
 }

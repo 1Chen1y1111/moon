@@ -3,7 +3,6 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { AppShell } from '@renderer/app-shell/AppShell'
-import { Button } from '@shadcn/ui/button'
 import { useUiStore } from '@renderer/lib/stores/ui-store'
 import { HomeEmptyState } from './HomeEmptyState'
 
@@ -34,14 +33,8 @@ describe('HomeEmptyState', () => {
       scoped.getByText('Start a fresh conversation, connect a provider, or adjust settings.')
     ).toBeInTheDocument()
     expect(scoped.getByRole('button', { name: 'New Chat' })).toBeInTheDocument()
-    expect(scoped.getByRole('button', { name: 'New Chat' })).toHaveAttribute('type', 'button')
     expect(scoped.getByRole('button', { name: 'Configure Provider' })).toBeInTheDocument()
-    expect(scoped.getByRole('button', { name: 'Configure Provider' })).toHaveAttribute(
-      'type',
-      'button'
-    )
     expect(scoped.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
-    expect(scoped.getByRole('button', { name: 'Settings' })).toHaveAttribute('type', 'button')
   })
 
   it('embeds into the app shell with a decorative bottom composer and no right rail', () => {
@@ -60,12 +53,6 @@ describe('HomeEmptyState', () => {
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
     expect(screen.getByText('Message Moon...')).toBeInTheDocument()
     expect(screen.queryByText('Enter to send')).not.toBeInTheDocument()
-  })
-
-  it('defaults Button type to button when type is not provided', () => {
-    render(<Button>Quick Action</Button>)
-
-    expect(screen.getByRole('button', { name: 'Quick Action' })).toHaveAttribute('type', 'button')
   })
 
   it('opens the mounted provider and settings dialogs from the home surface ctas', async () => {

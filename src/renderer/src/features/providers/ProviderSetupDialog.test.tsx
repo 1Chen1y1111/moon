@@ -119,4 +119,12 @@ describe('ProviderSetupDialog', () => {
     expect(screen.getByLabelText('Model')).toHaveValue('claude-3-7-sonnet-latest')
     expect(screen.queryByText('Model is required.')).not.toBeInTheDocument()
   })
+
+  it('keeps the cancel action as a non-submit button', () => {
+    useUiStore.getState().openProviderSetupDialog()
+
+    renderDialog()
+
+    expect(screen.getByRole('button', { name: 'Cancel' })).toHaveAttribute('type', 'button')
+  })
 })
