@@ -18,7 +18,11 @@ export function WindowChrome(): React.JSX.Element {
           disabled
           className={utilityButtonClassName}
         >
-          <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5 fill-none stroke-current">
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 16 16"
+            className="h-3.5 w-3.5 fill-none stroke-current"
+          >
             <circle cx="7" cy="7" r="3.75" strokeWidth="1.25" />
             <path d="M10.2 10.2 13 13" strokeWidth="1.25" strokeLinecap="round" />
           </svg>
@@ -30,7 +34,11 @@ export function WindowChrome(): React.JSX.Element {
           disabled
           className={utilityButtonClassName}
         >
-          <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5 fill-none stroke-current">
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 16 16"
+            className="h-3.5 w-3.5 fill-none stroke-current"
+          >
             <path
               d="M3 4.25h10M5.25 8h5.5M6.75 11.75h2.5"
               strokeWidth="1.25"

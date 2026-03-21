@@ -71,7 +71,7 @@
   --alma-accent-text: #1a1d23;
   --alma-update-bg: rgba(98, 174, 238, 0.1);
   --alma-update-text: #62aeee;
-  --alma-serif: Georgia, "Times New Roman", serif;
+  --alma-serif: Georgia, 'Times New Roman', serif;
 }
 
 .dark {

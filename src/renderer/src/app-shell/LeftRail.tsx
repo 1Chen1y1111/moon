@@ -5,7 +5,11 @@ export function LeftRail(): React.JSX.Element {
     <aside aria-label="Workspace navigation" className="flex h-full w-[288px] shrink-0 p-4">
       <div className="flex min-h-0 w-64 flex-1 flex-col overflow-hidden rounded-[28px] border border-[color:var(--alma-sidebar-border)] bg-[var(--alma-sidebar-bg)] shadow-[0_28px_80px_rgba(5,8,15,0.45)]">
         <WindowChrome />
-        <div role="group" aria-label="Primary actions" className="flex flex-1 flex-col gap-2 px-3 py-4">
+        <div
+          role="group"
+          aria-label="Primary actions"
+          className="flex flex-1 flex-col gap-2 px-3 py-4"
+        >
           <button
             type="button"
             className="flex h-11 items-center rounded-2xl px-4 text-left text-sm font-medium text-[var(--alma-text-secondary)] transition-colors hover:bg-white/[0.03] hover:text-[var(--alma-text-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--alma-accent)]"
