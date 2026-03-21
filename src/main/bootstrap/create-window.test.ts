@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const browserWindowMock = vi.fn()
 const shellOpenExternalMock = vi.fn()
 let browserWindowInstance: ReturnType<typeof createBrowserWindowInstance>
+const isMock = { dev: false }
 
 class BrowserWindowMock {
   constructor(options: unknown) {
@@ -21,9 +22,7 @@ vi.mock('electron', () => ({
 }))
 
 vi.mock('@electron-toolkit/utils', () => ({
-  is: {
-    dev: false
-  }
+  is: isMock
 }))
 
 vi.mock('../../../resources/icon.png?asset', () => ({
@@ -38,6 +37,7 @@ function createBrowserWindowInstance() {
     loadFile: vi.fn(),
     setWindowButtonVisibility: vi.fn(),
     webContents: {
+      openDevTools: vi.fn(),
       setWindowOpenHandler: vi.fn()
     }
   }
@@ -45,10 +45,14 @@ function createBrowserWindowInstance() {
 
 describe('createWindow', () => {
   const originalPlatform = process.platform
+  const env = process.env as Record<string, string | undefined>
 
   beforeEach(() => {
+    vi.resetModules()
     browserWindowMock.mockReset()
     shellOpenExternalMock.mockReset()
+    isMock.dev = false
+    delete env['ELECTRON_RENDERER_URL']
     browserWindowInstance = createBrowserWindowInstance()
   })
 
@@ -73,5 +77,19 @@ describe('createWindow', () => {
       })
     )
     expect(browserWindowInstance.setWindowButtonVisibility).toHaveBeenCalledWith(false)
+  })
+
+  it('opens DevTools automatically when running against the renderer dev server', async () => {
+    isMock.dev = true
+    env['ELECTRON_RENDERER_URL'] = 'http://127.0.0.1:5173'
+
+    const { createWindow } = await import('./create-window')
+
+    createWindow()
+
+    expect(browserWindowInstance.loadURL).toHaveBeenCalledWith('http://127.0.0.1:5173')
+    expect(browserWindowInstance.webContents.openDevTools).toHaveBeenCalledWith({
+      mode: 'detach'
+    })
   })
 })

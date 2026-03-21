@@ -39,4 +39,19 @@ describe('WindowChrome', () => {
     expect(minimizeMock).toHaveBeenCalledTimes(1)
     expect(toggleMaximizeMock).toHaveBeenCalledTimes(1)
   })
+
+  it('renders sidebar utility icon cards with portal tooltips on hover', async () => {
+    const user = userEvent.setup()
+
+    render(<WindowChrome />)
+
+    expect(screen.queryByRole('button', { name: '折叠侧边栏' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '搜索' })).not.toBeInTheDocument()
+    expect(screen.queryByText('折叠侧边栏')).not.toBeInTheDocument()
+    expect(screen.queryByText('搜索')).not.toBeInTheDocument()
+    expect(screen.queryByText('新建聊天')).not.toBeInTheDocument()
+
+    await user.hover(screen.getByTestId('window-chrome-collapse-trigger'))
+    expect(await screen.findByRole('tooltip', { name: '折叠侧边栏' })).toBeInTheDocument()
+  })
 })

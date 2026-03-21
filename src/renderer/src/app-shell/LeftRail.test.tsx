@@ -21,15 +21,22 @@ describe('LeftRail', () => {
     })
   })
 
-  it('renders the Alma floating rail assets', () => {
+  it('renders the Moon floating rail assets', () => {
     render(<LeftRail />)
 
     expect(screen.getByRole('complementary', { name: 'Workspace navigation' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '搜索' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: '筛选' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: '布局' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: '折叠侧边栏' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '搜索' })).not.toBeInTheDocument()
+    expect(screen.queryByText('折叠侧边栏')).not.toBeInTheDocument()
+    expect(screen.queryByText('搜索')).not.toBeInTheDocument()
+    expect(screen.getByTestId('window-chrome-collapse-trigger')).toBeInTheDocument()
+    expect(screen.getByTestId('window-chrome-search-trigger')).toBeInTheDocument()
+    expect(screen.getByTestId('window-chrome-compose-trigger')).toBeInTheDocument()
+    const newChatButtons = screen.getAllByRole('button', { name: '新建聊天' })
+
+    expect(newChatButtons).toHaveLength(1)
+    expect(newChatButtons.find((button) => !(button as HTMLButtonElement).disabled)).toBeEnabled()
     expect(screen.getByRole('button', { name: '清除历史' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '新建聊天' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '更多操作' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '更新' })).toBeInTheDocument()
   })
@@ -39,12 +46,15 @@ describe('LeftRail', () => {
 
     const rail = screen.getByRole('complementary', { name: 'Workspace navigation' })
     const shellMain = screen.getByRole('main')
+    const railNewChatButton = within(rail)
+      .getAllByRole('button', { name: '新建聊天' })
+      .find((button) => !(button as HTMLButtonElement).disabled)
 
     expect(shellMain).toHaveClass('flex', 'min-h-screen', 'min-w-0', 'flex-1')
     expect(within(shellMain).getByRole('region', { name: 'Test route stage' })).toBeInTheDocument()
 
     fireEvent.click(within(rail).getByRole('button', { name: '清除历史' }))
-    fireEvent.click(within(rail).getByRole('button', { name: '新建聊天' }))
+    fireEvent.click(railNewChatButton as HTMLButtonElement)
     fireEvent.click(within(rail).getByRole('button', { name: '更多操作' }))
     fireEvent.click(within(rail).getByRole('button', { name: '更新' }))
 

@@ -21,15 +21,15 @@ describe('HomeEmptyState', () => {
     })
   })
 
-  it('renders the alma landing hero content', () => {
+  it('renders the moon landing hero content', () => {
     render(<HomeEmptyState />)
-    const section = screen.getByRole('region', { name: 'Alma landing view' })
+    const section = screen.getByRole('region', { name: 'Moon landing view' })
     const scoped = within(section)
     const primaryCta = scoped.getByRole('button', { name: '新建聊天' })
     const providerCta = scoped.getByRole('button', { name: '配置提供商' })
     const settingsCta = scoped.getByRole('button', { name: '设置' })
 
-    expect(scoped.getByText('Alma')).toBeInTheDocument()
+    expect(scoped.getByText('Moon')).toBeInTheDocument()
     expect(scoped.getByText('优雅的 AI 提供商编排桌面应用')).toBeInTheDocument()
     expect(primaryCta).toHaveAttribute('type', 'button')
     expect(providerCta).toHaveAttribute('type', 'button')
@@ -40,7 +40,7 @@ describe('HomeEmptyState', () => {
   it('keeps the landing content inside shell main without a textbox composer', () => {
     renderInShell()
 
-    const section = screen.getByRole('region', { name: 'Alma landing view' })
+    const section = screen.getByRole('region', { name: 'Moon landing view' })
     const shellMain = screen.getByRole('main')
 
     expect(shellMain).toContainElement(section)

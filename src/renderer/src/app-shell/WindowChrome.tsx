@@ -1,5 +1,8 @@
-const utilityButtonClassName =
-  'flex h-8 w-8 cursor-default items-center justify-center rounded-full border border-white/6 bg-white/[0.03] text-[var(--alma-text-secondary)] opacity-100'
+import { PanelLeftClose, Search, SquarePen } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@shadcn/ui/tooltip'
+
+const utilityCardClassName =
+  'flex h-6 w-6 cursor-default select-none items-center justify-center rounded-sm text-moon-text-secondary transition-[background-color,border-color,color,box-shadow,transform] duration-200 ease-out group-hover:bg-[#3f6687] group-hover:border-[#4d7392] group-hover:text-white group-hover:shadow-[0_18px_40px_rgba(46,87,124,0.38)]'
 
 const trafficLightButtonClassName =
   'h-3 w-3 rounded-full transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50'
@@ -18,7 +21,7 @@ export function WindowChrome(): React.JSX.Element {
   }
 
   return (
-    <header className="flex items-center justify-between border-b border-[color:var(--alma-sidebar-border)] px-4 py-3">
+    <header className="flex items-center justify-between border-b border-moon-sidebar-border p-2">
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -40,54 +43,60 @@ export function WindowChrome(): React.JSX.Element {
         />
       </div>
 
-      <div className="flex items-center gap-1.5">
-        <button
-          type="button"
-          aria-label="搜索"
-          aria-disabled="true"
-          disabled
-          className={utilityButtonClassName}
-        >
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 16 16"
-            className="h-3.5 w-3.5 fill-none stroke-current"
-          >
-            <circle cx="7" cy="7" r="3.75" strokeWidth="1.25" />
-            <path d="M10.2 10.2 13 13" strokeWidth="1.25" strokeLinecap="round" />
-          </svg>
-        </button>
-        <button
-          type="button"
-          aria-label="筛选"
-          aria-disabled="true"
-          disabled
-          className={utilityButtonClassName}
-        >
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 16 16"
-            className="h-3.5 w-3.5 fill-none stroke-current"
-          >
-            <path
-              d="M3 4.25h10M5.25 8h5.5M6.75 11.75h2.5"
-              strokeWidth="1.25"
-              strokeLinecap="round"
-            />
-          </svg>
-        </button>
-        <button
-          type="button"
-          aria-label="布局"
-          aria-disabled="true"
-          disabled
-          className={utilityButtonClassName}
-        >
-          <svg aria-hidden="true" viewBox="0 0 16 16" className="h-3.5 w-3.5 fill-current">
-            <path d="M2.75 3.25A.5.5 0 0 1 3.25 2.75h4.5a.5.5 0 0 1 .5.5v4.5a.5.5 0 0 1-.5.5h-4.5a.5.5 0 0 1-.5-.5zm5 0a.5.5 0 0 1 .5-.5h4.5a.5.5 0 0 1 .5.5v1.75a.5.5 0 0 1-.5.5h-4.5a.5.5 0 0 1-.5-.5zm0 4.25a.5.5 0 0 1 .5-.5h4.5a.5.5 0 0 1 .5.5v5.25a.5.5 0 0 1-.5.5h-4.5a.5.5 0 0 1-.5-.5zm-5 1.25a.5.5 0 0 1 .5-.5h4.5a.5.5 0 0 1 .5.5v4a.5.5 0 0 1-.5.5h-4.5a.5.5 0 0 1-.5-.5z" />
-          </svg>
-        </button>
-      </div>
+      <TooltipProvider>
+        <div className="flex items-center gap-1.5">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="group" data-testid="window-chrome-collapse-trigger">
+                <div className={utilityCardClassName}>
+                  <PanelLeftClose aria-hidden="true" className="h-3 w-3" strokeWidth={1.75} />
+                </div>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent
+              side="bottom"
+              sideOffset={8}
+              className="rounded-lg border border-white/10 bg-[#262b34] px-4 py-1 text-xs font-medium text-white shadow-[0_18px_50px_rgba(6,9,14,0.45)]"
+            >
+              折叠侧边栏
+            </TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="group" data-testid="window-chrome-search-trigger">
+                <div className={utilityCardClassName}>
+                  <Search aria-hidden="true" className="h-3 w-3" strokeWidth={1.75} />
+                </div>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent
+              side="bottom"
+              sideOffset={8}
+              className="rounded-lg border border-white/10 bg-[#262b34] px-4 py-1 text-xs font-medium text-white shadow-[0_18px_50px_rgba(6,9,14,0.45)]"
+            >
+              搜索
+            </TooltipContent>
+          </Tooltip>
+
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <div className="group" data-testid="window-chrome-compose-trigger">
+                <div className={utilityCardClassName}>
+                  <SquarePen aria-hidden="true" className="h-3 w-3" strokeWidth={1.75} />
+                </div>
+              </div>
+            </TooltipTrigger>
+            <TooltipContent
+              side="bottom"
+              sideOffset={8}
+              className="rounded-lg border border-white/10 bg-[#262b34] px-4 py-1 text-xs font-medium text-white shadow-[0_18px_50px_rgba(6,9,14,0.45)]"
+            >
+              新建聊天
+            </TooltipContent>
+          </Tooltip>
+        </div>
+      </TooltipProvider>
     </header>
   )
 }

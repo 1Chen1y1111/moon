@@ -8,7 +8,7 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 const projectRoot = join(__dirname, '..')
 
-const components = ['button']
+const components = ['button', 'tooltip']
 
 function updateComponents() {
   if (components.length === 0) {

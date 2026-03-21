@@ -33,6 +33,9 @@ export function createWindow(): BrowserWindow {
   })
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    mainWindow.webContents.openDevTools({
+      mode: 'detach'
+    })
     void mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
     void mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
