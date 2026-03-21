@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { AppShell } from '@renderer/app-shell/AppShell'
-import { Button } from '@renderer/components/ui/button'
+import { Button } from '@shadcn/ui/button'
 import { useUiStore } from '@renderer/lib/stores/ui-store'
 import { HomeEmptyState } from './HomeEmptyState'
 

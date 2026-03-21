@@ -1,4 +1,4 @@
-import { Button } from '@renderer/components/ui/button'
+import { Button } from '@shadcn/ui/button'
 import { type SettingsSection, useSettingsStore } from '@renderer/lib/stores/settings-store'
 import { useUiStore } from '@renderer/lib/stores/ui-store'
 
