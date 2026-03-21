@@ -5,7 +5,7 @@ export function HomeEmptyState(): React.JSX.Element {
   return (
     <section
       aria-label="Alma landing view"
-      className="flex min-h-screen w-full items-center justify-center px-6 py-10 text-[var(--alma-text-primary)]"
+      className="flex min-h-full w-full flex-1 items-center justify-center px-6 py-10 text-[var(--alma-text-primary)]"
     >
       <div className="flex w-full max-w-[672px] flex-col items-center gap-8 text-center">
         <div className="flex h-[210px] w-[194px] items-center justify-center rounded-[28px] border border-[color:var(--alma-panel-border)] bg-[rgba(14,18,25,0.28)] p-4 shadow-[0_32px_90px_rgba(7,10,18,0.36)]">
