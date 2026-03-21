@@ -1,5 +1,4 @@
 import { render, screen, within } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { AppShell } from '@renderer/app-shell/AppShell'
@@ -22,53 +21,29 @@ describe('HomeEmptyState', () => {
     })
   })
 
-  it('renders the alma-style empty state actions and copy', () => {
+  it('renders the alma landing hero content', () => {
     renderInShell()
     const section = screen.getByRole('region', { name: 'Home empty state' })
     const scoped = within(section)
 
-    expect(scoped.getByText('Moon')).toBeInTheDocument()
-    expect(scoped.getByRole('heading', { name: 'How can I help you today?' })).toBeInTheDocument()
-    expect(
-      scoped.getByText('Start a fresh conversation, connect a provider, or adjust settings.')
-    ).toBeInTheDocument()
-    expect(scoped.getByRole('button', { name: 'New Chat' })).toBeInTheDocument()
-    expect(scoped.getByRole('button', { name: 'Configure Provider' })).toBeInTheDocument()
-    expect(scoped.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
+    expect(scoped.getByText('Alma')).toBeInTheDocument()
+    expect(scoped.getByText('优雅的 AI 提供商编排桌面应用')).toBeInTheDocument()
+    expect(scoped.getByRole('button', { name: '新建聊天' })).toBeInTheDocument()
+    expect(scoped.getByRole('button', { name: '配置提供商' })).toBeInTheDocument()
+    expect(scoped.getByRole('button', { name: '设置' })).toBeInTheDocument()
+    expect(scoped.getByText('请至少配置一个 AI 提供商以开始聊天')).toBeInTheDocument()
   })
 
-  it('embeds into the app shell with a decorative bottom composer and no right rail', () => {
+  it('keeps the landing content inside shell main without a textbox composer', () => {
     renderInShell()
 
     const section = screen.getByRole('region', { name: 'Home empty state' })
     const shellMain = screen.getByRole('main')
     const rails = screen.getAllByRole('complementary')
 
-    expect(section).toHaveClass('min-h-full')
-    expect(section).not.toHaveClass('min-h-screen')
-    expect(section).not.toHaveClass('w-screen')
     expect(shellMain).toContainElement(section)
     expect(rails).toHaveLength(1)
     expect(screen.getByRole('complementary', { name: 'Workspace navigation' })).toBeInTheDocument()
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
-    expect(screen.getByText('Message Moon...')).toBeInTheDocument()
-    expect(screen.queryByText('Enter to send')).not.toBeInTheDocument()
-  })
-
-  it('opens the mounted provider and settings dialogs from the home surface ctas', async () => {
-    const user = userEvent.setup()
-
-    renderInShell()
-    const section = screen.getByRole('region', { name: 'Home empty state' })
-    const scoped = within(section)
-
-    await user.click(scoped.getByRole('button', { name: 'Configure Provider' }))
-
-    expect(screen.getByRole('dialog', { name: 'Configure Provider' })).toBeInTheDocument()
-
-    await user.click(screen.getByRole('button', { name: 'Close' }))
-    await user.click(scoped.getByRole('button', { name: 'Settings' }))
-
-    expect(screen.getByRole('dialog', { name: 'Settings' })).toBeInTheDocument()
   })
 })
