@@ -60,11 +60,28 @@ export type AppIpcContractMap = {
     request: SaveProviderDraftInput
     response: AppSettings
   }
+  [ipcChannels.window.close]: {
+    request: undefined
+    response: void
+  }
+  [ipcChannels.window.minimize]: {
+    request: undefined
+    response: void
+  }
+  [ipcChannels.window.toggleMaximize]: {
+    request: undefined
+    response: void
+  }
 }
 
 export type MoonApi = {
   settings: {
     get: () => Promise<AppSettings>
     saveProvider: (input: SaveProviderDraftInput) => Promise<AppSettings>
+  }
+  windowControls: {
+    close: () => Promise<void>
+    minimize: () => Promise<void>
+    toggleMaximize: () => Promise<void>
   }
 }

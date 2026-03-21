@@ -19,6 +19,11 @@ const api: MoonApi = {
   settings: {
     get: () => invokeIpcChannel(ipcChannels.settings.get),
     saveProvider: (input) => invokeIpcChannel(ipcChannels.settings.saveProvider, input)
+  },
+  windowControls: {
+    close: () => invokeIpcChannel(ipcChannels.window.close),
+    minimize: () => invokeIpcChannel(ipcChannels.window.minimize),
+    toggleMaximize: () => invokeIpcChannel(ipcChannels.window.toggleMaximize)
   }
 }
 

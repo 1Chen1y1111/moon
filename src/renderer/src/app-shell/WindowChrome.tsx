@@ -1,13 +1,43 @@
 const utilityButtonClassName =
   'flex h-8 w-8 cursor-default items-center justify-center rounded-full border border-white/6 bg-white/[0.03] text-[var(--alma-text-secondary)] opacity-100'
 
+const trafficLightButtonClassName =
+  'h-3 w-3 rounded-full transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/50'
+
 export function WindowChrome(): React.JSX.Element {
+  const handleClose = (): void => {
+    void window.api.windowControls.close()
+  }
+
+  const handleMinimize = (): void => {
+    void window.api.windowControls.minimize()
+  }
+
+  const handleToggleMaximize = (): void => {
+    void window.api.windowControls.toggleMaximize()
+  }
+
   return (
     <header className="flex items-center justify-between border-b border-[color:var(--alma-sidebar-border)] px-4 py-3">
-      <div aria-hidden="true" className="flex items-center gap-2">
-        <span className="h-3 w-3 rounded-full bg-[#ff5f57]" />
-        <span className="h-3 w-3 rounded-full bg-[#ffbd2e]" />
-        <span className="h-3 w-3 rounded-full bg-[#28c840]" />
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          aria-label="关闭窗口"
+          className={`${trafficLightButtonClassName} bg-[#ff5f57]`}
+          onClick={handleClose}
+        />
+        <button
+          type="button"
+          aria-label="最小化窗口"
+          className={`${trafficLightButtonClassName} bg-[#ffbd2e]`}
+          onClick={handleMinimize}
+        />
+        <button
+          type="button"
+          aria-label="切换缩放窗口"
+          className={`${trafficLightButtonClassName} bg-[#28c840]`}
+          onClick={handleToggleMaximize}
+        />
       </div>
 
       <div className="flex items-center gap-1.5">
