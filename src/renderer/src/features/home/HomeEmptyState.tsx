@@ -5,7 +5,7 @@ export function HomeEmptyState(): React.JSX.Element {
   return (
     <section
       aria-label="Alma landing view"
-      className="flex w-full justify-center px-6 py-10 text-[var(--alma-text-primary)]"
+      className="flex min-h-screen w-full items-center justify-center px-6 py-10 text-[var(--alma-text-primary)]"
     >
       <div className="flex w-full max-w-[672px] flex-col items-center gap-8 text-center">
         <div className="flex h-[210px] w-[194px] items-center justify-center rounded-[28px] border border-[color:var(--alma-panel-border)] bg-[rgba(14,18,25,0.28)] p-4 shadow-[0_32px_90px_rgba(7,10,18,0.36)]">
@@ -26,6 +26,7 @@ export function HomeEmptyState(): React.JSX.Element {
 
         <div className="flex w-full max-w-[360px] flex-col items-center gap-3">
           <Button
+            type="button"
             size="lg"
             className="h-12 w-full rounded-full bg-[var(--alma-accent)] text-[var(--alma-accent-text)] shadow-[0_20px_60px_rgba(97,175,240,0.22)] hover:brightness-105"
           >
@@ -33,6 +34,7 @@ export function HomeEmptyState(): React.JSX.Element {
           </Button>
           <div className="grid w-full gap-3 sm:grid-cols-2">
             <Button
+              type="button"
               variant="secondary"
               size="lg"
               className="h-12 rounded-full border border-[color:var(--alma-panel-border)] bg-white/[0.04] text-[var(--alma-text-primary)] hover:bg-white/[0.08]"
@@ -40,6 +42,7 @@ export function HomeEmptyState(): React.JSX.Element {
               配置提供商
             </Button>
             <Button
+              type="button"
               variant="secondary"
               size="lg"
               className="h-12 rounded-full border border-[color:var(--alma-panel-border)] bg-white/[0.04] text-[var(--alma-text-primary)] hover:bg-white/[0.08]"

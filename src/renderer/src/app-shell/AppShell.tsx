@@ -7,9 +7,7 @@ export function AppShell({ children }: { children: React.ReactNode }): React.JSX
   return (
     <div className="flex min-h-screen bg-[var(--alma-app-bg)] text-white">
       <LeftRail />
-      <main className="flex min-h-screen flex-1 items-center justify-center overflow-auto">
-        {children}
-      </main>
+      <main className="min-h-screen flex-1 overflow-auto">{children}</main>
       <ProviderSetupDialog />
       <SettingsDialog />
       <div id="modal-root" />
