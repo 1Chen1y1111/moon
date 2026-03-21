@@ -59,6 +59,19 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
+
+  --alma-app-bg: #282c34;
+  --alma-sidebar-bg: #20242c;
+  --alma-sidebar-border: rgba(255, 255, 255, 0.05);
+  --alma-panel-border: rgba(255, 255, 255, 0.08);
+  --alma-text-primary: #ffffff;
+  --alma-text-secondary: #9ca3af;
+  --alma-text-muted: #6b7280;
+  --alma-accent: #61aff0;
+  --alma-accent-text: #1a1d23;
+  --alma-update-bg: rgba(98, 174, 238, 0.1);
+  --alma-update-text: #62aeee;
+  --alma-serif: "Source Serif 4", Georgia, serif;
 }
 
 .dark {
