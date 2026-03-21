@@ -1,7 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { AppShell } from './AppShell'
 import { LeftRail } from './LeftRail'
 import { useSettingsStore } from '@renderer/lib/stores/settings-store'
 import { useUiStore } from '@renderer/lib/stores/ui-store'

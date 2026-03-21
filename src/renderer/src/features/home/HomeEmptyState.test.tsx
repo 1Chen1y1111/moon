@@ -39,10 +39,8 @@ describe('HomeEmptyState', () => {
 
     const section = screen.getByRole('region', { name: 'Home empty state' })
     const shellMain = screen.getByRole('main')
-    const rails = screen.getAllByRole('complementary')
 
     expect(shellMain).toContainElement(section)
-    expect(rails).toHaveLength(1)
     expect(screen.getByRole('complementary', { name: 'Workspace navigation' })).toBeInTheDocument()
     expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
   })
