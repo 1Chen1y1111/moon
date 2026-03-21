@@ -11,12 +11,17 @@ export function createWindow(): BrowserWindow {
     height: 670,
     show: false,
     autoHideMenuBar: true,
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden' as const } : {}),
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false
     }
   })
+
+  if (process.platform === 'darwin') {
+    mainWindow.setWindowButtonVisibility(false)
+  }
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
