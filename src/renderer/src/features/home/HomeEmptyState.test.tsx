@@ -51,8 +51,11 @@ describe('HomeEmptyState', () => {
   it('keeps provider and settings ctas inert', () => {
     renderInShell()
 
-    fireEvent.click(screen.getByRole('button', { name: '配置提供商' }))
-    fireEvent.click(screen.getByRole('button', { name: '设置' }))
+    const section = screen.getByRole('region', { name: 'Moon landing view' })
+    const scoped = within(section)
+
+    fireEvent.click(scoped.getByRole('button', { name: '配置提供商' }))
+    fireEvent.click(scoped.getByRole('button', { name: '设置' }))
 
     expect(screen.queryByRole('dialog', { name: 'Configure Provider' })).not.toBeInTheDocument()
     expect(screen.queryByRole('dialog', { name: 'Settings' })).not.toBeInTheDocument()
