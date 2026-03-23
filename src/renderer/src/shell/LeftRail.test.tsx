@@ -1,28 +1,31 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
+import { AppProviders } from '@renderer/app/providers'
 import { AppShell } from '@renderer/shell/AppShell'
-import { useUiStore } from '@renderer/lib/stores/ui-store'
 
 import { LeftRail } from './LeftRail'
 
+function renderRail(): void {
+  render(
+    <AppProviders>
+      <LeftRail />
+    </AppProviders>
+  )
+}
+
 function renderInShell(): void {
   render(
-    <AppShell>
-      <section aria-label="Test route stage">route content</section>
-    </AppShell>
+    <AppProviders>
+      <AppShell>
+        <section aria-label="Test route stage">route content</section>
+      </AppShell>
+    </AppProviders>
   )
 }
 
 describe('LeftRail', () => {
-  beforeEach(() => {
-    useUiStore.setState({
-      isProviderSetupDialogOpen: false,
-      isSettingsDialogOpen: false
-    })
-  })
-
   afterEach(() => {
     vi.useRealTimers()
   })
@@ -30,7 +33,7 @@ describe('LeftRail', () => {
   it('renders the Moon floating rail assets', async () => {
     const user = userEvent.setup()
 
-    render(<LeftRail />)
+    renderRail()
 
     expect(screen.getByRole('complementary', { name: 'Workspace navigation' })).toBeInTheDocument()
     expect(screen.getByTestId('window-chrome-collapse-trigger')).toBeInTheDocument()
@@ -69,15 +72,13 @@ describe('LeftRail', () => {
     fireEvent.click(within(rail).getByRole('button', { name: '璁剧疆' }))
 
     expect(screen.queryByRole('dialog', { name: 'Configure Provider' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('dialog', { name: 'Settings' })).not.toBeInTheDocument()
-    expect(useUiStore.getState().isProviderSetupDialogOpen).toBe(false)
-    expect(useUiStore.getState().isSettingsDialogOpen).toBe(false)
+    expect(screen.getByRole('dialog', { name: '设置' })).toBeInTheDocument()
   })
 
   it('keeps the more actions menu open long enough to move into it', () => {
     vi.useFakeTimers()
 
-    render(<LeftRail />)
+    renderRail()
 
     const trigger = screen.getByRole('button', { name: '鏇村鎿嶄綔' })
 

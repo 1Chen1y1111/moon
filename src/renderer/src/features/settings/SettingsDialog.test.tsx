@@ -1,80 +1,83 @@
-import { render, screen, within } from '@testing-library/react'
+import { configureStore, type EnhancedStore } from '@reduxjs/toolkit'
+import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { Provider } from 'react-redux'
+import { describe, expect, it } from 'vitest'
 
+import type { SettingsState } from './model/settings.types'
+import { settingsReducer } from './model/slices'
 import { SettingsDialog } from './SettingsDialog'
-import { useSettingsStore } from '@renderer/lib/stores/settings-store'
-import { useUiStore } from '@renderer/lib/stores/ui-store'
 
-function renderDialog(): void {
-  render(<SettingsDialog />)
+type SettingsDialogTestStore = EnhancedStore<{
+  settings: SettingsState
+}>
+
+function createTestStore(preloadedSettings?: Partial<SettingsState>): SettingsDialogTestStore {
+  const baseSettingsState: SettingsState = {
+    activeSection: 'general',
+    isOpen: true
+  }
+
+  return configureStore({
+    reducer: {
+      settings: settingsReducer
+    },
+    preloadedState: {
+      settings: {
+        ...baseSettingsState,
+        ...preloadedSettings
+      }
+    }
+  })
+}
+
+function renderDialog(preloadedSettings?: Partial<SettingsState>): {
+  store: SettingsDialogTestStore
+  user: ReturnType<typeof userEvent.setup>
+} {
+  const store = createTestStore(preloadedSettings)
+
+  render(
+    <Provider store={store}>
+      <SettingsDialog />
+    </Provider>
+  )
+
+  return {
+    store,
+    user: userEvent.setup()
+  }
 }
 
 describe('SettingsDialog', () => {
-  beforeEach(() => {
-    useUiStore.setState({
-      isProviderSetupDialogOpen: false,
-      isSettingsDialogOpen: false
-    })
-    useSettingsStore.setState({
-      providerDrafts: {
-        claude: {
-          apiKey: '',
-          model: ''
-        }
-      },
-      activeSettingsSection: 'general'
-    })
-  })
-
-  it('renders settings as a modal with the expected sections when opened', () => {
-    useUiStore.getState().openSettingsDialog()
-
+  it('renders the rebuilt settings shell with the general page active', () => {
     renderDialog()
 
-    const dialog = screen.getByRole('dialog', { name: 'Settings' })
-    const scoped = within(dialog)
-
-    expect(scoped.getByRole('tab', { name: 'General' })).toHaveAttribute('aria-selected', 'true')
-    expect(scoped.getByRole('tab', { name: 'Providers' })).toBeInTheDocument()
-    expect(scoped.getByRole('tab', { name: 'Appearance' })).toBeInTheDocument()
-    expect(scoped.getByRole('tab', { name: 'Projects' })).toBeInTheDocument()
-    expect(scoped.getByText('Tune how Moon behaves before wiring persistence.')).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: '设置' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '通用' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('tab', { name: 'Agents' })).toBeInTheDocument()
+    expect(screen.getByText('工具模型')).toBeInTheDocument()
+    expect(screen.getByText('Coding Agent')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '关闭设置' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '保存' })).toBeInTheDocument()
   })
 
-  it('switches sections and shows provider summary content', async () => {
-    const user = userEvent.setup()
+  it('switches sections and shows placeholder content for non-general pages', async () => {
+    const { store, user } = renderDialog()
 
-    useSettingsStore.setState({
-      providerDrafts: {
-        claude: {
-          apiKey: 'sk-ant-demo',
-          model: 'claude-3-7-sonnet-latest'
-        }
-      },
-      activeSettingsSection: 'general'
-    })
+    await user.click(screen.getByRole('tab', { name: '提供商' }))
 
-    useUiStore.getState().openSettingsDialog()
-    renderDialog()
-
-    await user.click(screen.getByRole('tab', { name: 'Providers' }))
-
-    expect(useSettingsStore.getState().activeSettingsSection).toBe('providers')
-    expect(screen.getByText('Claude')).toBeInTheDocument()
-    expect(screen.getByText('claude-3-7-sonnet-latest')).toBeInTheDocument()
-    expect(screen.getByText('API key saved for this session only.')).toBeInTheDocument()
+    expect(store.getState().settings.activeSection).toBe('providers')
+    expect(screen.getByRole('heading', { name: '提供商' })).toBeInTheDocument()
+    expect(screen.getByText('页面内容待补齐')).toBeInTheDocument()
   })
 
-  it('closes the modal from the dismiss action', async () => {
-    const user = userEvent.setup()
+  it('closes the dialog from the dismiss action', async () => {
+    const { store, user } = renderDialog()
 
-    useUiStore.getState().openSettingsDialog()
-    renderDialog()
+    await user.click(screen.getByRole('button', { name: '关闭设置' }))
 
-    await user.click(screen.getByRole('button', { name: 'Close Settings' }))
-
-    expect(useUiStore.getState().isSettingsDialogOpen).toBe(false)
-    expect(screen.queryByRole('dialog', { name: 'Settings' })).not.toBeInTheDocument()
+    expect(store.getState().settings.isOpen).toBe(false)
+    expect(screen.queryByRole('dialog', { name: '设置' })).not.toBeInTheDocument()
   })
 })

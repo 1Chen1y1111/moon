@@ -1,4 +1,4 @@
-export { SettingsDialog } from './SettingsDialog'
+export { SettingsDialog } from './components/SettingsDialog'
 export { settingsSections } from './config/settings-sections'
 export {
   closeSettingsDialog,

@@ -1,27 +1,23 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 
+import { AppProviders } from '@renderer/app/providers'
 import { AppShell } from '@renderer/shell/AppShell'
-import { useUiStore } from '@renderer/lib/stores/ui-store'
+
 import { HomeEmptyState } from './HomeEmptyState'
 
 function renderInShell(): void {
   render(
-    <AppShell>
-      <HomeEmptyState />
-    </AppShell>
+    <AppProviders>
+      <AppShell>
+        <HomeEmptyState />
+      </AppShell>
+    </AppProviders>
   )
 }
 
 describe('HomeEmptyState', () => {
-  beforeEach(() => {
-    useUiStore.setState({
-      isProviderSetupDialogOpen: false,
-      isSettingsDialogOpen: false
-    })
-  })
-
-  it('renders the moon landing hero content', () => {
+  it('renders the Moon landing hero content', () => {
     render(<HomeEmptyState />)
     const section = screen.getByRole('region', { name: 'Moon landing view' })
     const scoped = within(section)
@@ -48,7 +44,7 @@ describe('HomeEmptyState', () => {
     expect(within(shellMain).queryByRole('textbox')).not.toBeInTheDocument()
   })
 
-  it('keeps provider and settings ctas inert', () => {
+  it('keeps provider and settings CTAs inert', () => {
     renderInShell()
 
     const section = screen.getByRole('region', { name: 'Moon landing view' })
@@ -58,8 +54,6 @@ describe('HomeEmptyState', () => {
     fireEvent.click(scoped.getByRole('button', { name: '设置' }))
 
     expect(screen.queryByRole('dialog', { name: 'Configure Provider' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('dialog', { name: 'Settings' })).not.toBeInTheDocument()
-    expect(useUiStore.getState().isProviderSetupDialogOpen).toBe(false)
-    expect(useUiStore.getState().isSettingsDialogOpen).toBe(false)
+    expect(screen.queryByRole('dialog', { name: '设置' })).not.toBeInTheDocument()
   })
 })
