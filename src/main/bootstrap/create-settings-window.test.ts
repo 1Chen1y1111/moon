@@ -69,4 +69,28 @@ describe('openSettingsWindow', () => {
     expect(firstWindow).toBe(secondWindow)
     expect(firstWindow.focus).toHaveBeenCalledTimes(1)
   })
+
+  it('loads the settings route when running against the renderer dev server', async () => {
+    isMock.dev = true
+    env['ELECTRON_RENDERER_URL'] = 'http://127.0.0.1:5173'
+    const firstWindow = browserWindowInstances[0]
+
+    const { openSettingsWindow } = await import('./create-settings-window')
+
+    openSettingsWindow()
+
+    expect(firstWindow?.loadURL).toHaveBeenCalledWith('http://127.0.0.1:5173#/settings')
+  })
+
+  it('loads the settings route when using the packaged renderer file', async () => {
+    const firstWindow = browserWindowInstances[0]
+    const { openSettingsWindow } = await import('./create-settings-window')
+
+    openSettingsWindow()
+
+    expect(firstWindow?.loadFile).toHaveBeenCalledWith(
+      expect.stringMatching(/renderer[\\/]+index\.html$/),
+      { hash: '/settings' }
+    )
+  })
 })

@@ -1,24 +1,17 @@
 import { describe, expect, it } from 'vitest'
 
-import {
-  closeSettingsDialog,
-  openSettingsDialog,
-  setActiveSettingsSection,
-  settingsReducer
-} from './index'
+import { setActiveSettingsSection, settingsReducer } from './index'
 
 describe('settingsSlice', () => {
-  it('opens and closes the settings dialog', () => {
-    const openedState = settingsReducer(undefined, openSettingsDialog())
-    const closedState = settingsReducer(openedState, closeSettingsDialog())
+  it('defaults to the general section', () => {
+    const state = settingsReducer(undefined, { type: 'unknown' })
 
-    expect(openedState.isOpen).toBe(true)
-    expect(closedState.isOpen).toBe(false)
+    expect(state.activeSection).toBe('general')
   })
 
   it('switches the active settings section', () => {
-    const nextState = settingsReducer(undefined, setActiveSettingsSection('providers'))
+    const nextState = settingsReducer(undefined, setActiveSettingsSection('about'))
 
-    expect(nextState.activeSection).toBe('providers')
+    expect(nextState.activeSection).toBe('about')
   })
 })

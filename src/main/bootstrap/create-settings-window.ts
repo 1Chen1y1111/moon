@@ -53,9 +53,11 @@ export function openSettingsWindow(): BrowserWindow {
     settingsWindow.webContents.openDevTools({
       mode: 'detach'
     })
-    void settingsWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    void settingsWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/settings`)
   } else {
-    void settingsWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    void settingsWindow.loadFile(join(__dirname, '../renderer/index.html'), {
+      hash: '/settings'
+    })
   }
 
   return settingsWindow

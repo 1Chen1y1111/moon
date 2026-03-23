@@ -1,4 +1,9 @@
-import { createRootRouteWithContext, createRoute, createRouter } from '@tanstack/react-router'
+import {
+  createHashHistory,
+  createRootRouteWithContext,
+  createRoute,
+  createRouter
+} from '@tanstack/react-router'
 
 import type { AppRouterContext } from './router-context'
 import { ChatRoute, HomeRoute, RootLayout, SettingsRoute } from './route-hosts'
@@ -29,6 +34,7 @@ const routeTree = rootRoute.addChildren([homeRoute, chatRoute, settingsRoute])
 
 export const appRouter = createRouter({
   routeTree,
+  history: createHashHistory(),
   context: {
     routeState: { activeChatId: null },
     setRouteState: () => undefined

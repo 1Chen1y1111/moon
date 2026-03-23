@@ -1,6 +1,1 @@
-export {
-  closeSettingsDialog,
-  openSettingsDialog,
-  setActiveSettingsSection,
-  settingsReducer
-} from './settings.slice'
+export { setActiveSettingsSection, settingsReducer } from './settings.slice'

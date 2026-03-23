@@ -5,8 +5,8 @@ import { useAppSelector } from './store/hooks'
 import { AppProviders } from './providers'
 
 function SettingsProbe(): React.JSX.Element {
-  const isOpen = useAppSelector((state) => state.settings.isOpen)
-  return <span>{isOpen ? 'open' : 'closed'}</span>
+  const activeSection = useAppSelector((state) => state.settings.activeSection)
+  return <span>{activeSection}</span>
 }
 
 describe('AppProviders', () => {
@@ -17,6 +17,6 @@ describe('AppProviders', () => {
       </AppProviders>
     )
 
-    expect(screen.getByText('closed')).toBeInTheDocument()
+    expect(screen.getByText('general')).toBeInTheDocument()
   })
 })

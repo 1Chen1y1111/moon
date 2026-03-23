@@ -40,5 +40,4 @@ export type SettingsSection = {
 
 export type SettingsState = {
   activeSection: SettingsSectionId
-  isOpen: boolean
 }

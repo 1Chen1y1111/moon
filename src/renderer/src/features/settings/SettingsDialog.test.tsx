@@ -17,8 +17,7 @@ type SettingsPageTestStore = EnhancedStore<{
 
 function createTestStore(preloadedSettings?: Partial<SettingsState>): SettingsPageTestStore {
   const baseSettingsState: SettingsState = {
-    activeSection: 'general',
-    isOpen: false
+    activeSection: 'general'
   }
 
   return configureStore({
