@@ -25,6 +25,7 @@ export function openSettingsWindow(): BrowserWindow {
     show: false,
     autoHideMenuBar: true,
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden' as const } : {}),
+    ...(process.platform === 'win32' ? { frame: false } : {}),
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),

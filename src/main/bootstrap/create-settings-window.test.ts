@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const browserWindowMock = vi.fn()
 const shellOpenExternalMock = vi.fn()
@@ -62,6 +62,7 @@ function createBrowserWindowInstance(): {
 }
 
 describe('openSettingsWindow', () => {
+  const originalPlatform = process.platform
   const env = process.env as Record<string, string | undefined>
 
   beforeEach(() => {
@@ -71,6 +72,12 @@ describe('openSettingsWindow', () => {
     isMock.dev = false
     delete env['ELECTRON_RENDERER_URL']
     browserWindowInstances = [createBrowserWindowInstance(), createBrowserWindowInstance()]
+  })
+
+  afterEach(() => {
+    Object.defineProperty(process, 'platform', {
+      value: originalPlatform
+    })
   })
 
   it('reuses the existing settings window by focusing it', async () => {
@@ -105,6 +112,22 @@ describe('openSettingsWindow', () => {
     expect(firstWindow?.loadFile).toHaveBeenCalledWith(
       expect.stringMatching(/renderer[\\/]+index\.html$/),
       { hash: '/settings' }
+    )
+  })
+
+  it('removes the native window frame on Windows for the dedicated settings window', async () => {
+    Object.defineProperty(process, 'platform', {
+      value: 'win32'
+    })
+
+    const { openSettingsWindow } = await import('./create-settings-window')
+
+    openSettingsWindow()
+
+    expect(browserWindowMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        frame: false
+      })
     )
   })
 })

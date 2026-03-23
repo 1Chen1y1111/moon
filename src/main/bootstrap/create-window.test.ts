@@ -92,4 +92,20 @@ describe('createMainWindow', () => {
       mode: 'detach'
     })
   })
+
+  it('removes the native window frame on Windows so the custom chrome is the only title bar', async () => {
+    Object.defineProperty(process, 'platform', {
+      value: 'win32'
+    })
+
+    const { createMainWindow } = await import('./create-window')
+
+    createMainWindow()
+
+    expect(browserWindowMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        frame: false
+      })
+    )
+  })
 })
