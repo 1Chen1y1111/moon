@@ -21,6 +21,7 @@ describe('registerIpcHandlers', () => {
     getSettings: vi.fn(),
     saveProvider: vi.fn()
   }
+  const openSettingsWindow = vi.fn()
 
   beforeEach(() => {
     removeHandlerMock.mockReset()
@@ -28,6 +29,7 @@ describe('registerIpcHandlers', () => {
     fromWebContentsMock.mockReset()
     settingsService.getSettings.mockReset()
     settingsService.saveProvider.mockReset()
+    openSettingsWindow.mockReset()
   })
 
   it('registers window control handlers that operate on the sender window', async () => {
@@ -73,5 +75,25 @@ describe('registerIpcHandlers', () => {
     expect(browserWindow.minimize).toHaveBeenCalledTimes(1)
     expect(browserWindow.maximize).toHaveBeenCalledTimes(1)
     expect(browserWindow.unmaximize).not.toHaveBeenCalled()
+  })
+
+  it('registers a handler that opens the dedicated settings window', async () => {
+    const { registerIpcHandlers } = await import('./register-ipc')
+    const { ipcChannels } = await import('../ipc/channels')
+
+    registerIpcHandlers({
+      settingsService: settingsService as never,
+      openSettingsWindow
+    })
+
+    const openSettingsHandler = handleMock.mock.calls.find(
+      ([channel]) => channel === ipcChannels.window.openSettings
+    )?.[1]
+
+    expect(openSettingsHandler).toBeTypeOf('function')
+
+    await openSettingsHandler?.()
+
+    expect(openSettingsWindow).toHaveBeenCalledTimes(1)
   })
 })

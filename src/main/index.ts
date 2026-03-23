@@ -3,6 +3,7 @@ import { join } from 'node:path'
 
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 
+import { openSettingsWindow } from './bootstrap/create-settings-window'
 import { createMainWindow } from './bootstrap/create-window'
 import { registerIpcHandlers } from './bootstrap/register-ipc'
 import { bootstrapDatabase } from './db/bootstrap'
@@ -26,6 +27,7 @@ app.whenReady().then(() => {
   bootstrapDatabase(databaseConnection)
 
   registerIpcHandlers({
+    openSettingsWindow,
     settingsService: new SettingsService(new SettingsRepository(databaseConnection))
   })
 
