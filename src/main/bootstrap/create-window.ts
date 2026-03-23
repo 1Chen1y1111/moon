@@ -5,7 +5,7 @@ import { is } from '@electron-toolkit/utils'
 
 import icon from '../../../resources/icon.png?asset'
 
-export function createWindow(): BrowserWindow {
+export function createMainWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
     width: 900,
     height: 670,
@@ -43,3 +43,5 @@ export function createWindow(): BrowserWindow {
 
   return mainWindow
 }
+
+export const createWindow = createMainWindow

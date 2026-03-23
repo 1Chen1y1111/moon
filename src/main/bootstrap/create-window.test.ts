@@ -43,7 +43,7 @@ function createBrowserWindowInstance() {
   }
 }
 
-describe('createWindow', () => {
+describe('createMainWindow', () => {
   const originalPlatform = process.platform
   const env = process.env as Record<string, string | undefined>
 
@@ -67,9 +67,9 @@ describe('createWindow', () => {
       value: 'darwin'
     })
 
-    const { createWindow } = await import('./create-window')
+    const { createMainWindow } = await import('./create-window')
 
-    createWindow()
+    createMainWindow()
 
     expect(browserWindowMock).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -83,9 +83,9 @@ describe('createWindow', () => {
     isMock.dev = true
     env['ELECTRON_RENDERER_URL'] = 'http://127.0.0.1:5173'
 
-    const { createWindow } = await import('./create-window')
+    const { createMainWindow } = await import('./create-window')
 
-    createWindow()
+    createMainWindow()
 
     expect(browserWindowInstance.loadURL).toHaveBeenCalledWith('http://127.0.0.1:5173')
     expect(browserWindowInstance.webContents.openDevTools).toHaveBeenCalledWith({

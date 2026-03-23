@@ -3,7 +3,7 @@ import { join } from 'node:path'
 
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 
-import { createWindow } from './bootstrap/create-window'
+import { createMainWindow } from './bootstrap/create-window'
 import { registerIpcHandlers } from './bootstrap/register-ipc'
 import { bootstrapDatabase } from './db/bootstrap'
 import { createDatabaseConnection, type DatabaseConnection } from './db/connection'
@@ -29,10 +29,10 @@ app.whenReady().then(() => {
     settingsService: new SettingsService(new SettingsRepository(databaseConnection))
   })
 
-  createWindow()
+  createMainWindow()
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
   })
 })
 
