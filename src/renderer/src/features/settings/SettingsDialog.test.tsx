@@ -53,7 +53,7 @@ function renderSettingsPage(preloadedSettings?: Partial<SettingsState>): {
 }
 
 describe('SettingsPage', () => {
-  it('renders the settings shell as a page surface instead of a modal', () => {
+  it('renders the settings shell without modal framing and keeps the shell split layout', () => {
     renderSettingsPage()
 
     expect(screen.queryByRole('dialog', { name: '设置' })).not.toBeInTheDocument()
@@ -66,12 +66,23 @@ describe('SettingsPage', () => {
     expect(screen.getByRole('button', { name: '保存' })).toBeInTheDocument()
   })
 
-  it('switches sections and shows placeholder content in the settings page shell', async () => {
-    const { store, user } = renderSettingsPage()
+  it('keeps the header and footer fixed while the sidebar and content own scrolling', async () => {
+    const { user } = renderSettingsPage()
+
+    const sidebarTablist = screen.getByRole('tablist', { name: '设置分类' })
+    const footerButton = screen.getByRole('button', { name: '保存' })
+    const headerTitle = screen.getByRole('heading', { name: '通用' })
+
+    expect(sidebarTablist).toHaveClass('overflow-y-auto')
+    expect(sidebarTablist).not.toHaveClass('overflow-visible')
+    expect(footerButton).toBeInTheDocument()
+    expect(headerTitle).toBeInTheDocument()
 
     await user.click(screen.getByRole('tab', { name: '关于' }))
 
-    expect(store.getState().settings.activeSection).toBe('about')
+    const contentScrollRegion = screen.getByTestId('settings-content-scroll')
+
+    expect(contentScrollRegion).toHaveClass('overflow-y-auto')
     expect(screen.getByRole('heading', { name: '关于' })).toBeInTheDocument()
     expect(screen.getByText('页面内容待补齐')).toBeInTheDocument()
   })
