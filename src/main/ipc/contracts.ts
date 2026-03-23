@@ -72,6 +72,10 @@ export type AppIpcContractMap = {
     request: undefined
     response: void
   }
+  [ipcChannels.window.openSettings]: {
+    request: undefined
+    response: void
+  }
 }
 
 export type MoonApi = {
@@ -83,5 +87,6 @@ export type MoonApi = {
     close: () => Promise<void>
     minimize: () => Promise<void>
     toggleMaximize: () => Promise<void>
+    openSettings: () => Promise<void>
   }
 }

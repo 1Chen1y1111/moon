@@ -6,6 +6,7 @@ export const ipcChannels = {
   window: {
     close: 'window:close',
     minimize: 'window:minimize',
-    toggleMaximize: 'window:toggle-maximize'
+    toggleMaximize: 'window:toggle-maximize',
+    openSettings: 'window:open-settings'
   }
 } as const
