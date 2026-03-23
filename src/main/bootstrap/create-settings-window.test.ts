@@ -29,7 +29,21 @@ vi.mock('../../../resources/icon.png?asset', () => ({
   default: 'icon.png'
 }))
 
-function createBrowserWindowInstance() {
+function createBrowserWindowInstance(): {
+  on: ReturnType<typeof vi.fn>
+  show: ReturnType<typeof vi.fn>
+  focus: ReturnType<typeof vi.fn>
+  restore: ReturnType<typeof vi.fn>
+  isDestroyed: ReturnType<typeof vi.fn>
+  isMinimized: ReturnType<typeof vi.fn>
+  loadURL: ReturnType<typeof vi.fn>
+  loadFile: ReturnType<typeof vi.fn>
+  setWindowButtonVisibility: ReturnType<typeof vi.fn>
+  webContents: {
+    openDevTools: ReturnType<typeof vi.fn>
+    setWindowOpenHandler: ReturnType<typeof vi.fn>
+  }
+} {
   return {
     on: vi.fn(),
     show: vi.fn(),
