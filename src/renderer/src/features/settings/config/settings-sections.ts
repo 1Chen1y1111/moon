@@ -2,20 +2,27 @@ import {
   Bot,
   Brain,
   Cable,
+  Database,
   FolderOpen,
+  Gauge,
   Globe,
   Hand,
+  Info,
+  Keyboard,
   Languages,
   MemoryStick,
   MessageCircle,
   Package2,
+  Palette,
   PersonStanding,
   Plug,
   ScanSearch,
   Settings,
   Sparkles,
   VenetianMask,
-  WalletCards
+  WalletCards,
+  Wifi,
+  Workflow
 } from 'lucide-react'
 
 import type { SettingsSection } from '../model/settings.types'
@@ -155,6 +162,70 @@ export const settingsSections: SettingsSection[] = [
     title: '网络搜索',
     description: '联网搜索能力与偏好。',
     icon: Globe,
+    kind: 'placeholder'
+  },
+  {
+    id: 'chrome-relay',
+    label: 'Chrome Relay',
+    title: 'Chrome Relay',
+    description: '浏览器 relay 与连接状态。',
+    icon: Workflow,
+    kind: 'placeholder'
+  },
+  {
+    id: 'user-interface',
+    label: '用户界面',
+    title: '用户界面',
+    description: '界面布局与交互体验设置。',
+    icon: PersonStanding,
+    kind: 'placeholder'
+  },
+  {
+    id: 'color-schemes',
+    label: '配色方案',
+    title: '配色方案',
+    description: '主题、配色和外观方案。',
+    icon: Palette,
+    kind: 'placeholder'
+  },
+  {
+    id: 'network',
+    label: '网络',
+    title: '网络',
+    description: '网络连接与代理相关设置。',
+    icon: Wifi,
+    kind: 'placeholder'
+  },
+  {
+    id: 'shortcuts',
+    label: '快捷键',
+    title: '快捷键',
+    description: '全局和局部快捷键配置。',
+    icon: Keyboard,
+    kind: 'placeholder'
+  },
+  {
+    id: 'data',
+    label: '数据',
+    title: '数据',
+    description: '数据目录、缓存和导入导出。',
+    icon: Database,
+    kind: 'placeholder'
+  },
+  {
+    id: 'usage',
+    label: '使用量',
+    title: '使用量',
+    description: '用量统计和资源消耗信息。',
+    icon: Gauge,
+    kind: 'placeholder'
+  },
+  {
+    id: 'about',
+    label: '关于',
+    title: '关于',
+    description: '版本信息与应用说明。',
+    icon: Info,
     kind: 'placeholder'
   }
 ]

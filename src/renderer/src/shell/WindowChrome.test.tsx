@@ -31,9 +31,9 @@ describe('WindowChrome', () => {
 
     render(<WindowChrome />)
 
-    await user.click(screen.getByRole('button', { name: '鍏抽棴绐楀彛' }))
-    await user.click(screen.getByRole('button', { name: '鏈€灏忓寲绐楀彛' }))
-    await user.click(screen.getByRole('button', { name: '鍒囨崲缂╂斁绐楀彛' }))
+    await user.click(screen.getByRole('button', { name: '关闭窗口' }))
+    await user.click(screen.getByRole('button', { name: '最小化窗口' }))
+    await user.click(screen.getByRole('button', { name: '切换缩放窗口' }))
 
     expect(closeMock).toHaveBeenCalledTimes(1)
     expect(minimizeMock).toHaveBeenCalledTimes(1)
@@ -50,6 +50,6 @@ describe('WindowChrome', () => {
     expect(screen.getByTestId('window-chrome-compose-trigger')).toBeInTheDocument()
 
     await user.hover(screen.getByTestId('window-chrome-collapse-trigger'))
-    expect(await screen.findByRole('tooltip', { name: '鎶樺彔渚ц竟鏍?' })).toBeInTheDocument()
+    expect(await screen.findByRole('tooltip', { name: '折叠侧边栏' })).toBeInTheDocument()
   })
 })

@@ -1,5 +1,5 @@
-import { Button } from '@shadcn/ui/button'
 import LogoIcon from '@renderer/assets/logo.svg'
+import { Button } from '@shadcn/ui/button'
 
 export function HomeEmptyState(): React.JSX.Element {
   return (
@@ -49,7 +49,9 @@ export function HomeEmptyState(): React.JSX.Element {
           </div>
         </div>
 
-        <p className="text-sm leading-6 text-moon-text-muted">请至少配置一个 AI 提供商以开始聊天</p>
+        <p className="text-sm leading-6 text-moon-text-muted">
+          请至少配置一个 AI 提供商以开始聊天
+        </p>
       </div>
     </section>
   )

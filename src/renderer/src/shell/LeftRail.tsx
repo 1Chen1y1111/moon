@@ -60,13 +60,13 @@ export function LeftRail(): React.JSX.Element {
             type="button"
             className="flex h-11 items-center rounded-2xl px-4 text-left text-xs font-medium text-moon-text-secondary transition-colors hover:bg-moon-button-ghost-bg-hover hover:text-moon-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
           >
-            娓呴櫎鍘嗗彶
+            清除历史
           </button>
           <button
             type="button"
             className="flex h-11 items-center rounded-2xl border border-moon-button-secondary-border bg-moon-button-secondary-bg px-4 text-left text-xs font-medium text-moon-text-primary transition-colors hover:bg-moon-button-secondary-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
           >
-            鏂板缓鑱婂ぉ
+            新建聊天
           </button>
         </div>
 
@@ -82,7 +82,7 @@ export function LeftRail(): React.JSX.Element {
                     aria-hidden="true"
                     className="h-4 w-4 shrink-0 text-moon-text-secondary"
                   />
-                  <span>绠＄悊鎻愮ず璇嶅簲鐢?</span>
+                  <span>管理提示词应用</span>
                 </button>
 
                 <div className="my-1 h-px bg-moon-sidebar-border" />
@@ -96,7 +96,7 @@ export function LeftRail(): React.JSX.Element {
                       aria-hidden="true"
                       className="h-4 w-4 shrink-0 text-moon-text-secondary"
                     />
-                    <span>鍥惧簱</span>
+                    <span>图库</span>
                   </button>
                   <button
                     type="button"
@@ -106,7 +106,7 @@ export function LeftRail(): React.JSX.Element {
                       aria-hidden="true"
                       className="h-4 w-4 shrink-0 text-moon-text-secondary"
                     />
-                    <span>鐜板満缂栫▼</span>
+                    <span>现场编程</span>
                   </button>
                   <button
                     type="button"
@@ -117,7 +117,7 @@ export function LeftRail(): React.JSX.Element {
                       aria-hidden="true"
                       className="h-4 w-4 shrink-0 text-moon-text-secondary"
                     />
-                    <span>璁剧疆</span>
+                    <span>设置</span>
                   </button>
                 </div>
 
@@ -138,7 +138,7 @@ export function LeftRail(): React.JSX.Element {
 
             <button
               type="button"
-              aria-label="鏇村鎿嶄綔"
+              aria-label="更多操作"
               className="flex h-8 w-8 items-center justify-center rounded-md bg-transparent text-moon-text-primary transition-[background-color,color,box-shadow] hover:bg-moon-menu-item-bg-hover hover:shadow-[var(--moon-shadow-menu-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
             >
               <Ellipsis aria-hidden="true" className="h-4 w-4" />
@@ -150,7 +150,7 @@ export function LeftRail(): React.JSX.Element {
             className="inline-flex h-6 items-center gap-2 rounded-sm border border-moon-button-update-border bg-moon-button-update-bg px-2 text-xs text-moon-button-update-fg transition-[background-color,border-color,color,box-shadow] shadow-[var(--moon-shadow-menu-hover)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
           >
             <CircleFadingArrowUp aria-hidden="true" className="h-3 w-3" />
-            鏇存柊
+            更新
           </button>
         </div>
       </div>

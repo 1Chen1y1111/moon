@@ -18,6 +18,14 @@ export type SettingsSectionId =
   | 'text-to-speech'
   | 'people'
   | 'web-search'
+  | 'chrome-relay'
+  | 'user-interface'
+  | 'color-schemes'
+  | 'network'
+  | 'shortcuts'
+  | 'data'
+  | 'usage'
+  | 'about'
 
 export type SettingsSectionKind = 'general' | 'placeholder'
 

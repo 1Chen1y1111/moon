@@ -50,25 +50,27 @@ function renderDialog(preloadedSettings?: Partial<SettingsState>): {
 }
 
 describe('SettingsDialog', () => {
-  it('renders the rebuilt settings shell with the general page active', () => {
+  it('renders the rebuilt settings shell with the full sidebar list', () => {
     renderDialog()
 
     expect(screen.getByRole('dialog', { name: '设置' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '通用' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('tab', { name: 'Agents' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Chrome Relay' })).toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: '关于' })).toBeInTheDocument()
     expect(screen.getByText('工具模型')).toBeInTheDocument()
     expect(screen.getByText('Coding Agent')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '关闭设置' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '保存' })).toBeInTheDocument()
   })
 
-  it('switches sections and shows placeholder content for non-general pages', async () => {
+  it('switches sections and shows placeholder content for the added lower sections', async () => {
     const { store, user } = renderDialog()
 
-    await user.click(screen.getByRole('tab', { name: '提供商' }))
+    await user.click(screen.getByRole('tab', { name: '关于' }))
 
-    expect(store.getState().settings.activeSection).toBe('providers')
-    expect(screen.getByRole('heading', { name: '提供商' })).toBeInTheDocument()
+    expect(store.getState().settings.activeSection).toBe('about')
+    expect(screen.getByRole('heading', { name: '关于' })).toBeInTheDocument()
     expect(screen.getByText('页面内容待补齐')).toBeInTheDocument()
   })
 

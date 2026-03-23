@@ -26,19 +26,19 @@ export function WindowChrome(): React.JSX.Element {
       <div className="flex items-center gap-2">
         <button
           type="button"
-          aria-label="鍏抽棴绐楀彛"
+          aria-label="关闭窗口"
           className={`${trafficLightButtonClassName} bg-moon-window-control-close`}
           onClick={handleClose}
         />
         <button
           type="button"
-          aria-label="鏈€灏忓寲绐楀彛"
+          aria-label="最小化窗口"
           className={`${trafficLightButtonClassName} bg-moon-window-control-minimize`}
           onClick={handleMinimize}
         />
         <button
           type="button"
-          aria-label="鍒囨崲缂╂斁绐楀彛"
+          aria-label="切换缩放窗口"
           className={`${trafficLightButtonClassName} bg-moon-window-control-maximize`}
           onClick={handleToggleMaximize}
         />
@@ -59,7 +59,7 @@ export function WindowChrome(): React.JSX.Element {
               sideOffset={8}
               className="rounded-lg border border-moon-tooltip-border bg-moon-tooltip-bg px-4 py-1 text-xs font-medium text-moon-tooltip-fg shadow-[var(--moon-shadow-tooltip)]"
             >
-              鎶樺彔渚ц竟鏍?
+              折叠侧边栏
             </TooltipContent>
           </Tooltip>
 
@@ -76,7 +76,7 @@ export function WindowChrome(): React.JSX.Element {
               sideOffset={8}
               className="rounded-lg border border-moon-tooltip-border bg-moon-tooltip-bg px-4 py-1 text-xs font-medium text-moon-tooltip-fg shadow-[var(--moon-shadow-tooltip)]"
             >
-              鎼滅储
+              搜索
             </TooltipContent>
           </Tooltip>
 
@@ -93,7 +93,7 @@ export function WindowChrome(): React.JSX.Element {
               sideOffset={8}
               className="rounded-lg border border-moon-tooltip-border bg-moon-tooltip-bg px-4 py-1 text-xs font-medium text-moon-tooltip-fg shadow-[var(--moon-shadow-tooltip)]"
             >
-              鏂板缓鑱婂ぉ
+              新建聊天
             </TooltipContent>
           </Tooltip>
         </div>
