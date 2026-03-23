@@ -8,10 +8,7 @@ import { settingsReducer } from '@renderer/features/settings'
 
 import { ProviderSetupDialog } from './ProviderSetupDialog'
 import type { ProviderDraftState } from './model/providers.types'
-import {
-  openProviderSetupDialog,
-  providersReducer
-} from './model/slices'
+import { openProviderSetupDialog, providersReducer } from './model/slices'
 
 type ProviderDialogTestStore = EnhancedStore<{
   providers: ProviderDraftState
@@ -39,9 +36,7 @@ function createTestStore(
   })
 }
 
-function renderDialog(
-  preloadedProviders?: Partial<ProviderDraftState>
-): ProviderDialogTestStore {
+function renderDialog(preloadedProviders?: Partial<ProviderDraftState>): ProviderDialogTestStore {
   const store = createTestStore(preloadedProviders)
 
   render(

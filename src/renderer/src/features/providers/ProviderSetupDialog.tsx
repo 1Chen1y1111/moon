@@ -82,8 +82,8 @@ function ProviderSetupDialogContent({
 
     dispatch(
       saveClaudeProviderDraft({
-      apiKey: parsed.data.apiKey,
-      model: parsed.data.model
+        apiKey: parsed.data.apiKey,
+        model: parsed.data.model
       })
     )
     onSubmit?.(parsed.data)

@@ -57,18 +57,20 @@ function createNodeSqliteConnection(filePath: string): DatabaseConnection {
   return {
     exec: (sql) => database.exec(sql),
     prepare: (sql) => createNodeSqliteStatement(database.prepare(sql)),
-    transaction: <T>(callback: () => T) => () => {
-      database.exec('BEGIN')
+    transaction:
+      <T>(callback: () => T) =>
+      () => {
+        database.exec('BEGIN')
 
-      try {
-        const result = callback()
-        database.exec('COMMIT')
-        return result
-      } catch (error) {
-        database.exec('ROLLBACK')
-        throw error
-      }
-    },
+        try {
+          const result = callback()
+          database.exec('COMMIT')
+          return result
+        } catch (error) {
+          database.exec('ROLLBACK')
+          throw error
+        }
+      },
     close: () => database.close()
   }
 }
