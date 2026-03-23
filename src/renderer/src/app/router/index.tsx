@@ -6,11 +6,9 @@ import {
 } from '@tanstack/react-router'
 
 import type { AppRouterContext } from './router-context'
-import { ChatRoute, HomeRoute, RootLayout, SettingsRoute } from './route-hosts'
+import { ChatRoute, HomeRoute, SettingsRoute } from './route-hosts'
 
-const rootRoute = createRootRouteWithContext<AppRouterContext>()({
-  component: RootLayout
-})
+const rootRoute = createRootRouteWithContext<AppRouterContext>()({})
 
 const homeRoute = createRoute({
   getParentRoute: () => rootRoute,
