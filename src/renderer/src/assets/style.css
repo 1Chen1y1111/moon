@@ -61,6 +61,11 @@
   --color-moon-window-control-close: var(--moon-window-control-close);
   --color-moon-window-control-minimize: var(--moon-window-control-minimize);
   --color-moon-window-control-maximize: var(--moon-window-control-maximize);
+  --color-moon-scrollbar-track: var(--moon-scrollbar-track);
+  --color-moon-scrollbar-thumb: var(--moon-scrollbar-thumb);
+  --color-moon-scrollbar-thumb-hover: var(--moon-scrollbar-thumb-hover);
+  --color-moon-scrollbar-button-bg: var(--moon-scrollbar-button-bg);
+  --color-moon-scrollbar-button-icon: var(--moon-scrollbar-button-icon);
 
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -208,6 +213,11 @@
   --moon-window-control-close: #ff5f57;
   --moon-window-control-minimize: #ffbd2e;
   --moon-window-control-maximize: #28c840;
+  --moon-scrollbar-track: #252931;
+  --moon-scrollbar-thumb: #c8ccd4;
+  --moon-scrollbar-thumb-hover: #d6dae2;
+  --moon-scrollbar-button-bg: #252931;
+  --moon-scrollbar-button-icon: #8f97a5;
 
   --moon-shadow-shell: 0 28px 80px rgba(5, 8, 15, 0.45);
   --moon-shadow-menu-hover: 0 18px 40px rgba(46, 87, 124, 0.28);
@@ -281,6 +291,59 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    scrollbar-width: thin;
+    scrollbar-color: var(--moon-scrollbar-thumb) var(--moon-scrollbar-track);
+  }
+
+  *::-webkit-scrollbar {
+    width: 14px;
+    height: 14px;
+  }
+
+  *::-webkit-scrollbar-track {
+    background: var(--moon-scrollbar-track);
+  }
+
+  *::-webkit-scrollbar-thumb {
+    background: var(--moon-scrollbar-thumb);
+    border: 4px solid transparent;
+    border-radius: 999px;
+    background-clip: content-box;
+  }
+
+  *::-webkit-scrollbar-thumb:hover {
+    background: var(--moon-scrollbar-thumb-hover);
+    background-clip: content-box;
+  }
+
+  *::-webkit-scrollbar-corner {
+    background: var(--moon-scrollbar-track);
+  }
+
+  *::-webkit-scrollbar-button {
+    display: block;
+    width: 14px;
+    height: 14px;
+    background-color: var(--moon-scrollbar-button-bg);
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size: 10px 10px;
+  }
+
+  *::-webkit-scrollbar-button:single-button:vertical:decrement {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 7.5 6 4.5l3 3' fill='none' stroke='%238f97a5' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5'/%3E%3C/svg%3E");
+  }
+
+  *::-webkit-scrollbar-button:single-button:vertical:increment {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M3 4.5 6 7.5l3-3' fill='none' stroke='%238f97a5' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5'/%3E%3C/svg%3E");
+  }
+
+  *::-webkit-scrollbar-button:single-button:horizontal:decrement {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M7.5 3 4.5 6l3 3' fill='none' stroke='%238f97a5' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5'/%3E%3C/svg%3E");
+  }
+
+  *::-webkit-scrollbar-button:single-button:horizontal:increment {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath d='M4.5 3 7.5 6l-3 3' fill='none' stroke='%238f97a5' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5'/%3E%3C/svg%3E");
   }
 
   body {

@@ -16,15 +16,15 @@ export function SettingsPageContent(): React.JSX.Element {
   return (
     <div
       data-testid="settings-shell-surface"
-      className="flex h-full min-h-0 w-full overflow-hidden rounded-3xl border border-moon-sidebar-border bg-moon-sidebar-bg text-moon-text-primary shadow-[var(--moon-shadow-shell)]"
+      className="flex h-full min-h-0 w-full overflow-hidden text-moon-text-primary shadow-[var(--moon-shadow-shell)]"
     >
       <SettingsSidebar
         activeSection={activeSection}
         onSectionChange={(sectionId) => dispatch(setActiveSettingsSection(sectionId))}
       />
 
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="flex h-[60px] shrink-0 items-center justify-between border-b border-moon-sidebar-border px-6">
+      <section className="flex min-h-0 min-w-0 flex-1 flex-col ml-2">
+        <header className="flex h-15 shrink-0 items-center justify-between border-b border-moon-sidebar-border px-6">
           <h1 className="text-[2rem] font-semibold tracking-tight text-moon-text-primary">
             {activeMeta?.title ?? '设置'}
           </h1>

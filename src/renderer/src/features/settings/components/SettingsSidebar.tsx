@@ -13,12 +13,12 @@ export function SettingsSidebar({
   return (
     <aside
       data-testid="settings-sidebar-shell"
-      className="flex h-full w-[228px] shrink-0 border-r border-moon-sidebar-border bg-moon-sidebar-bg px-3 py-3"
+      className="flex h-full w-57 shrink-0 border-r border-moon-sidebar-border bg-moon-sidebar-bg px-3 py-3 rounded-3xl overflow-hidden"
     >
       <div
         role="tablist"
         aria-label="设置分类"
-        className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1"
+        className="flex min-h-0 flex-1 flex-col gap-1  overflow-y-auto pr-1"
       >
         {settingsSections.map((section) => {
           const isActive = section.id === activeSection
