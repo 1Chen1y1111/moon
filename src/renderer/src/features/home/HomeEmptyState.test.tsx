@@ -2,16 +2,16 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 
 import { AppProviders } from '@renderer/app/providers'
-import { AppShell } from '@renderer/shell/AppShell'
+import { WorkspaceShell } from '@renderer/shell/WorkspaceShell'
 
 import { HomeEmptyState } from './HomeEmptyState'
 
 function renderInShell(): void {
   render(
     <AppProviders>
-      <AppShell>
+      <WorkspaceShell>
         <HomeEmptyState />
-      </AppShell>
+      </WorkspaceShell>
     </AppProviders>
   )
 }

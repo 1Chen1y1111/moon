@@ -1,15 +1,15 @@
 import { ChatPage } from '@renderer/pages/chat/ChatPage'
 import { HomePage } from '@renderer/pages/home/HomePage'
 import { SettingsPage } from '@renderer/pages/settings/SettingsPage'
-import { AppShell } from '@renderer/shell/AppShell'
-import { SettingsShell } from '@renderer/shell/SettingsShell'
+import { SettingsWindowShell } from '@renderer/shell/SettingsWindowShell'
+import { WorkspaceShell } from '@renderer/shell/WorkspaceShell'
 
 export function WorkspaceLayout({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <AppShell>{children}</AppShell>
+  return <WorkspaceShell>{children}</WorkspaceShell>
 }
 
 export function SettingsLayout({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return <SettingsShell>{children}</SettingsShell>
+  return <SettingsWindowShell>{children}</SettingsWindowShell>
 }
 
 export function HomeRoute(): React.JSX.Element {

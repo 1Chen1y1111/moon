@@ -1,4 +1,4 @@
-export { SettingsShellContent as SettingsDialog } from './components/SettingsShellContent'
+export { SettingsPageContent } from './SettingsPageContent'
 export { settingsSections } from './config/settings-sections'
 export { selectActiveSettingsSection } from './model/settings.selectors'
 export { setActiveSettingsSection, settingsReducer } from './model/slices'
