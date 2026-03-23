@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { AppShell } from '@renderer/app-shell/AppShell'
+import { AppShell } from '@renderer/shell/AppShell'
 import { useUiStore } from '@renderer/lib/stores/ui-store'
 import { HomeEmptyState } from './HomeEmptyState'
 

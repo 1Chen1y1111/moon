@@ -1,6 +1,6 @@
 import { useState } from 'react'
 
-import { AppRouterContextStore, type AppRouteState } from './router-context'
+import { AppRouterContextStore, type AppRouteState } from './router/router-context'
 
 export function AppProviders({ children }: { children: React.ReactNode }): React.JSX.Element {
   const [routeState, setRouteState] = useState<AppRouteState>({ activeChatId: null })
