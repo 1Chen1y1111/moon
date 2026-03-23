@@ -53,7 +53,7 @@ function renderSettingsPage(preloadedSettings?: Partial<SettingsState>): {
 }
 
 describe('SettingsPage', () => {
-  it('renders the settings shell without modal framing and keeps the shell split layout', () => {
+  it('renders the settings shell with workspace-aligned token styling', () => {
     renderSettingsPage()
 
     expect(screen.queryByRole('dialog', { name: '设置' })).not.toBeInTheDocument()
@@ -64,6 +64,12 @@ describe('SettingsPage', () => {
     expect(screen.getByText('工具模型')).toBeInTheDocument()
     expect(screen.getByText('Coding Agent')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '保存' })).toBeInTheDocument()
+    expect(screen.getByRole('tablist', { name: '设置分类' })).toHaveClass('overflow-y-auto')
+    expect(screen.getByTestId('settings-shell-surface')).toHaveClass(
+      'border-moon-sidebar-border',
+      'bg-moon-sidebar-bg'
+    )
+    expect(screen.getByTestId('settings-sidebar-shell')).toHaveClass('px-3', 'py-3')
   })
 
   it('keeps the header and footer fixed while the sidebar and content own scrolling', async () => {

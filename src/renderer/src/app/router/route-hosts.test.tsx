@@ -30,5 +30,7 @@ describe('route layouts', () => {
 
     expect(screen.getByRole('region', { name: 'Settings child' })).toBeInTheDocument()
     expect(screen.queryByRole('complementary', { name: 'Workspace navigation' })).not.toBeInTheDocument()
+    expect(screen.getByTestId('settings-window-shell')).toHaveClass('h-screen', 'overflow-hidden')
+    expect(screen.getByTestId('settings-window-shell')).not.toHaveClass('min-h-screen')
   })
 })
