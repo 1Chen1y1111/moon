@@ -11,7 +11,10 @@ export function SettingsSidebar({
   onSectionChange
 }: SettingsSidebarProps): React.JSX.Element {
   return (
-    <aside className="flex h-full w-[228px] shrink-0 border-r border-[#3a414f] bg-[#242a32] px-2 py-2">
+    <aside
+      data-testid="settings-sidebar-shell"
+      className="flex h-full w-[228px] shrink-0 border-r border-moon-sidebar-border bg-moon-sidebar-bg px-3 py-3"
+    >
       <div
         role="tablist"
         aria-label="设置分类"
@@ -29,12 +32,12 @@ export function SettingsSidebar({
               aria-selected={isActive}
               className={
                 isActive
-                  ? 'flex items-center gap-3 rounded-lg border border-[#58708a] bg-[#33475d] px-3 py-2.5 text-left text-sm font-medium text-[#83c7ff]'
-                  : 'flex items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-left text-sm font-medium text-[#eef2f7] transition-colors hover:bg-[#2b3440]'
+                  ? 'flex items-center gap-3 rounded-xl border border-moon-menu-item-border-hover bg-moon-menu-item-bg-hover px-3 py-2.5 text-left text-sm font-medium text-moon-accent'
+                  : 'flex items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-left text-sm font-medium text-moon-text-primary transition-colors hover:bg-moon-button-ghost-bg-hover hover:text-moon-text-primary'
               }
               onClick={() => onSectionChange(section.id)}
             >
-              <Icon aria-hidden="true" className="h-4 w-4 shrink-0" strokeWidth={1.8} />
+              <Icon aria-hidden="true" className="h-4 w-4 shrink-0 text-moon-text-secondary" />
               <span>{section.label}</span>
             </button>
           )
