@@ -63,7 +63,9 @@ src/renderer/src/
         SettingsSidebar.tsx
         SettingsContent.tsx
       model/
-        settings.slice.ts
+        slices/
+          settings.slice.ts
+          index.ts
         settings.selectors.ts
         settings.types.ts
       config/
@@ -78,7 +80,9 @@ src/renderer/src/
       components/
         ProviderSetupDialog.tsx
       model/
-        providers.slice.ts
+        slices/
+          providers.slice.ts
+          index.ts
         providers.types.ts
       config/
         provider-options.ts
@@ -214,12 +218,21 @@ Placement rules:
   - register middleware
 - `app/store/hooks.ts`
   - export typed hooks such as `useAppDispatch` and `useAppSelector`
-- `features/*/model/*.slice.ts`
+- `features/*/model/slices/*.slice.ts`
   - define feature slices
+- `features/*/model/slices/index.ts`
+  - re-export feature reducers, actions, and slice-level helpers
 - `features/*/model/*.selectors.ts`
   - define feature selectors when they add clarity
 
 This keeps the store assembly global while leaving state ownership inside features.
+
+Recommended rule:
+
+- `app/store` assembles the store
+- feature slices stay inside their feature
+- if a feature owns multiple slices, keep them under `model/slices/`
+- if a feature starts with one slice but is likely to grow, it may still use `model/slices/index.ts` from the beginning for consistency
 
 The renderer should not use a top-level `lib/stores` bucket.
 
