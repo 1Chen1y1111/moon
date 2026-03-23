@@ -47,6 +47,7 @@ describe('registerIpcHandlers', () => {
     const { ipcChannels } = await import('../ipc/channels')
 
     registerIpcHandlers({
+      openSettingsWindow,
       settingsService: settingsService as never
     })
 

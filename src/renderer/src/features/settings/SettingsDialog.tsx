@@ -1,1 +1,1 @@
-export { SettingsDialog } from './components/SettingsDialog'
+export { SettingsShellContent as SettingsDialog } from './components/SettingsShellContent'

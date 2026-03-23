@@ -9,13 +9,9 @@ import {
   SlidersHorizontal
 } from 'lucide-react'
 
-import { useAppDispatch } from '@renderer/app/store/hooks'
-import { openSettingsDialog } from '@renderer/features/settings'
-
 import { WindowChrome } from './WindowChrome'
 
 export function LeftRail(): React.JSX.Element {
-  const dispatch = useAppDispatch()
   const [isMoreActionsOpen, setIsMoreActionsOpen] = useState(false)
   const closeTimeoutRef = useRef<number | null>(null)
 
@@ -45,6 +41,10 @@ export function LeftRail(): React.JSX.Element {
       setIsMoreActionsOpen(false)
       closeTimeoutRef.current = null
     }, 180)
+  }
+
+  const handleOpenSettings = (): void => {
+    void window.api.windowControls.openSettings()
   }
 
   return (
@@ -111,7 +111,7 @@ export function LeftRail(): React.JSX.Element {
                   <button
                     type="button"
                     className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs text-moon-text-primary transition-colors hover:bg-moon-menu-item-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
-                    onClick={() => dispatch(openSettingsDialog())}
+                    onClick={handleOpenSettings}
                   >
                     <Settings
                       aria-hidden="true"

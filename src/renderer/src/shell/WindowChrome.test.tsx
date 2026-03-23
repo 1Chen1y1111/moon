@@ -21,7 +21,8 @@ describe('WindowChrome', () => {
       windowControls: {
         close: closeMock,
         minimize: minimizeMock,
-        toggleMaximize: toggleMaximizeMock
+        toggleMaximize: toggleMaximizeMock,
+        openSettings: vi.fn()
       }
     }
   })

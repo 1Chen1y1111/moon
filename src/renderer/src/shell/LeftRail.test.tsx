@@ -1,11 +1,13 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AppProviders } from '@renderer/app/providers'
 import { AppShell } from '@renderer/shell/AppShell'
 
 import { LeftRail } from './LeftRail'
+
+const openSettingsMock = vi.fn()
 
 function renderRail(): void {
   render(
@@ -26,6 +28,22 @@ function renderInShell(): void {
 }
 
 describe('LeftRail', () => {
+  beforeEach(() => {
+    openSettingsMock.mockReset()
+    ;(window as Window & { api: Record<string, unknown> }).api = {
+      settings: {
+        get: vi.fn(),
+        saveProvider: vi.fn()
+      },
+      windowControls: {
+        close: vi.fn(),
+        minimize: vi.fn(),
+        toggleMaximize: vi.fn(),
+        openSettings: openSettingsMock
+      }
+    }
+  })
+
   afterEach(() => {
     vi.useRealTimers()
   })
@@ -52,7 +70,7 @@ describe('LeftRail', () => {
     expect(await screen.findByRole('button', { name: '设置' })).toBeInTheDocument()
   })
 
-  it('renders shell main content beside the rail', async () => {
+  it('opens the dedicated settings window from the shell rail', async () => {
     const user = userEvent.setup()
 
     renderInShell()
@@ -71,8 +89,9 @@ describe('LeftRail', () => {
     await user.hover(within(rail).getByRole('button', { name: '更多操作' }))
     fireEvent.click(within(rail).getByRole('button', { name: '设置' }))
 
+    expect(openSettingsMock).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('dialog', { name: 'Configure Provider' })).not.toBeInTheDocument()
-    expect(screen.getByRole('dialog', { name: '设置' })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: '设置' })).not.toBeInTheDocument()
   })
 
   it('keeps the more actions menu open long enough to move into it', () => {

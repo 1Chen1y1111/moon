@@ -10,7 +10,7 @@ const isMock = { dev: false }
 class BrowserWindowMock {
   constructor(options: unknown) {
     browserWindowMock(options)
-    return browserWindowInstances.shift()
+    return browserWindowInstances.shift() as ReturnType<typeof createBrowserWindowInstance>
   }
 }
 

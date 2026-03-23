@@ -4,23 +4,27 @@ import userEvent from '@testing-library/user-event'
 import { Provider } from 'react-redux'
 import { describe, expect, it } from 'vitest'
 
+import { providersReducer } from '@renderer/features/providers'
+import { SettingsPage } from '@renderer/pages/settings/SettingsPage'
+
 import type { SettingsState } from './model/settings.types'
 import { settingsReducer } from './model/slices'
-import { SettingsDialog } from './SettingsDialog'
 
-type SettingsDialogTestStore = EnhancedStore<{
+type SettingsPageTestStore = EnhancedStore<{
+  providers: ReturnType<typeof providersReducer>
   settings: SettingsState
 }>
 
-function createTestStore(preloadedSettings?: Partial<SettingsState>): SettingsDialogTestStore {
+function createTestStore(preloadedSettings?: Partial<SettingsState>): SettingsPageTestStore {
   const baseSettingsState: SettingsState = {
     activeSection: 'general',
-    isOpen: true
+    isOpen: false
   }
 
   return configureStore({
     reducer: {
-      settings: settingsReducer
+      settings: settingsReducer,
+      providers: providersReducer
     },
     preloadedState: {
       settings: {
@@ -31,15 +35,15 @@ function createTestStore(preloadedSettings?: Partial<SettingsState>): SettingsDi
   })
 }
 
-function renderDialog(preloadedSettings?: Partial<SettingsState>): {
-  store: SettingsDialogTestStore
+function renderSettingsPage(preloadedSettings?: Partial<SettingsState>): {
+  store: SettingsPageTestStore
   user: ReturnType<typeof userEvent.setup>
 } {
   const store = createTestStore(preloadedSettings)
 
   render(
     <Provider store={store}>
-      <SettingsDialog />
+      <SettingsPage />
     </Provider>
   )
 
@@ -49,37 +53,27 @@ function renderDialog(preloadedSettings?: Partial<SettingsState>): {
   }
 }
 
-describe('SettingsDialog', () => {
-  it('renders the rebuilt settings shell with the full sidebar list', () => {
-    renderDialog()
+describe('SettingsPage', () => {
+  it('renders the settings shell as a page surface instead of a modal', () => {
+    renderSettingsPage()
 
-    expect(screen.getByRole('dialog', { name: '设置' })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: '设置' })).not.toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '通用' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('tab', { name: 'Agents' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Chrome Relay' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: '关于' })).toBeInTheDocument()
     expect(screen.getByText('工具模型')).toBeInTheDocument()
     expect(screen.getByText('Coding Agent')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '关闭设置' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '保存' })).toBeInTheDocument()
   })
 
-  it('switches sections and shows placeholder content for the added lower sections', async () => {
-    const { store, user } = renderDialog()
+  it('switches sections and shows placeholder content in the settings page shell', async () => {
+    const { store, user } = renderSettingsPage()
 
     await user.click(screen.getByRole('tab', { name: '关于' }))
 
     expect(store.getState().settings.activeSection).toBe('about')
     expect(screen.getByRole('heading', { name: '关于' })).toBeInTheDocument()
     expect(screen.getByText('页面内容待补齐')).toBeInTheDocument()
-  })
-
-  it('closes the dialog from the dismiss action', async () => {
-    const { store, user } = renderDialog()
-
-    await user.click(screen.getByRole('button', { name: '关闭设置' }))
-
-    expect(store.getState().settings.isOpen).toBe(false)
-    expect(screen.queryByRole('dialog', { name: '设置' })).not.toBeInTheDocument()
   })
 })
