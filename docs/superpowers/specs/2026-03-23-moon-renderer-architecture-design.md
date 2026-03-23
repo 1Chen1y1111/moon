@@ -93,7 +93,7 @@ src/renderer/src/
 
   shared/
     assets/
-    lib/
+    utils/
     hooks/
     types/
     services/
