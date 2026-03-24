@@ -9,7 +9,7 @@ import {
   SlidersHorizontal
 } from 'lucide-react'
 
-import { WindowChrome } from './WindowChrome'
+import { WorkspaceChrome } from './WorkspaceChrome'
 
 export function WorkspaceSidebar(): React.JSX.Element {
   const [isMoreActionsOpen, setIsMoreActionsOpen] = useState(false)
@@ -50,7 +50,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
   return (
     <aside aria-label="Workspace navigation" className="flex w-58 shrink-0 p-2">
       <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-3xl border border-moon-sidebar-border bg-moon-sidebar-bg shadow-[var(--moon-shadow-shell)]">
-        <WindowChrome />
+        <WorkspaceChrome />
         <div
           role="group"
           aria-label="Primary actions"

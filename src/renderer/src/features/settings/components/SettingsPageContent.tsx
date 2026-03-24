@@ -1,6 +1,5 @@
-import { Minus, Square, X } from 'lucide-react'
-
 import { useAppDispatch, useAppSelector } from '@renderer/app/store/hooks'
+import { SettingsChrome } from '@renderer/shell/SettingsChrome'
 
 import { settingsSections } from '../config/settings-sections'
 import { selectActiveSettingsSection } from '../model/settings.selectors'
@@ -16,43 +15,15 @@ export function SettingsPageContent(): React.JSX.Element {
   return (
     <div
       data-testid="settings-shell-surface"
-      className="flex h-full min-h-0 w-full overflow-hidden text-moon-text-primary shadow-[var(--moon-shadow-shell)]"
+      className="flex h-full min-h-0 w-full overflow-hidden  text-moon-text-primary shadow-[var(--moon-shadow-shell)]"
     >
       <SettingsSidebar
         activeSection={activeSection}
         onSectionChange={(sectionId) => dispatch(setActiveSettingsSection(sectionId))}
       />
 
-      <section className="flex min-h-0 min-w-0 flex-1 flex-col ml-2">
-        <header className="flex h-15 shrink-0 items-center justify-between border-b border-moon-sidebar-border px-6">
-          <h1 className="text-[2rem] font-semibold tracking-tight text-moon-text-primary">
-            {activeMeta?.title ?? '设置'}
-          </h1>
-
-          <div className="flex items-center gap-1 text-moon-text-secondary">
-            <button
-              type="button"
-              aria-label="最小化设置"
-              className="flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-moon-button-ghost-bg-hover"
-            >
-              <Minus aria-hidden="true" className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              aria-label="最大化设置"
-              className="flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-moon-button-ghost-bg-hover"
-            >
-              <Square aria-hidden="true" className="h-3.5 w-3.5" />
-            </button>
-            <button
-              type="button"
-              aria-label="关闭设置窗口"
-              className="flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-moon-menu-item-bg-hover hover:text-moon-text-primary"
-            >
-              <X aria-hidden="true" className="h-4 w-4" />
-            </button>
-          </div>
-        </header>
+      <section className="ml-2 flex min-h-0 min-w-0 flex-1 flex-col">
+        <SettingsChrome title={activeMeta?.title ?? '设置'} />
 
         <div
           data-testid="settings-content-scroll"

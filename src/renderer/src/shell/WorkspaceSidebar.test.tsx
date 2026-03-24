@@ -39,7 +39,9 @@ describe('WorkspaceSidebar', () => {
         close: vi.fn(),
         minimize: vi.fn(),
         toggleMaximize: vi.fn(),
-        openSettings: openSettingsMock
+        openSettings: openSettingsMock,
+        getState: vi.fn().mockResolvedValue({ isMaximized: false }),
+        onStateChange: vi.fn().mockReturnValue(() => undefined)
       }
     }
   })

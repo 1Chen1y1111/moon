@@ -51,6 +51,10 @@ export const sessionRecordSchema = z.object({
 
 export type SessionRecord = z.infer<typeof sessionRecordSchema>
 
+export type WindowState = {
+  isMaximized: boolean
+}
+
 export type AppIpcContractMap = {
   [ipcChannels.settings.get]: {
     request: undefined
@@ -76,6 +80,10 @@ export type AppIpcContractMap = {
     request: undefined
     response: void
   }
+  [ipcChannels.window.getState]: {
+    request: undefined
+    response: WindowState
+  }
 }
 
 export type MoonApi = {
@@ -88,5 +96,7 @@ export type MoonApi = {
     minimize: () => Promise<void>
     toggleMaximize: () => Promise<void>
     openSettings: () => Promise<void>
+    getState: () => Promise<WindowState>
+    onStateChange: (listener: (state: WindowState) => void) => () => void
   }
 }

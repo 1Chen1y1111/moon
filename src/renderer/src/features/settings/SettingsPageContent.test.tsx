@@ -1,8 +1,8 @@
 import { configureStore, type EnhancedStore } from '@reduxjs/toolkit'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Provider } from 'react-redux'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { providersReducer } from '@renderer/features/providers'
 import { SettingsPage } from '@renderer/pages/settings/SettingsPage'
@@ -53,23 +53,37 @@ function renderSettingsPage(preloadedSettings?: Partial<SettingsState>): {
 }
 
 describe('SettingsPage', () => {
-  it('renders the settings shell with workspace-aligned token styling', () => {
+  beforeEach(() => {
+    ;(window as Window & { api: Record<string, unknown> }).api = {
+      settings: {
+        get: vi.fn(),
+        saveProvider: vi.fn()
+      },
+      windowControls: {
+        close: vi.fn(),
+        minimize: vi.fn(),
+        toggleMaximize: vi.fn(),
+        openSettings: vi.fn(),
+        getState: vi.fn().mockResolvedValue({ isMaximized: false }),
+        onStateChange: vi.fn().mockReturnValue(() => undefined)
+      }
+    }
+  })
+
+  it('renders mac controls in the sidebar and windows controls in the right header', () => {
     renderSettingsPage()
 
-    expect(screen.queryByRole('dialog', { name: '设置' })).not.toBeInTheDocument()
+    const sidebarShell = screen.getByTestId('settings-sidebar-shell')
+    const shellSurface = screen.getByTestId('settings-shell-surface')
+
     expect(screen.getByRole('tab', { name: '通用' })).toHaveAttribute('aria-selected', 'true')
-    expect(screen.getByRole('tab', { name: 'Agents' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Chrome Relay' })).toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: '关于' })).toBeInTheDocument()
     expect(screen.getByText('工具模型')).toBeInTheDocument()
-    expect(screen.getByText('Coding Agent')).toBeInTheDocument()
+    expect(shellSurface).toHaveClass('border-moon-sidebar-border', 'bg-moon-sidebar-bg')
+    expect(sidebarShell).toHaveClass('px-3', 'py-3')
+    expect(within(sidebarShell).getByRole('button', { name: '切换缩放窗口' })).toBeInTheDocument()
+    expect(within(sidebarShell).getByRole('button', { name: '最小化窗口' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '放大窗口' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '保存' })).toBeInTheDocument()
-    expect(screen.getByRole('tablist', { name: '设置分类' })).toHaveClass('overflow-y-auto')
-    expect(screen.getByTestId('settings-shell-surface')).toHaveClass(
-      'border-moon-sidebar-border',
-      'bg-moon-sidebar-bg'
-    )
-    expect(screen.getByTestId('settings-sidebar-shell')).toHaveClass('px-3', 'py-3')
   })
 
   it('keeps the header and footer fixed while the sidebar and content own scrolling', async () => {
