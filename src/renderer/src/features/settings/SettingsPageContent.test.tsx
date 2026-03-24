@@ -74,12 +74,15 @@ describe('SettingsPage', () => {
     renderSettingsPage()
 
     const sidebarShell = screen.getByTestId('settings-sidebar-shell')
-    const shellSurface = screen.getByTestId('settings-shell-surface')
 
     expect(screen.getByRole('tab', { name: '通用' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByText('工具模型')).toBeInTheDocument()
-    expect(shellSurface).toHaveClass('border-moon-sidebar-border', 'bg-moon-sidebar-bg')
-    expect(sidebarShell).toHaveClass('px-3', 'py-3')
+    expect(sidebarShell).toHaveClass(
+      'border-moon-sidebar-border',
+      'bg-moon-sidebar-bg',
+      'px-3',
+      'py-3'
+    )
     expect(within(sidebarShell).getByRole('button', { name: '切换缩放窗口' })).toBeInTheDocument()
     expect(within(sidebarShell).getByRole('button', { name: '最小化窗口' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '放大窗口' })).toBeInTheDocument()
