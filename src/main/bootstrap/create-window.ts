@@ -5,13 +5,14 @@ import { is } from '@electron-toolkit/utils'
 
 import icon from '../../../resources/icon.png?asset'
 
-export function createWindow(): BrowserWindow {
+export function createMainWindow(): BrowserWindow {
   const mainWindow = new BrowserWindow({
     width: 900,
     height: 670,
     show: false,
     autoHideMenuBar: true,
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden' as const } : {}),
+    ...(process.platform === 'win32' ? { frame: false } : {}),
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
@@ -43,3 +44,5 @@ export function createWindow(): BrowserWindow {
 
   return mainWindow
 }
+
+export const createWindow = createMainWindow

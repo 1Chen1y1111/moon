@@ -96,6 +96,7 @@
 ## Task 1: Install the UI, testing, and state-management foundation
 
 **Files:**
+
 - Create: `components.json`
 - Create: `vitest.config.ts`
 - Create: `src/renderer/src/test/setup.ts`
@@ -196,6 +197,7 @@ git commit -m "feat: add workspace frontend foundation"
 ## Task 2: Build the stable app shell and routing skeleton
 
 **Files:**
+
 - Create: `src/renderer/src/app/providers.tsx`
 - Create: `src/renderer/src/app/router.tsx`
 - Create: `src/renderer/src/app-shell/AppShell.tsx`
@@ -268,6 +270,7 @@ git commit -m "feat: add workspace shell and routing"
 ## Task 3: Implement the Alma-aligned home empty state
 
 **Files:**
+
 - Modify: `src/renderer/src/features/home/HomeEmptyState.tsx`
 - Modify: `src/renderer/src/assets/base.css`
 - Modify: `src/renderer/src/assets/main.css`
@@ -340,6 +343,7 @@ git commit -m "feat: add alma-style home empty state"
 ## Task 4: Add the provider and settings modals with UI stores
 
 **Files:**
+
 - Create: `src/renderer/src/features/providers/ProviderSetupDialog.tsx`
 - Create: `src/renderer/src/features/providers/provider-form-schema.ts`
 - Create: `src/renderer/src/features/settings/SettingsDialog.tsx`
@@ -431,6 +435,7 @@ git commit -m "feat: add provider and settings modals"
 ## Task 5: Add SQLite persistence and a typed Electron IPC bridge
 
 **Files:**
+
 - Create: `src/main/bootstrap/create-window.ts`
 - Create: `src/main/bootstrap/register-ipc.ts`
 - Create: `src/main/db/connection.ts`
@@ -531,6 +536,7 @@ git commit -m "feat: add persistence and typed ipc bridge"
 ## Task 6: Implement the Claude adapter and normalized runtime events
 
 **Files:**
+
 - Create: `src/main/providers/provider-types.ts`
 - Create: `src/main/providers/claude/claude-adapter.ts`
 - Create: `src/main/providers/claude/normalize-claude-event.ts`
@@ -639,6 +645,7 @@ git commit -m "feat: add claude runtime adapter"
 ## Task 7: Build the chat workspace and streaming event rendering
 
 **Files:**
+
 - Create: `src/renderer/src/features/chat/ChatWorkspace.tsx`
 - Create: `src/renderer/src/features/chat/MessageList.tsx`
 - Create: `src/renderer/src/features/chat/Composer.tsx`
@@ -658,8 +665,18 @@ git commit -m "feat: add claude runtime adapter"
 it('renders streamed text, tool events, and approvals', async () => {
   mockChatStream([
     { type: 'message.delta', sessionId: 'session-1', text: 'Hello' },
-    { type: 'tool.requested', sessionId: 'session-1', toolName: 'Read', input: { file_path: 'README.md' } },
-    { type: 'approval.requested', requestId: 'approval-1', toolName: 'Bash', input: { command: 'npm test' } }
+    {
+      type: 'tool.requested',
+      sessionId: 'session-1',
+      toolName: 'Read',
+      input: { file_path: 'README.md' }
+    },
+    {
+      type: 'approval.requested',
+      requestId: 'approval-1',
+      toolName: 'Bash',
+      input: { command: 'npm test' }
+    }
   ])
 
   render(<ChatWorkspace sessionId="session-1" />)
@@ -720,6 +737,7 @@ git commit -m "feat: add chat workspace streaming ui"
 ## Task 8: Wire provider persistence, session resume metadata, and project attachment
 
 **Files:**
+
 - Create: `src/renderer/src/features/projects/ProjectAttachmentButton.tsx`
 - Modify: `src/main/services/settings-service.ts`
 - Modify: `src/main/services/project-service.ts`

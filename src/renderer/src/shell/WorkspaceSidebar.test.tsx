@@ -2,24 +2,48 @@ import { fireEvent, render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { AppShell } from '@renderer/app-shell/AppShell'
-import { useUiStore } from '@renderer/lib/stores/ui-store'
-import { LeftRail } from './LeftRail'
+import { AppProviders } from '@renderer/app/providers'
+import { WorkspaceShell } from '@renderer/shell/WorkspaceShell'
 
-function renderInShell(): void {
+import { WorkspaceSidebar } from './WorkspaceSidebar'
+
+const openSettingsMock = vi.fn()
+
+function renderRail(): void {
   render(
-    <AppShell>
-      <section aria-label="Test route stage">route content</section>
-    </AppShell>
+    <AppProviders>
+      <WorkspaceSidebar />
+    </AppProviders>
   )
 }
 
-describe('LeftRail', () => {
+function renderInShell(): void {
+  render(
+    <AppProviders>
+      <WorkspaceShell>
+        <section aria-label="Test route stage">route content</section>
+      </WorkspaceShell>
+    </AppProviders>
+  )
+}
+
+describe('WorkspaceSidebar', () => {
   beforeEach(() => {
-    useUiStore.setState({
-      isProviderSetupDialogOpen: false,
-      isSettingsDialogOpen: false
-    })
+    openSettingsMock.mockReset()
+    ;(window as Window & { api: Record<string, unknown> }).api = {
+      settings: {
+        get: vi.fn(),
+        saveProvider: vi.fn()
+      },
+      windowControls: {
+        close: vi.fn(),
+        minimize: vi.fn(),
+        toggleMaximize: vi.fn(),
+        openSettings: openSettingsMock,
+        getState: vi.fn().mockResolvedValue({ isMaximized: false }),
+        onStateChange: vi.fn().mockReturnValue(() => undefined)
+      }
+    }
   })
 
   afterEach(() => {
@@ -29,43 +53,26 @@ describe('LeftRail', () => {
   it('renders the Moon floating rail assets', async () => {
     const user = userEvent.setup()
 
-    render(<LeftRail />)
+    renderRail()
 
     expect(screen.getByRole('complementary', { name: 'Workspace navigation' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '折叠侧边栏' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '搜索' })).not.toBeInTheDocument()
-    expect(screen.queryByText('折叠侧边栏')).not.toBeInTheDocument()
-    expect(screen.queryByText('搜索')).not.toBeInTheDocument()
     expect(screen.getByTestId('window-chrome-collapse-trigger')).toBeInTheDocument()
     expect(screen.getByTestId('window-chrome-search-trigger')).toBeInTheDocument()
     expect(screen.getByTestId('window-chrome-compose-trigger')).toBeInTheDocument()
+
     const newChatButtons = screen.getAllByRole('button', { name: '新建聊天' })
 
     expect(newChatButtons).toHaveLength(1)
     expect(newChatButtons.find((button) => !(button as HTMLButtonElement).disabled)).toBeEnabled()
     expect(screen.getByRole('button', { name: '清除历史' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '管理提示词应用' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '图库' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '现场编程' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '设置' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Show External Chats' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '更多操作' })).toHaveClass('bg-transparent')
-    expect(screen.getByRole('button', { name: '更新' })).toHaveClass(
-      'bg-moon-button-update-bg',
-      'border-moon-button-update-border',
-      'text-moon-button-update-fg'
-    )
 
     await user.hover(screen.getByRole('button', { name: '更多操作' }))
 
-    expect(await screen.findByRole('button', { name: '管理提示词应用' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '图库' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '现场编程' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '设置' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Show External Chats' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '设置' })).toBeInTheDocument()
   })
 
-  it('keeps rail actions inert inside the shell stage', async () => {
+  it('opens the dedicated settings window from the shell rail', async () => {
     const user = userEvent.setup()
 
     renderInShell()
@@ -82,24 +89,17 @@ describe('LeftRail', () => {
     fireEvent.click(within(rail).getByRole('button', { name: '清除历史' }))
     fireEvent.click(railNewChatButton as HTMLButtonElement)
     await user.hover(within(rail).getByRole('button', { name: '更多操作' }))
-    fireEvent.click(within(rail).getByRole('button', { name: '管理提示词应用' }))
-    fireEvent.click(within(rail).getByRole('button', { name: '图库' }))
-    fireEvent.click(within(rail).getByRole('button', { name: '现场编程' }))
     fireEvent.click(within(rail).getByRole('button', { name: '设置' }))
-    fireEvent.click(within(rail).getByRole('button', { name: 'Show External Chats' }))
-    fireEvent.click(within(rail).getByRole('button', { name: '更多操作' }))
-    fireEvent.click(within(rail).getByRole('button', { name: '更新' }))
 
+    expect(openSettingsMock).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('dialog', { name: 'Configure Provider' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('dialog', { name: 'Settings' })).not.toBeInTheDocument()
-    expect(useUiStore.getState().isProviderSetupDialogOpen).toBe(false)
-    expect(useUiStore.getState().isSettingsDialogOpen).toBe(false)
+    expect(screen.queryByRole('dialog', { name: '设置' })).not.toBeInTheDocument()
   })
 
-  it('keeps the more actions menu open long enough to move into it', async () => {
+  it('keeps the more actions menu open long enough to move into it', () => {
     vi.useFakeTimers()
 
-    render(<LeftRail />)
+    renderRail()
 
     const trigger = screen.getByRole('button', { name: '更多操作' })
 

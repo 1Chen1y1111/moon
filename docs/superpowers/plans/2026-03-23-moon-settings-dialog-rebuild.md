@@ -76,6 +76,7 @@
 ### Task 1: Add Redux Toolkit dependencies
 
 **Files:**
+
 - Modify: `package.json`
 
 - [ ] **Step 1: Write the failing dependency check**
@@ -113,6 +114,7 @@ git commit -m "chore: add redux toolkit for renderer state"
 ### Task 2: Move router and shell files into the approved structure
 
 **Files:**
+
 - Create: `src/renderer/src/app/router/index.tsx`
 - Create: `src/renderer/src/app/router/route-hosts.tsx`
 - Create: `src/renderer/src/app/router/router-context.ts`
@@ -194,6 +196,7 @@ git commit -m "refactor: align renderer shell and routing structure"
 ### Task 3: Introduce app-level Redux store assembly
 
 **Files:**
+
 - Create: `src/renderer/src/app/store/index.ts`
 - Create: `src/renderer/src/app/store/hooks.ts`
 - Modify: `src/renderer/src/app/providers.tsx`
@@ -260,6 +263,7 @@ git commit -m "feat: add renderer redux store assembly"
 ### Task 4: Create the settings feature model and section config
 
 **Files:**
+
 - Create: `src/renderer/src/features/settings/model/settings.types.ts`
 - Create: `src/renderer/src/features/settings/model/settings.selectors.ts`
 - Create: `src/renderer/src/features/settings/model/slices/settings.slice.test.ts`
@@ -276,9 +280,9 @@ Create a reducer test such as:
 
 ```ts
 expect(settingsReducer(undefined, settingsDialogOpened()).isOpen).toBe(true)
-expect(
-  settingsReducer(undefined, settingsSectionChanged('providers')).activeSection
-).toBe('providers')
+expect(settingsReducer(undefined, settingsSectionChanged('providers')).activeSection).toBe(
+  'providers'
+)
 ```
 
 Run: `npx vitest run src/renderer/src/features/settings/model/settings.slice.test.ts`
@@ -348,6 +352,7 @@ git commit -m "refactor: move settings state into redux feature slice"
 ### Task 5: Rebuild the settings dialog UI and sidebar switching
 
 **Files:**
+
 - Create: `src/renderer/src/features/settings/components/SettingsDialog.tsx`
 - Create: `src/renderer/src/features/settings/components/SettingsSidebar.tsx`
 - Create: `src/renderer/src/features/settings/components/SettingsContent.tsx`
@@ -422,6 +427,7 @@ git commit -m "feat: rebuild settings dialog shell and sidebar switching"
 ### Task 6: Wire shell triggers into the settings slice
 
 **Files:**
+
 - Modify: `src/renderer/src/shell/AppShell.tsx`
 - Modify: `src/renderer/src/shell/LeftRail.tsx`
 - Modify: `src/renderer/src/features/providers/ProviderSetupDialog.tsx`
@@ -472,6 +478,7 @@ git commit -m "feat: wire settings dialog through shell redux actions"
 ### Task 7: Remove obsolete Zustand usage and dead imports
 
 **Files:**
+
 - Modify: `package.json`
 - Modify: any renderer file still importing `zustand`
 
@@ -505,6 +512,7 @@ git commit -m "refactor: remove renderer zustand and legacy paths"
 ### Task 8: Run full verification
 
 **Files:**
+
 - No code changes required unless verification fails
 
 - [ ] **Step 1: Run settings and shell tests**

@@ -1,9 +1,15 @@
 import { useState } from 'react'
 
+import { useAppDispatch, useAppSelector } from '@renderer/app/store/hooks'
 import { Button } from '@shadcn/ui/button'
+
 import { providerFormSchema, type ProviderFormValues } from './provider-form-schema'
-import { useSettingsStore } from '@renderer/lib/stores/settings-store'
-import { useUiStore } from '@renderer/lib/stores/ui-store'
+import {
+  closeProviderSetupDialog,
+  saveClaudeProviderDraft,
+  selectClaudeProviderDraft,
+  selectIsProviderSetupDialogOpen
+} from './index'
 
 type ProviderSetupDialogProps = {
   onSubmit?: (values: ProviderFormValues) => void
@@ -17,8 +23,8 @@ const inputClassName =
 export function ProviderSetupDialog({
   onSubmit
 }: ProviderSetupDialogProps): React.JSX.Element | null {
-  const isOpen = useUiStore((state) => state.isProviderSetupDialogOpen)
-  const claudeDraft = useSettingsStore((state) => state.providerDrafts.claude)
+  const isOpen = useAppSelector(selectIsProviderSetupDialogOpen)
+  const claudeDraft = useAppSelector(selectClaudeProviderDraft)
 
   if (!isOpen) {
     return null
@@ -38,8 +44,7 @@ function ProviderSetupDialogContent({
   initialValues,
   onSubmit
 }: ProviderSetupDialogContentProps): React.JSX.Element {
-  const closeDialog = useUiStore((state) => state.closeProviderSetupDialog)
-  const saveProviderDraft = useSettingsStore((state) => state.saveProviderDraft)
+  const dispatch = useAppDispatch()
   const [values, setValues] = useState<ProviderFormValues>({
     provider: 'claude',
     apiKey: initialValues.apiKey,
@@ -54,7 +59,7 @@ function ProviderSetupDialogContent({
 
   function handleDismiss(): void {
     setErrors({})
-    closeDialog()
+    dispatch(closeProviderSetupDialog())
   }
 
   function handleSubmit(event: React.FormEvent<HTMLFormElement>): void {
@@ -75,10 +80,12 @@ function ProviderSetupDialogContent({
       return
     }
 
-    saveProviderDraft(parsed.data.provider, {
-      apiKey: parsed.data.apiKey,
-      model: parsed.data.model
-    })
+    dispatch(
+      saveClaudeProviderDraft({
+        apiKey: parsed.data.apiKey,
+        model: parsed.data.model
+      })
+    )
     onSubmit?.(parsed.data)
     handleDismiss()
   }

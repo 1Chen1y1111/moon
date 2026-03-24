@@ -5,14 +5,19 @@ import type { SettingsService } from '../services/settings-service'
 
 type RegisterIpcDependencies = {
   settingsService: SettingsService
+  openSettingsWindow: () => BrowserWindow
 }
 
-export function registerIpcHandlers({ settingsService }: RegisterIpcDependencies): void {
+export function registerIpcHandlers({
+  openSettingsWindow,
+  settingsService
+}: RegisterIpcDependencies): void {
   ipcMain.removeHandler(ipcChannels.settings.get)
   ipcMain.removeHandler(ipcChannels.settings.saveProvider)
   ipcMain.removeHandler(ipcChannels.window.close)
   ipcMain.removeHandler(ipcChannels.window.minimize)
   ipcMain.removeHandler(ipcChannels.window.toggleMaximize)
+  ipcMain.removeHandler(ipcChannels.window.openSettings)
 
   ipcMain.handle(ipcChannels.settings.get, () => settingsService.getSettings())
   ipcMain.handle(ipcChannels.settings.saveProvider, (_event, input) =>
@@ -37,5 +42,8 @@ export function registerIpcHandlers({ settingsService }: RegisterIpcDependencies
     }
 
     senderWindow.maximize()
+  })
+  ipcMain.handle(ipcChannels.window.openSettings, () => {
+    openSettingsWindow()
   })
 }

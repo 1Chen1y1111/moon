@@ -1,17 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import {
+  CircleFadingArrowUp,
   Ellipsis,
   ImageIcon,
   MessageSquareMore,
   Music4,
   Settings,
-  SlidersHorizontal,
-  CircleFadingArrowUp
+  SlidersHorizontal
 } from 'lucide-react'
 
-import { WindowChrome } from './WindowChrome'
+import { WorkspaceChrome } from './WorkspaceChrome'
 
-export function LeftRail(): React.JSX.Element {
+export function WorkspaceSidebar(): React.JSX.Element {
   const [isMoreActionsOpen, setIsMoreActionsOpen] = useState(false)
   const closeTimeoutRef = useRef<number | null>(null)
 
@@ -43,10 +43,14 @@ export function LeftRail(): React.JSX.Element {
     }, 180)
   }
 
+  const handleOpenSettings = (): void => {
+    void window.api.windowControls.openSettings()
+  }
+
   return (
     <aside aria-label="Workspace navigation" className="flex w-58 shrink-0 p-2">
       <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-3xl border border-moon-sidebar-border bg-moon-sidebar-bg shadow-[var(--moon-shadow-shell)]">
-        <WindowChrome />
+        <WorkspaceChrome />
         <div
           role="group"
           aria-label="Primary actions"
@@ -67,11 +71,7 @@ export function LeftRail(): React.JSX.Element {
         </div>
 
         <div className="flex items-center justify-between px-3 pb-3">
-          <div
-            className="relative"
-            onMouseEnter={openMoreActions}
-            onMouseLeave={closeMoreActions}
-          >
+          <div className="relative" onMouseEnter={openMoreActions} onMouseLeave={closeMoreActions}>
             {isMoreActionsOpen ? (
               <div className="absolute bottom-full left-0 mb-2 w-48 rounded-md border border-moon-panel-border bg-moon-menu-bg p-1 shadow-[var(--moon-shadow-menu-panel)]">
                 <button
@@ -111,6 +111,7 @@ export function LeftRail(): React.JSX.Element {
                   <button
                     type="button"
                     className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs text-moon-text-primary transition-colors hover:bg-moon-menu-item-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
+                    onClick={handleOpenSettings}
                   >
                     <Settings
                       aria-hidden="true"

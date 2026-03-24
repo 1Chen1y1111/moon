@@ -2,9 +2,9 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { WindowChrome } from './WindowChrome'
+import { WorkspaceChrome } from './WorkspaceChrome'
 
-describe('WindowChrome', () => {
+describe('WorkspaceChrome', () => {
   const closeMock = vi.fn()
   const minimizeMock = vi.fn()
   const toggleMaximizeMock = vi.fn()
@@ -21,15 +21,18 @@ describe('WindowChrome', () => {
       windowControls: {
         close: closeMock,
         minimize: minimizeMock,
-        toggleMaximize: toggleMaximizeMock
+        toggleMaximize: toggleMaximizeMock,
+        openSettings: vi.fn(),
+        getState: vi.fn().mockResolvedValue({ isMaximized: false }),
+        onStateChange: vi.fn().mockReturnValue(() => undefined)
       }
     }
   })
 
-  it('invokes native window control actions from the sidebar traffic lights', async () => {
+  it('renders mac window controls and workspace utility actions together', async () => {
     const user = userEvent.setup()
 
-    render(<WindowChrome />)
+    render(<WorkspaceChrome />)
 
     await user.click(screen.getByRole('button', { name: '关闭窗口' }))
     await user.click(screen.getByRole('button', { name: '最小化窗口' }))
@@ -38,20 +41,8 @@ describe('WindowChrome', () => {
     expect(closeMock).toHaveBeenCalledTimes(1)
     expect(minimizeMock).toHaveBeenCalledTimes(1)
     expect(toggleMaximizeMock).toHaveBeenCalledTimes(1)
-  })
-
-  it('renders sidebar utility icon cards with portal tooltips on hover', async () => {
-    const user = userEvent.setup()
-
-    render(<WindowChrome />)
-
-    expect(screen.queryByRole('button', { name: '折叠侧边栏' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '搜索' })).not.toBeInTheDocument()
-    expect(screen.queryByText('折叠侧边栏')).not.toBeInTheDocument()
-    expect(screen.queryByText('搜索')).not.toBeInTheDocument()
-    expect(screen.queryByText('新建聊天')).not.toBeInTheDocument()
-
-    await user.hover(screen.getByTestId('window-chrome-collapse-trigger'))
-    expect(await screen.findByRole('tooltip', { name: '折叠侧边栏' })).toBeInTheDocument()
+    expect(screen.getByTestId('window-chrome-collapse-trigger')).toBeInTheDocument()
+    expect(screen.getByTestId('window-chrome-search-trigger')).toBeInTheDocument()
+    expect(screen.getByTestId('window-chrome-compose-trigger')).toBeInTheDocument()
   })
 })

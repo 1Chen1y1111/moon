@@ -23,7 +23,20 @@ const api: MoonApi = {
   windowControls: {
     close: () => invokeIpcChannel(ipcChannels.window.close),
     minimize: () => invokeIpcChannel(ipcChannels.window.minimize),
-    toggleMaximize: () => invokeIpcChannel(ipcChannels.window.toggleMaximize)
+    toggleMaximize: () => invokeIpcChannel(ipcChannels.window.toggleMaximize),
+    openSettings: () => invokeIpcChannel(ipcChannels.window.openSettings),
+    getState: () => invokeIpcChannel(ipcChannels.window.getState),
+    onStateChange: (listener) => {
+      const channel = ipcChannels.window.onStateChange
+      const handler = (_event: unknown, payload: { isMaximized: boolean }): void =>
+        listener(payload)
+
+      ipcRenderer.on(channel, handler)
+
+      return () => {
+        ipcRenderer.off(channel, handler)
+      }
+    }
   }
 }
 

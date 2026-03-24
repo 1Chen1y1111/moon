@@ -13,6 +13,7 @@
 ### Task 1: Add the Script Entry Point
 
 **Files:**
+
 - Create: `scripts/update-shadcn.js`
 
 - [ ] **Step 1: Verify the repository has no existing scripts directory**
@@ -72,6 +73,7 @@ git commit -m "feat: add update-shadcn utility script"
 ### Task 2: Register the Package Script
 
 **Files:**
+
 - Modify: `package.json`
 
 - [ ] **Step 1: Add the npm script**
@@ -99,6 +101,7 @@ git commit -m "chore: add update-shadcn package script"
 ### Task 3: Verify Script Execution
 
 **Files:**
+
 - Test: `scripts/update-shadcn.js`
 
 - [ ] **Step 1: Run the script directly**
