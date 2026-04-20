@@ -27,10 +27,10 @@ export function SettingsSidebar({
   return (
     <aside
       data-testid="settings-sidebar-shell"
-      className="flex h-full w-57 shrink-0 rounded-3xl border-r border-moon-sidebar-border bg-moon-sidebar-bg px-3 py-3 overflow-hidden"
+      className="flex h-full w-57 shrink-0 rounded-3xl border-r border-moon-sidebar-border bg-moon-sidebar-bg py-3 overflow-hidden"
     >
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="pb-4">
+        <div className="pb-4 px-3">
           <MacWindowControls
             onClose={handleClose}
             onMinimize={handleMinimize}
@@ -41,7 +41,7 @@ export function SettingsSidebar({
         <div
           role="tablist"
           aria-label="设置分类"
-          className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pr-1"
+          className="flex min-h-0 flex-1 flex-col gap-1 px-3 overflow-y-auto"
         >
           {settingsSections.map((section) => {
             const isActive = section.id === activeSection

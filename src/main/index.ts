@@ -3,6 +3,7 @@ import { join } from 'node:path'
 
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 
+import { setApplicationIcon } from './bootstrap/app-icon'
 import { openSettingsWindow } from './bootstrap/create-settings-window'
 import { createMainWindow } from './bootstrap/create-window'
 import { registerIpcHandlers } from './bootstrap/register-ipc'
@@ -18,6 +19,7 @@ let databaseConnection: DatabaseConnection | null = null
 // Some APIs can only be used after this event occurs.
 app.whenReady().then(() => {
   electronApp.setAppUserModelId('com.electron')
+  setApplicationIcon()
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)

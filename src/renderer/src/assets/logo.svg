@@ -1,11 +1,118 @@
-<svg viewBox="0 0 64 64" fill="none"
-  xmlns="http://www.w3.org/2000/svg"
-  xmlns:xlink="http://www.w3.org/1999/xlink">
-  <rect width="64" height="64" fill="url(#pattern0_1049_47)"/>
+<svg viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="2" y="2" width="60" height="60" rx="15" fill="url(#moon-logo-bg)" />
+  <rect
+    x="3"
+    y="3"
+    width="58"
+    height="58"
+    rx="14"
+    stroke="url(#moon-logo-rim)"
+    stroke-opacity="0.55"
+    stroke-width="1.2"
+  />
+  <circle cx="37.8" cy="27.5" r="19.4" fill="url(#moon-logo-shadow)" opacity="0.98" />
+  <g filter="url(#moon-logo-crescent-glow)">
+    <mask id="moon-logo-crescent-mask">
+      <rect width="64" height="64" fill="black" />
+      <circle cx="28.1" cy="35.3" r="18.7" fill="white" />
+      <circle cx="37.6" cy="28.3" r="19.7" fill="black" />
+    </mask>
+    <circle
+      cx="28.1"
+      cy="35.3"
+      r="18.7"
+      fill="url(#moon-logo-crescent)"
+      mask="url(#moon-logo-crescent-mask)"
+    />
+  </g>
+  <path
+    d="M17.8 46.6C24.8 51 36.7 50.4 45.7 43.8"
+    stroke="url(#moon-logo-horizon)"
+    stroke-width="3.2"
+    stroke-linecap="round"
+    opacity="0.38"
+  />
+  <circle cx="43.1" cy="36.8" r="1.9" fill="#9BE8F4" opacity="0.72" />
+  <path
+    d="M48.4 15.1L50 19.6L54.5 21.2L50 22.8L48.4 27.3L46.8 22.8L42.3 21.2L46.8 19.6L48.4 15.1Z"
+    fill="url(#moon-logo-star)"
+  />
   <defs>
-    <pattern id="pattern0_1049_47" patternContentUnits="objectBoundingBox" width="1" height="1">
-      <use xlink:href="#image0_1049_47" transform="scale(0.0078125)"/>
-    </pattern>
-    <image id="image0_1049_47" width="128" height="128" preserveAspectRatio="none" xlink:href="data:image/jpeg;base64,/9j/2wBDAAgICAgJCAkKCgkNDgwODRMREBARExwUFhQWFBwrGx8bGx8bKyYuJSMlLiZENS8vNUROQj5CTl9VVV93cXecnNH/2wBDAQgICAgJCAkKCgkNDgwODRMREBARExwUFhQWFBwrGx8bGx8bKyYuJSMlLiZENS8vNUROQj5CTl9VVV93cXecnNH/wgARCACAAIADASIAAhEBAxEB/8QAHAAAAgIDAQEAAAAAAAAAAAAAAgMBBAAFBwYI/8QAGAEAAwEBAAAAAAAAAAAAAAAAAAECAwT/2gAMAwEAAhADEAAAAOAlhMg5NgyZMXjcErHCChcI0i0ULgwQTBazDxjUGTWlT77fueRD6TRDrBYBOuD1qkg0EEwGsNoPcu7l5HtN4+Z4Lv8AR0VQtrm6iraFVZVhMtC3LVExbRNem7U9i6LyPrOvN87ovVzRCbddVUr2a81XTdpzSFtVLlqWje+u2p9j17hG425vWeE7rzoPGodWnVNa56xGk8ttNVFrUxU3jEsB7a7XN2zrLFTuulckzTLsuo5yRPtPLa3VxoKyXGwqNcsTWSHGk6HmgmnSmRNhcAYQI8DAl4uQRBBIMNJMdKpB2KljMXAMERQQQKJHID//xAAeEAEAAgIDAQEBAAAAAAAAAAABAAIEEQMFEgYQFf/aAAgBAQABAgDWtBrz58+dJpE1CAAaDWvOkRNMYQAACvnz5aoiIxCAAFa06f4DP+Tz8hq1aojGEIFTh4flvlfrPoee7Vq1SwiMrCVKnxXX9Tw99n+WrWxYsWGMrKysrMSvYWyTy1tWxYtLRlpWVlZhnDmBmUJaXlpaPCxlpWErKX58n5Tt/sekY2s3bTu8djLSsJVql+k7vFzu++X5eKxXh6vpO3z1ZaEERx+fn4Ou73q/t+fl5cf+123aKrGEERHhyLNMMxfGR2SqrGEIIjve4qqqsswREd+t72qqqsPwRHe973tVX93stv169evW1Xf5/8QANhAAAgECAgcECQMFAAAAAAAAAQIDAAQFERITITAxQWEGMkJxFBUgIiNDUFGBUmKRY3KSssH/2gAIAQEAAz8A+qk8BWM34SWfRs4W4GXvnySuxuAIPWuJXc05GYgi0Vc1gT5ixwmaIcmlui7fwABvHlkSONCzuwVVAzJJ4AVb4UUknRJsQPPisHRevWvUFsLe3IbEJlz0jt1SnxVLNK8krs7uxLMxzLE8yTvVgR8WlXNyxituh8T0kED3Ep91ULsegGZqXEcRubqU5tK5byHIb08uPKo4GsrJe7bRohHXxH+a1XZrESvEwaP+RArOVvPeg3VsDw1yf7CguKynP5lem4BfwrtZoGy8120Umbz9pjbNP4RKI/yVLe2UZWHFSCPxWrvhIvB8nz6NtpCqqWGjTWN87xr8CTN4z0NEH2Ca9X4dhVgwymIkuZuhkyVR+ANwZ7FSD78Gw9V5UYHQE5ZVYY5Yei3ZXR8DgjNWq7w5yxTSiPdkXumnQ5EGm+1SyMqIhZmOQAGZNJZSrLelROo0xHyhUbS79RyFHEL+e52hSQEB5IuxRuGhkDrt5EHgQeINDZcWxJjJ4c1P2NTWrjNiMqGr1U+ToeKsMxXZC8BZ4DE39J8q7HxZsDcyZci4/wCCoFYwYPYRxFthkAzb8sa+E9nDLp6RznlHjP6R+0bqSFtJGy+45EdRVncd5dS/3G1ak+TPG/kwq+8UqKOrirOLbPeaw/oj96neMwwIIYTxA7zf3HfD6x//xAAhEQACAQMDBQAAAAAAAAAAAAAAARECECAhMXEwMkBRgf/aAAgBAgEBPwDpRmiIUkRd3Q128oe+ejUezfkZEjwTFV9JHV4f/8QAIBEAAgEDBAMAAAAAAAAAAAAAAAECESBBEBIxcUBhkf/aAAgBAwEBPwDWpW5s3IrdOTboiJW7L6I8LRWyi1xgjL4Kg5JIjxY1lDgumbPZGGX4f//Z"/>
+    <linearGradient
+      id="moon-logo-bg"
+      x1="8"
+      y1="5.5"
+      x2="57.5"
+      y2="61"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop stop-color="#313847" />
+      <stop offset="0.48" stop-color="#202632" />
+      <stop offset="1" stop-color="#141821" />
+    </linearGradient>
+    <linearGradient id="moon-logo-rim" x1="9" y1="4" x2="55" y2="59" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#C8CCD4" stop-opacity="0.34" />
+      <stop offset="0.42" stop-color="#61AFEF" stop-opacity="0.12" />
+      <stop offset="1" stop-color="#0F131B" stop-opacity="0.2" />
+    </linearGradient>
+    <radialGradient
+      id="moon-logo-shadow"
+      cx="0"
+      cy="0"
+      r="1"
+      gradientUnits="userSpaceOnUse"
+      gradientTransform="translate(31.5 20.4) rotate(47.8) scale(31.4)"
+    >
+      <stop stop-color="#252B37" />
+      <stop offset="0.58" stop-color="#171D27" />
+      <stop offset="1" stop-color="#10151D" />
+    </radialGradient>
+    <linearGradient
+      id="moon-logo-crescent"
+      x1="17"
+      y1="18"
+      x2="43.5"
+      y2="51.2"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop stop-color="#F8FEFF" />
+      <stop offset="0.5" stop-color="#B7F3FA" />
+      <stop offset="1" stop-color="#61AFEF" />
+    </linearGradient>
+    <linearGradient
+      id="moon-logo-horizon"
+      x1="18"
+      y1="48.6"
+      x2="46"
+      y2="43.7"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop stop-color="#4E8DBB" stop-opacity="0.3" />
+      <stop offset="0.58" stop-color="#61AFEF" />
+      <stop offset="1" stop-color="#B7F3FA" stop-opacity="0.58" />
+    </linearGradient>
+    <linearGradient
+      id="moon-logo-star"
+      x1="45.2"
+      y1="16.4"
+      x2="51.9"
+      y2="25.7"
+      gradientUnits="userSpaceOnUse"
+    >
+      <stop stop-color="#FFF1B8" />
+      <stop offset="1" stop-color="#E7C787" />
+    </linearGradient>
+    <filter
+      id="moon-logo-crescent-glow"
+      x="5.4"
+      y="12.6"
+      width="45.4"
+      height="45.4"
+      filterUnits="userSpaceOnUse"
+      color-interpolation-filters="sRGB"
+    >
+      <feDropShadow dx="0" dy="0" stdDeviation="2.8" flood-color="#A7F0FA" flood-opacity="0.34" />
+      <feDropShadow dx="0" dy="4" stdDeviation="5" flood-color="#06101A" flood-opacity="0.32" />
+    </filter>
   </defs>
 </svg>

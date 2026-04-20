@@ -8,7 +8,7 @@ export function HomeEmptyState(): React.JSX.Element {
       className="flex min-h-full w-full flex-1 items-center justify-center px-6 py-10 text-moon-text-primary"
     >
       <div className="flex w-full max-w-[672px] flex-col items-center gap-8 text-center">
-        <div className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-lg border border-moon-panel-border">
+        <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-moon-panel-border shadow-[var(--moon-shadow-menu-hover)]">
           <img src={LogoIcon} alt="" aria-hidden="true" className="h-full w-full object-contain" />
         </div>
 
