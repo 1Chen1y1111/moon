@@ -4,10 +4,10 @@ import { Tooltip as TooltipPrimitive } from 'radix-ui'
 import { Tooltip, TooltipProvider, TooltipTrigger } from '@shadcn/ui/tooltip'
 
 const utilityCardClassName =
-  'flex h-6 w-6 cursor-default select-none items-center justify-center rounded-sm text-moon-text-secondary transition-[background-color,border-color,color,box-shadow,transform] duration-200 ease-out group-hover:bg-moon-menu-item-bg-hover group-hover:border-moon-menu-item-border-hover group-hover:text-moon-fg-inverse group-hover:shadow-[var(--moon-shadow-menu-hover)]'
+  'flex size-moon-compact-control cursor-default select-none items-center justify-center rounded-moon-compact text-moon-text-secondary transition-[background-color,border-color,color,box-shadow,transform] duration-200 ease-out group-hover:bg-moon-menu-item-bg-hover group-hover:border-moon-menu-item-border-hover group-hover:text-moon-fg-inverse group-hover:shadow-moon-menu-hover'
 
 const utilityTooltipClassName =
-  'z-50 inline-flex w-fit max-w-xs origin-(--radix-tooltip-content-transform-origin) items-center gap-1.5 rounded-lg border border-moon-tooltip-border bg-moon-tooltip-bg px-4 py-1 text-xs font-medium text-moon-tooltip-fg shadow-[var(--moon-shadow-tooltip)] data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0 data-[state=delayed-open]:zoom-in-95 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95'
+  'z-50 inline-flex w-fit max-w-xs origin-(--radix-tooltip-content-transform-origin) items-center gap-moon-tight rounded-moon-control border border-moon-tooltip-border bg-moon-tooltip-bg px-moon-lg py-moon-sm text-moon-caption font-moon-title leading-moon-caption text-moon-tooltip-fg shadow-moon-tooltip data-[side=bottom]:slide-in-from-top-2 data-[side=left]:slide-in-from-right-2 data-[side=right]:slide-in-from-left-2 data-[side=top]:slide-in-from-bottom-2 data-[state=delayed-open]:animate-in data-[state=delayed-open]:fade-in-0 data-[state=delayed-open]:zoom-in-95 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95'
 
 function WorkspaceTooltipContent({ children }: { children: string }): React.JSX.Element {
   return (
@@ -27,12 +27,16 @@ function WorkspaceTooltipContent({ children }: { children: string }): React.JSX.
 export function WorkspaceUtilityActions(): React.JSX.Element {
   return (
     <TooltipProvider>
-      <div className="flex items-center gap-1.5">
+      <div className="flex items-center gap-moon-tight">
         <Tooltip>
           <TooltipTrigger asChild>
             <div className="group" data-testid="window-chrome-collapse-trigger">
               <div className={utilityCardClassName}>
-                <PanelLeftClose aria-hidden="true" className="h-3 w-3" strokeWidth={1.75} />
+                <PanelLeftClose
+                  aria-hidden="true"
+                  className="size-moon-icon-xs"
+                  strokeWidth={1.75}
+                />
               </div>
             </div>
           </TooltipTrigger>
@@ -43,7 +47,7 @@ export function WorkspaceUtilityActions(): React.JSX.Element {
           <TooltipTrigger asChild>
             <div className="group" data-testid="window-chrome-search-trigger">
               <div className={utilityCardClassName}>
-                <Search aria-hidden="true" className="h-3 w-3" strokeWidth={1.75} />
+                <Search aria-hidden="true" className="size-moon-icon-xs" strokeWidth={1.75} />
               </div>
             </div>
           </TooltipTrigger>
@@ -54,7 +58,7 @@ export function WorkspaceUtilityActions(): React.JSX.Element {
           <TooltipTrigger asChild>
             <div className="group" data-testid="window-chrome-compose-trigger">
               <div className={utilityCardClassName}>
-                <SquarePen aria-hidden="true" className="h-3 w-3" strokeWidth={1.75} />
+                <SquarePen aria-hidden="true" className="size-moon-icon-xs" strokeWidth={1.75} />
               </div>
             </div>
           </TooltipTrigger>

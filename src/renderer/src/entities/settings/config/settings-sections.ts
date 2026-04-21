@@ -178,7 +178,7 @@ export const settingsSections: SettingsSection[] = [
     title: '用户界面',
     description: '界面布局与交互体验设置。',
     icon: PersonStanding,
-    kind: 'placeholder'
+    kind: 'user-interface'
   },
   {
     id: 'color-schemes',

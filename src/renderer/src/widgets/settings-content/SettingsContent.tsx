@@ -1,6 +1,7 @@
 import { settingsSections, type SettingsSectionId } from '@renderer/entities/settings'
 import { GeneralSettingsSection } from '@renderer/features/general-settings'
 import { ProviderSettingsSection } from '@renderer/features/provider-settings'
+import { UserInterfaceSettingsSection } from '@renderer/features/user-interface'
 
 import { PlaceholderSettingsSection } from './PlaceholderSettingsSection'
 
@@ -17,6 +18,10 @@ export function SettingsContent({ activeSection }: SettingsContentProps): React.
 
   if (activeMeta?.kind === 'providers') {
     return <ProviderSettingsSection />
+  }
+
+  if (activeMeta?.kind === 'user-interface') {
+    return <UserInterfaceSettingsSection />
   }
 
   return <PlaceholderSettingsSection section={activeMeta} />

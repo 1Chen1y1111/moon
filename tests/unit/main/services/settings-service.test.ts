@@ -7,17 +7,37 @@ import { SettingsService } from '@main/services/settings-service'
 
 function createSettingsRepositoryMock(): {
   getSettings: ReturnType<typeof vi.fn>
+  saveAppearance: ReturnType<typeof vi.fn>
   saveProvider: ReturnType<typeof vi.fn>
 } {
   const appSettings = createDefaultAppSettings()
 
   return {
     getSettings: vi.fn().mockReturnValue(appSettings),
+    saveAppearance: vi.fn().mockReturnValue(appSettings),
     saveProvider: vi.fn().mockReturnValue(appSettings)
   }
 }
 
 describe('SettingsService', () => {
+  it('validates and saves appearance settings', () => {
+    const settingsRepository = createSettingsRepositoryMock()
+    const service = new SettingsService(settingsRepository as never)
+
+    const settings = service.saveAppearance({ theme: 'dark' })
+
+    expect(settings).toEqual(createDefaultAppSettings())
+    expect(settingsRepository.saveAppearance).toHaveBeenCalledWith({ theme: 'dark' })
+  })
+
+  it('rejects unsupported appearance themes before writing to the repository', () => {
+    const settingsRepository = createSettingsRepositoryMock()
+    const service = new SettingsService(settingsRepository as never)
+
+    expect(() => service.saveAppearance({ theme: 'blue' } as never)).toThrow()
+    expect(settingsRepository.saveAppearance).not.toHaveBeenCalled()
+  })
+
   it('normalizes first-party provider drafts before writing to the repository', () => {
     const settingsRepository = createSettingsRepositoryMock()
     const service = new SettingsService(settingsRepository as never)

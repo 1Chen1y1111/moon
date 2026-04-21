@@ -48,10 +48,10 @@ export function openSettingsWindow(options?: SettingsWindowOptions): BrowserWind
   }
 
   settingsWindow = new BrowserWindow({
-    width: 1180,
-    height: 820,
-    minWidth: 980,
-    minHeight: 720,
+    width: 1200,
+    height: 800,
+    minWidth: 780,
+    minHeight: 640,
     show: false,
     autoHideMenuBar: true,
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden' as const } : {}),

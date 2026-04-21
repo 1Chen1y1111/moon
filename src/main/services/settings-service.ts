@@ -1,5 +1,5 @@
-import type { AppSettings, SaveProviderInput } from '@ipc/contracts'
-import { saveProviderInputSchema } from '@ipc/contracts'
+import type { AppSettings, SaveAppearanceInput, SaveProviderInput } from '@ipc/contracts'
+import { saveAppearanceInputSchema, saveProviderInputSchema } from '@ipc/contracts'
 import type { SettingsRepository } from '../repositories/settings-repository'
 
 export class SettingsService {
@@ -17,5 +17,11 @@ export class SettingsService {
       model: parsedInput.model,
       baseUrl: parsedInput.provider === 'openai-compatible' ? parsedInput.baseUrl : ''
     })
+  }
+
+  saveAppearance(input: SaveAppearanceInput): AppSettings {
+    const parsedInput = saveAppearanceInputSchema.parse(input)
+
+    return this.settingsRepository.saveAppearance(parsedInput)
   }
 }

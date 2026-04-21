@@ -18,8 +18,10 @@ export function SettingsChrome({ title }: SettingsChromeProps): React.JSX.Elemen
   }
 
   return (
-    <header className="flex h-15 shrink-0 items-center justify-between border-b border-moon-sidebar-border px-6">
-      <h1 className="text-[2rem] font-semibold tracking-tight text-moon-text-primary">{title}</h1>
+    <header className="flex h-moon-chrome shrink-0 items-center justify-between border-b border-moon-sidebar-border px-moon-panel">
+      <h1 className="font-moon-serif text-moon-h1-section font-moon-title leading-moon-h1-section text-moon-text-primary">
+        {title}
+      </h1>
       <WindowsWindowControls
         onClose={handleClose}
         onMinimize={handleMinimize}

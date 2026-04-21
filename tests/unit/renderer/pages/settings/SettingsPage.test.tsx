@@ -34,7 +34,11 @@ describe('SettingsPage', () => {
 
     expect(screen.getByRole('tab', { name: '通用' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByText('工具模型')).toBeInTheDocument()
-    expect(sidebarShell).toHaveClass('border-moon-sidebar-border', 'bg-moon-sidebar-bg', 'py-3')
+    expect(sidebarShell).toHaveClass(
+      'border-moon-sidebar-border',
+      'bg-moon-sidebar-bg',
+      'py-moon-option-gap'
+    )
     expect(within(sidebarShell).getByRole('button', { name: '切换缩放窗口' })).toBeInTheDocument()
     expect(within(sidebarShell).getByRole('button', { name: '最小化窗口' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '放大窗口' })).toBeInTheDocument()
@@ -86,6 +90,26 @@ describe('SettingsPage', () => {
       apiKey: 'sk-ant-demo',
       model: 'claude-3-7-sonnet-latest',
       baseUrl: ''
+    })
+  })
+
+  it('renders user interface theme choices and saves the selected theme', async () => {
+    const { user } = renderWithProviders(<SettingsPage />)
+
+    await user.click(screen.getByRole('tab', { name: '用户界面' }))
+
+    expect(screen.getAllByRole('heading', { name: '用户界面' }).length).toBeGreaterThan(0)
+    expect(screen.getByRole('button', { name: '浅色' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '深色' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '跟随系统' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByTestId('appearance-preview-light')).toBeInTheDocument()
+    expect(screen.getByTestId('appearance-preview-dark')).toBeInTheDocument()
+    expect(screen.getByTestId('appearance-preview-system')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '深色' }))
+
+    await waitFor(() => {
+      expect(api.settings.saveAppearance).toHaveBeenCalledWith({ theme: 'dark' })
     })
   })
 

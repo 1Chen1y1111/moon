@@ -30,6 +30,59 @@ Follow `.editorconfig` and Prettier: 2-space indentation, LF endings, UTF-8, sin
 
 Use TypeScript for source files. React components use `PascalCase.tsx`; tests live under `tests/` with source-mirroring folders. Keep slices named `*.slice.ts`, selectors as `*.selectors.ts`, and type modules as `*.types.ts`. Prefer aliases such as `@renderer`, `@shadcn`, `@ipc`, `@main`, and `@tests`.
 
+## Moon Design System
+
+The renderer follows the Moon design system: warm parchment surfaces, ink-blue focus,
+warm neutral grays, serif authority for headings, and no hard drop shadows. This is a
+typeset document aesthetic, not a dashboard aesthetic.
+
+Use `src/renderer/src/shared/assets/style.css` as the source of truth for all visual
+tokens and component recipes. Prefer existing `moon-*` tokens and `.moon-*` recipes
+before adding new values. Do not introduce `kami-*` names; this project uses `moon-*`
+only.
+
+For UI styling, avoid raw Tailwind visual scale utilities when a Moon token exists:
+do not add `text-sm`, `text-xs`, `text-lg`, `leading-6`, `gap-3`, `px-6`, `py-4`,
+`font-medium`, `rounded-md`, or similar hard-coded visual choices in app UI. Use the
+Moon typography, spacing, weight, radius, color, and shadow tokens instead, such as
+`text-moon-body`, `text-moon-h2`, `leading-moon-body`, `gap-moon-md`,
+`px-moon-panel`, `font-moon-title`, and `rounded-moon-control`.
+
+Typography rules:
+
+- Serif headings use weight 500 through `font-moon-title`; do not use bold serif.
+- UI labels, metadata, controls, and body text use sans.
+- Use the role-based type tokens: `text-moon-display`, `text-moon-h1-section`,
+  `text-moon-h2`, `text-moon-h3`, `text-moon-body-lead`, `text-moon-body`,
+  `text-moon-body-dense`, `text-moon-caption`, `text-moon-label`, and `text-moon-tiny`.
+- Use the matching `leading-moon-*` tokens. Do not use line-height values above 1.55.
+- Do not use italic. The stylesheet normalizes italic elements to `font-style: normal`.
+
+Color and depth rules:
+
+- Light mode uses parchment `#f5f4ed`, ivory surfaces, warm neutral grays, and ink blue
+  `#1B365D` as the only accent color.
+- Keep ink blue visually sparse; it should mark focus, selection, and primary actions.
+- Tag and badge backgrounds must use solid token colors such as `.moon-tag`,
+  `.moon-tag-standard`, and `.moon-tag-strong`; do not use ad hoc translucent tag colors.
+- Use ring or whisper shadows (`shadow-moon-ring`, `shadow-moon-whisper`,
+  `shadow-moon-shell`, `shadow-moon-menu-hover`) instead of hard drop shadows.
+- Dark mode is an explicit exception: it preserves the previous dark palette under the
+  `.dark` token overrides. Do not warm-shift dark mode unless the user asks.
+
+Component recipes already exist for common document surfaces:
+
+- Cards: `.moon-card`, `.moon-card-featured`
+- Tags: `.moon-tag`, `.moon-tag-standard`, `.moon-tag-strong`, `.moon-tag-brush`
+- Quotes and code: `.moon-quote`, `.moon-code-block`, `.moon-code-card`
+- Section starts: `.moon-section-title`, `.moon-section-header`
+- Metrics, print, and slides: `.moon-metrics`, `.moon-page-break`, `.moon-slide`,
+  `.moon-slide-footer`
+
+When a UI/UX change is requested, briefly sketch the intended layout with an ASCII
+diagram in the conversation or PR notes. For screenshots or visual comparisons, keep
+the logo unchanged unless the user explicitly asks to modify it.
+
 ## Testing Guidelines
 
 Vitest uses `jsdom`, globals, and `tests/helpers/renderer/setup.ts`. Test files are included from `tests/**/*.test.{ts,tsx}`, and `tsconfig.test.json` provides test-only TypeScript alias coverage. Put unit tests under `tests/unit/`, repository/database tests under `tests/integration/`, and shared test helpers under `tests/helpers/`.

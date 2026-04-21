@@ -1,5 +1,7 @@
 export {
+  applyAppSettings,
   loadAppSettings,
+  saveAppearanceSettings,
   saveProviderSettings,
   setActiveSettingsSection,
   settingsReducer

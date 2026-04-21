@@ -1,10 +1,15 @@
 import { render, screen } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it } from 'vitest'
 
 import { AppProviders } from '@renderer/app/providers'
 import { SettingsLayout, WorkspaceLayout } from '@renderer/app/router/route-hosts'
+import { installMockWindowApi } from '@tests/helpers/renderer/mock-window-api'
 
 describe('route layouts', () => {
+  beforeEach(() => {
+    installMockWindowApi()
+  })
+
   it('renders the workspace layout with the main shell rail', () => {
     render(
       <AppProviders>

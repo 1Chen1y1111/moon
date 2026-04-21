@@ -5,6 +5,7 @@ import {
   type AppSettings,
   type MoonApi,
   type OpenSettingsInput,
+  type SaveAppearanceInput,
   type SaveProviderInput,
   type WindowState
 } from '@ipc/contracts'
@@ -14,7 +15,9 @@ type MockFn<T extends (...args: never[]) => unknown> = ReturnType<typeof vi.fn<T
 export type MockMoonApi = {
   settings: {
     get: MockFn<() => Promise<AppSettings>>
+    saveAppearance: MockFn<(input: SaveAppearanceInput) => Promise<AppSettings>>
     saveProvider: MockFn<(input: SaveProviderInput) => Promise<AppSettings>>
+    onChange: MockFn<(listener: (settings: AppSettings) => void) => () => void>
   }
   windowControls: {
     close: MockFn<() => Promise<void>>
@@ -40,9 +43,15 @@ function createMockWindowApi(options: MockWindowApiOptions = {}): MockMoonApi {
   return {
     settings: {
       get: vi.fn<() => Promise<AppSettings>>().mockResolvedValue(appSettings),
+      saveAppearance: vi
+        .fn<(input: SaveAppearanceInput) => Promise<AppSettings>>()
+        .mockResolvedValue(savedSettings),
       saveProvider: vi
         .fn<(input: SaveProviderInput) => Promise<AppSettings>>()
-        .mockResolvedValue(savedSettings)
+        .mockResolvedValue(savedSettings),
+      onChange: vi
+        .fn<(listener: (settings: AppSettings) => void) => () => void>()
+        .mockReturnValue(() => undefined)
     },
     windowControls: {
       close: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),

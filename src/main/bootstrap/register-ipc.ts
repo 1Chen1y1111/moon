@@ -2,11 +2,18 @@ import { BrowserWindow, ipcMain } from 'electron'
 
 import { ipcChannels } from '@ipc/channels'
 import { openSettingsInputSchema } from '@ipc/contracts'
+import type { AppSettings } from '@ipc/contracts'
 import type { SettingsService } from '../services/settings-service'
 
 type RegisterIpcDependencies = {
   settingsService: SettingsService
   openSettingsWindow: (input?: { section?: 'providers' }) => BrowserWindow
+}
+
+function broadcastSettingsChange(settings: AppSettings): void {
+  BrowserWindow.getAllWindows().forEach((window) => {
+    window.webContents.send(ipcChannels.settings.onChange, settings)
+  })
 }
 
 export function registerIpcHandlers({
@@ -15,6 +22,7 @@ export function registerIpcHandlers({
 }: RegisterIpcDependencies): void {
   ipcMain.removeHandler(ipcChannels.settings.get)
   ipcMain.removeHandler(ipcChannels.settings.saveProvider)
+  ipcMain.removeHandler(ipcChannels.settings.saveAppearance)
   ipcMain.removeHandler(ipcChannels.window.close)
   ipcMain.removeHandler(ipcChannels.window.minimize)
   ipcMain.removeHandler(ipcChannels.window.toggleMaximize)
@@ -22,9 +30,20 @@ export function registerIpcHandlers({
   ipcMain.removeHandler(ipcChannels.window.getState)
 
   ipcMain.handle(ipcChannels.settings.get, () => settingsService.getSettings())
-  ipcMain.handle(ipcChannels.settings.saveProvider, (_event, input) =>
-    settingsService.saveProvider(input)
-  )
+  ipcMain.handle(ipcChannels.settings.saveProvider, (_event, input) => {
+    const settings = settingsService.saveProvider(input)
+
+    broadcastSettingsChange(settings)
+
+    return settings
+  })
+  ipcMain.handle(ipcChannels.settings.saveAppearance, (_event, input) => {
+    const settings = settingsService.saveAppearance(input)
+
+    broadcastSettingsChange(settings)
+
+    return settings
+  })
   ipcMain.handle(ipcChannels.window.close, (event) => {
     BrowserWindow.fromWebContents(event.sender)?.close()
   })

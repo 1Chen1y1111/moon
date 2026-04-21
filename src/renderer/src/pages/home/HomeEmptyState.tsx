@@ -13,36 +13,36 @@ export function HomeEmptyState(): React.JSX.Element {
   return (
     <section
       aria-label="Moon landing view"
-      className="flex min-h-full w-full flex-1 items-center justify-center px-6 py-10 text-moon-text-primary"
+      className="flex min-h-full w-full flex-1 items-center justify-center px-moon-panel py-moon-section-gap text-moon-text-primary"
     >
-      <div className="flex w-full max-w-[672px] flex-col items-center gap-8 text-center">
-        <div className="flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl border border-moon-panel-border shadow-[var(--moon-shadow-menu-hover)]">
+      <div className="flex w-full max-w-moon-hero flex-col items-center gap-moon-card-stack text-center">
+        <div className="flex size-moon-brand-mark items-center justify-center overflow-hidden rounded-moon-card shadow-moon-menu-hover">
           <img src={LogoIcon} alt="" aria-hidden="true" className="h-full w-full object-contain" />
         </div>
 
-        <div className="space-y-4">
-          <h1 className="font-moon-serif text-6xl tracking-tight text-moon-text-primary sm:text-7xl">
+        <div className="space-y-moon-lg">
+          <h1 className="font-moon-serif text-moon-display font-moon-title leading-moon-display text-moon-text-primary">
             Moon
           </h1>
-          <p className="text-base leading-7 text-moon-text-secondary sm:text-lg">
+          <p className="text-moon-body-lead leading-moon-body-lead text-moon-text-secondary">
             优雅的 AI 提供商编排桌面应用
           </p>
         </div>
 
-        <div className="flex w-full max-w-[360px] flex-col items-center gap-3">
+        <div className="flex w-full max-w-moon-actions flex-col items-center gap-moon-option-gap">
           <Button
             type="button"
             size="lg"
-            className="h-12 w-full rounded-full bg-moon-button-primary-bg text-moon-button-primary-fg shadow-[var(--moon-shadow-accent)] hover:bg-moon-button-primary-bg-hover"
+            className="h-moon-cta w-full rounded-moon-control bg-moon-button-primary-bg text-moon-button-primary-fg shadow-moon-accent hover:bg-moon-button-primary-bg-hover"
           >
             新建聊天
           </Button>
-          <div className="grid w-full gap-3 sm:grid-cols-2">
+          <div className="grid w-full gap-moon-option-gap sm:grid-cols-2">
             <Button
               type="button"
               variant="secondary"
               size="lg"
-              className="h-12 rounded-full border border-moon-button-secondary-border bg-moon-button-secondary-bg text-moon-text-primary hover:bg-moon-button-secondary-bg-hover"
+              className="h-moon-cta rounded-moon-control border border-moon-button-secondary-border bg-moon-button-secondary-bg text-moon-text-primary hover:bg-moon-button-secondary-bg-hover"
               onClick={handleOpenProviderSettings}
             >
               配置提供商
@@ -51,7 +51,7 @@ export function HomeEmptyState(): React.JSX.Element {
               type="button"
               variant="secondary"
               size="lg"
-              className="h-12 rounded-full border border-moon-button-secondary-border bg-moon-button-secondary-bg text-moon-text-primary hover:bg-moon-button-secondary-bg-hover"
+              className="h-moon-cta rounded-moon-control border border-moon-button-secondary-border bg-moon-button-secondary-bg text-moon-text-primary hover:bg-moon-button-secondary-bg-hover"
               onClick={handleOpenSettings}
             >
               设置
@@ -59,7 +59,9 @@ export function HomeEmptyState(): React.JSX.Element {
           </div>
         </div>
 
-        <p className="text-sm leading-6 text-moon-text-muted">请至少配置一个 AI 提供商以开始聊天</p>
+        <p className="text-moon-caption leading-moon-caption text-moon-text-muted">
+          请至少配置一个 AI 提供商以开始聊天
+        </p>
       </div>
     </section>
   )

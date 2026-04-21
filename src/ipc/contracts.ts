@@ -15,6 +15,18 @@ export const providerLabels = {
   'openai-compatible': 'OpenAI Compatible'
 } as const satisfies Record<ProviderId, string>
 
+export const appearanceThemes = ['light', 'dark', 'system'] as const
+
+export const appearanceThemeSchema = z.enum(appearanceThemes)
+
+export type AppearanceTheme = z.infer<typeof appearanceThemeSchema>
+
+export const appearanceSettingsSchema = z.object({
+  theme: appearanceThemeSchema
+})
+
+export type AppearanceSettings = z.infer<typeof appearanceSettingsSchema>
+
 export const providerSettingsSchema = z.object({
   provider: providerIdSchema,
   apiKey: z.string(),
@@ -26,6 +38,7 @@ export const providerSettingsSchema = z.object({
 export type ProviderSettings = z.infer<typeof providerSettingsSchema>
 
 export const appSettingsSchema = z.object({
+  appearance: appearanceSettingsSchema,
   providers: z.object({
     claude: providerSettingsSchema,
     openai: providerSettingsSchema,
@@ -72,6 +85,12 @@ export const saveProviderInputSchema = z
   })
 
 export type SaveProviderInput = z.infer<typeof saveProviderInputSchema>
+
+export const saveAppearanceInputSchema = z.object({
+  theme: appearanceThemeSchema
+})
+
+export type SaveAppearanceInput = z.infer<typeof saveAppearanceInputSchema>
 
 export const openSettingsInputSchema = z
   .object({
@@ -123,6 +142,10 @@ export type AppIpcContractMap = {
     request: SaveProviderInput
     response: AppSettings
   }
+  [ipcChannels.settings.saveAppearance]: {
+    request: SaveAppearanceInput
+    response: AppSettings
+  }
   [ipcChannels.window.close]: {
     request: undefined
     response: void
@@ -149,6 +172,8 @@ export type MoonApi = {
   settings: {
     get: () => Promise<AppSettings>
     saveProvider: (input: SaveProviderInput) => Promise<AppSettings>
+    saveAppearance: (input: SaveAppearanceInput) => Promise<AppSettings>
+    onChange: (listener: (settings: AppSettings) => void) => () => void
   }
   windowControls: {
     close: () => Promise<void>
@@ -172,6 +197,9 @@ function createDefaultProviderSettings(provider: ProviderId): ProviderSettings {
 
 export function createDefaultAppSettings(): AppSettings {
   return {
+    appearance: {
+      theme: 'system'
+    },
     providers: {
       claude: createDefaultProviderSettings('claude'),
       openai: createDefaultProviderSettings('openai'),

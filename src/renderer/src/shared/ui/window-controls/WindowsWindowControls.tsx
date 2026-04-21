@@ -8,7 +8,7 @@ type WindowsWindowControlsProps = {
 }
 
 const windowsButtonClassName =
-  'flex h-8 w-10 items-center justify-center rounded-md text-moon-text-secondary transition-colors hover:bg-moon-button-ghost-bg-hover hover:text-moon-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-ring-subtle'
+  'flex h-moon-window-button-y w-moon-window-button-x items-center justify-center rounded-moon-control text-moon-text-secondary transition-colors hover:bg-moon-button-ghost-bg-hover hover:text-moon-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-ring-subtle'
 
 export function WindowsWindowControls({
   isRestored = false,
@@ -24,7 +24,7 @@ export function WindowsWindowControls({
         className={windowsButtonClassName}
         onClick={onMinimize}
       >
-        <Minus aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={1.75} />
+        <Minus aria-hidden="true" className="size-moon-icon-sm" strokeWidth={1.75} />
       </button>
       <button
         type="button"
@@ -33,9 +33,9 @@ export function WindowsWindowControls({
         onClick={onToggleMaximize}
       >
         {isRestored ? (
-          <Copy aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={1.75} />
+          <Copy aria-hidden="true" className="size-moon-icon-sm" strokeWidth={1.75} />
         ) : (
-          <Square aria-hidden="true" className="h-3.5 w-3.5" strokeWidth={1.75} />
+          <Square aria-hidden="true" className="size-moon-icon-sm" strokeWidth={1.75} />
         )}
       </button>
       <button
@@ -44,7 +44,7 @@ export function WindowsWindowControls({
         className={`${windowsButtonClassName} hover:bg-moon-state-danger hover:text-moon-fg-inverse`}
         onClick={onClose}
       >
-        <X aria-hidden="true" className="h-4 w-4" strokeWidth={1.75} />
+        <X aria-hidden="true" className="size-moon-icon" strokeWidth={1.75} />
       </button>
     </div>
   )

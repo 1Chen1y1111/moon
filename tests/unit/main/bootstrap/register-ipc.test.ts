@@ -5,10 +5,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const removeHandlerMock = vi.fn()
 const handleMock = vi.fn()
 const fromWebContentsMock = vi.fn()
+const getAllWindowsMock = vi.fn()
 
 vi.mock('electron', () => ({
   BrowserWindow: {
-    fromWebContents: fromWebContentsMock
+    fromWebContents: fromWebContentsMock,
+    getAllWindows: getAllWindowsMock
   },
   ipcMain: {
     removeHandler: removeHandlerMock,
@@ -23,6 +25,7 @@ function getRegisteredHandler(channel: string): ((...args: unknown[]) => unknown
 describe('registerIpcHandlers', () => {
   const settingsService = {
     getSettings: vi.fn(),
+    saveAppearance: vi.fn(),
     saveProvider: vi.fn()
   }
   const openSettingsWindow = vi.fn()
@@ -31,7 +34,10 @@ describe('registerIpcHandlers', () => {
     removeHandlerMock.mockReset()
     handleMock.mockReset()
     fromWebContentsMock.mockReset()
+    getAllWindowsMock.mockReset()
+    getAllWindowsMock.mockReturnValue([])
     settingsService.getSettings.mockReset()
+    settingsService.saveAppearance.mockReset()
     settingsService.saveProvider.mockReset()
     openSettingsWindow.mockReset()
   })
@@ -49,6 +55,7 @@ describe('registerIpcHandlers', () => {
     }
 
     settingsService.getSettings.mockReturnValue(settings)
+    settingsService.saveAppearance.mockReturnValue(settings)
     settingsService.saveProvider.mockReturnValue(settings)
 
     registerIpcHandlers({
@@ -57,13 +64,43 @@ describe('registerIpcHandlers', () => {
     })
 
     const getSettingsHandler = getRegisteredHandler(ipcChannels.settings.get)
+    const saveAppearanceHandler = getRegisteredHandler(ipcChannels.settings.saveAppearance)
     const saveProviderHandler = getRegisteredHandler(ipcChannels.settings.saveProvider)
 
     expect(getSettingsHandler).toBeTypeOf('function')
+    expect(saveAppearanceHandler).toBeTypeOf('function')
     expect(saveProviderHandler).toBeTypeOf('function')
     expect(await getSettingsHandler?.({ sender: {} })).toBe(settings)
+    expect(await saveAppearanceHandler?.({ sender: {} }, { theme: 'dark' })).toBe(settings)
     expect(await saveProviderHandler?.({ sender: {} }, input)).toBe(settings)
+    expect(settingsService.saveAppearance).toHaveBeenCalledWith({ theme: 'dark' })
     expect(settingsService.saveProvider).toHaveBeenCalledWith(input)
+  })
+
+  it('broadcasts saved settings to open renderer windows', async () => {
+    const { createDefaultAppSettings } = await import('@ipc/contracts')
+    const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
+    const { ipcChannels } = await import('@ipc/channels')
+    const settings = createDefaultAppSettings()
+    const firstWebContents = { send: vi.fn() }
+    const secondWebContents = { send: vi.fn() }
+
+    settingsService.saveAppearance.mockReturnValue(settings)
+    getAllWindowsMock.mockReturnValue([
+      { webContents: firstWebContents },
+      { webContents: secondWebContents }
+    ])
+
+    registerIpcHandlers({
+      openSettingsWindow,
+      settingsService: settingsService as never
+    })
+
+    const saveAppearanceHandler = getRegisteredHandler(ipcChannels.settings.saveAppearance)
+
+    expect(await saveAppearanceHandler?.({ sender: {} }, { theme: 'dark' })).toBe(settings)
+    expect(firstWebContents.send).toHaveBeenCalledWith(ipcChannels.settings.onChange, settings)
+    expect(secondWebContents.send).toHaveBeenCalledWith(ipcChannels.settings.onChange, settings)
   })
 
   it('registers window control handlers that operate on the sender window', async () => {

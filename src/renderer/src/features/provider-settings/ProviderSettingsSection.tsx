@@ -129,12 +129,14 @@ export function ProviderSettingsSection(): React.JSX.Element {
 
   return (
     <section className={settingsPanelClassName}>
-      <h2 className="text-[2rem] font-medium tracking-tight text-moon-text-primary">提供商</h2>
-      <p className="mt-6 max-w-3xl text-sm leading-7 text-moon-text-secondary">
+      <h2 className="font-moon-serif text-moon-h2 font-moon-title leading-moon-h2 text-moon-text-primary">
+        提供商
+      </h2>
+      <p className="mt-moon-xl max-w-3xl text-moon-body leading-moon-body text-moon-text-secondary">
         为每个模型提供商保存一套本地配置。API Key 会在主进程使用系统安全存储能力加密后落库。
       </p>
 
-      <div className="mt-8 grid gap-4 xl:grid-cols-2">
+      <div className="mt-moon-card-stack grid gap-moon-lg xl:grid-cols-2">
         {providerIds.map((provider) => (
           <ProviderSettingsCard
             key={provider}
@@ -151,7 +153,11 @@ export function ProviderSettingsSection(): React.JSX.Element {
         ))}
       </div>
 
-      {saveError ? <p className="mt-4 text-sm text-amber-300">{saveError}</p> : null}
+      {saveError ? (
+        <p className="mt-moon-lg text-moon-body leading-moon-body text-moon-state-danger">
+          {saveError}
+        </p>
+      ) : null}
     </section>
   )
 }

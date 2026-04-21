@@ -17,7 +17,19 @@ function invokeIpcChannel<TChannel extends keyof AppIpcContractMap>(
 const api: MoonApi = {
   settings: {
     get: () => invokeIpcChannel(ipcChannels.settings.get),
-    saveProvider: (input) => invokeIpcChannel(ipcChannels.settings.saveProvider, input)
+    saveProvider: (input) => invokeIpcChannel(ipcChannels.settings.saveProvider, input),
+    saveAppearance: (input) => invokeIpcChannel(ipcChannels.settings.saveAppearance, input),
+    onChange: (listener) => {
+      const channel = ipcChannels.settings.onChange
+      const handler = (_event: unknown, payload: Parameters<typeof listener>[0]): void =>
+        listener(payload)
+
+      ipcRenderer.on(channel, handler)
+
+      return () => {
+        ipcRenderer.off(channel, handler)
+      }
+    }
   },
   windowControls: {
     close: () => invokeIpcChannel(ipcChannels.window.close),

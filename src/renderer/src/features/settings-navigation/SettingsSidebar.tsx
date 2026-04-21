@@ -14,15 +14,15 @@ export function SettingsSidebar({
   return (
     <aside
       data-testid="settings-sidebar-shell"
-      className="flex h-full w-57 shrink-0 rounded-3xl border-r border-moon-sidebar-border bg-moon-sidebar-bg py-3 overflow-hidden"
+      className="flex h-full w-moon-settings-sidebar shrink-0 overflow-hidden rounded-moon-panel border-r border-moon-sidebar-border bg-moon-sidebar-bg py-moon-option-gap"
     >
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="pb-4 px-3">{headerSlot}</div>
+        <div className="px-moon-nav-x pb-moon-lg">{headerSlot}</div>
 
         <div
           role="tablist"
           aria-label="设置分类"
-          className="flex min-h-0 flex-1 flex-col gap-1 px-3 overflow-y-auto"
+          className="flex min-h-0 flex-1 flex-col gap-moon-sm overflow-y-auto px-moon-nav-x"
         >
           {settingsSections.map((section) => {
             const isActive = section.id === activeSection
@@ -36,12 +36,15 @@ export function SettingsSidebar({
                 aria-selected={isActive}
                 className={
                   isActive
-                    ? 'flex items-center gap-3 rounded-xl border border-moon-menu-item-border-hover bg-moon-menu-item-bg-hover px-3 py-2.5 text-left text-sm font-medium text-moon-accent'
-                    : 'flex items-center gap-3 rounded-xl border border-transparent px-3 py-2.5 text-left text-sm font-medium text-moon-text-primary transition-colors hover:bg-moon-button-ghost-bg-hover hover:text-moon-text-primary'
+                    ? 'flex items-center gap-moon-option-gap rounded-moon-control border border-moon-menu-item-border-hover bg-moon-menu-item-bg-hover px-moon-nav-x py-moon-nav-y text-left text-moon-body-lead font-moon-title leading-moon-body-lead text-moon-accent'
+                    : 'flex items-center gap-moon-option-gap rounded-moon-control border border-transparent px-moon-nav-x py-moon-nav-y text-left text-moon-body-lead font-moon-title leading-moon-body-lead text-moon-text-primary transition-colors hover:bg-moon-button-ghost-bg-hover hover:text-moon-text-primary'
                 }
                 onClick={() => onSectionChange(section.id)}
               >
-                <Icon aria-hidden="true" className="h-4 w-4 shrink-0 text-moon-text-secondary" />
+                <Icon
+                  aria-hidden="true"
+                  className="size-moon-icon shrink-0 text-moon-text-secondary"
+                />
                 <span>{section.label}</span>
               </button>
             )

@@ -60,10 +60,14 @@ describe('preload api', () => {
     const api = getExposedApi()
 
     await api.settings.get()
+    await api.settings.saveAppearance({ theme: 'dark' })
     await api.settings.saveProvider(input)
     await api.windowControls.openSettings({ section: 'providers' })
 
     expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.settings.get)
+    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.settings.saveAppearance, {
+      theme: 'dark'
+    })
     expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.settings.saveProvider, input)
     expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.window.openSettings, {
       section: 'providers'
@@ -88,5 +92,27 @@ describe('preload api', () => {
 
     expect(listener).toHaveBeenCalledWith({ isMaximized: true })
     expect(ipcOffMock).toHaveBeenCalledWith(ipcChannels.window.onStateChange, handler)
+  })
+
+  it('cleans up the settings change event subscription', async () => {
+    const { createDefaultAppSettings } = await import('@ipc/contracts')
+    await import('@preload/index')
+
+    const api = getExposedApi()
+    const listener = vi.fn()
+    const settings = createDefaultAppSettings()
+
+    const unsubscribe = api.settings.onChange(listener)
+    const handler = ipcOnMock.mock.calls.find(
+      ([channel]) => channel === ipcChannels.settings.onChange
+    )?.[1]
+
+    expect(handler).toBeTypeOf('function')
+
+    handler?.({}, settings)
+    unsubscribe()
+
+    expect(listener).toHaveBeenCalledWith(settings)
+    expect(ipcOffMock).toHaveBeenCalledWith(ipcChannels.settings.onChange, handler)
   })
 })

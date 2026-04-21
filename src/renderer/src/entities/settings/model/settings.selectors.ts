@@ -18,6 +18,10 @@ export function selectSettingsSaveStatus(state: SettingsSliceState): SettingsSta
   return state.settings.saveStatus
 }
 
+export function selectSettingsLoadStatus(state: SettingsSliceState): SettingsState['loadStatus'] {
+  return state.settings.loadStatus
+}
+
 export function selectSettingsError(state: SettingsSliceState): string | null {
   return state.settings.error
 }

@@ -71,6 +71,34 @@ describe('SettingsRepository', () => {
     secondConnection.close()
   })
 
+  it('persists appearance theme across database connections', () => {
+    const directoryPath = mkdtempSync(join(tmpdir(), 'moon-settings-repository-'))
+    const databasePath = join(directoryPath, 'moon.sqlite')
+    tempDirectories.push(directoryPath)
+
+    const firstConnection = createDatabaseConnection(databasePath)
+    bootstrapDatabase(firstConnection)
+
+    const firstRepository = new SettingsRepository(firstConnection, fakeSecretCodec)
+
+    expect(firstRepository.getSettings().appearance.theme).toBe('system')
+
+    firstRepository.saveAppearance({ theme: 'dark' })
+
+    expect(firstRepository.getSettings().appearance.theme).toBe('dark')
+
+    firstConnection.close()
+
+    const secondConnection = createDatabaseConnection(databasePath)
+    bootstrapDatabase(secondConnection)
+
+    const secondRepository = new SettingsRepository(secondConnection, fakeSecretCodec)
+
+    expect(secondRepository.getSettings().appearance.theme).toBe('dark')
+
+    secondConnection.close()
+  })
+
   it('does not write a provider row when encryption is unavailable', () => {
     const directoryPath = mkdtempSync(join(tmpdir(), 'moon-settings-repository-'))
     const databasePath = join(directoryPath, 'moon.sqlite')

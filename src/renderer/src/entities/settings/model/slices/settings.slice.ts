@@ -1,6 +1,11 @@
 import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/toolkit'
 
-import { createDefaultAppSettings, type AppSettings, type SaveProviderInput } from '@ipc/contracts'
+import {
+  createDefaultAppSettings,
+  type AppSettings,
+  type SaveAppearanceInput,
+  type SaveProviderInput
+} from '@ipc/contracts'
 
 import type { SettingsSectionId, SettingsState } from '../settings.types'
 
@@ -29,10 +34,18 @@ export const saveProviderSettings = createAsyncThunk<AppSettings, SaveProviderIn
   (input) => window.api.settings.saveProvider(input)
 )
 
+export const saveAppearanceSettings = createAsyncThunk<AppSettings, SaveAppearanceInput>(
+  'settings/saveAppearanceSettings',
+  (input) => window.api.settings.saveAppearance(input)
+)
+
 const settingsSlice = createSlice({
   name: 'settings',
   initialState,
   reducers: {
+    applyAppSettings(state, action: PayloadAction<AppSettings>) {
+      state.appSettings = action.payload
+    },
     setActiveSettingsSection(state, action: PayloadAction<SettingsSectionId>) {
       state.activeSection = action.payload
     }
@@ -63,9 +76,21 @@ const settingsSlice = createSlice({
         state.saveStatus = 'failed'
         state.error = getErrorMessage(action.error)
       })
+      .addCase(saveAppearanceSettings.pending, (state) => {
+        state.saveStatus = 'saving'
+        state.error = null
+      })
+      .addCase(saveAppearanceSettings.fulfilled, (state, action) => {
+        state.saveStatus = 'succeeded'
+        state.appSettings = action.payload
+      })
+      .addCase(saveAppearanceSettings.rejected, (state, action) => {
+        state.saveStatus = 'failed'
+        state.error = getErrorMessage(action.error)
+      })
   }
 })
 
-export const { setActiveSettingsSection } = settingsSlice.actions
+export const { applyAppSettings, setActiveSettingsSection } = settingsSlice.actions
 
 export const settingsReducer = settingsSlice.reducer

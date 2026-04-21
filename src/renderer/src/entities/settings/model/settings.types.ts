@@ -29,7 +29,7 @@ export type SettingsSectionId =
   | 'usage'
   | 'about'
 
-export type SettingsSectionKind = 'general' | 'providers' | 'placeholder'
+export type SettingsSectionKind = 'general' | 'providers' | 'user-interface' | 'placeholder'
 
 export type SettingsSection = {
   id: SettingsSectionId

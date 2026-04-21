@@ -2,12 +2,14 @@ import { eq } from 'drizzle-orm'
 
 import {
   createDefaultAppSettings,
+  type AppearanceSettings,
+  type AppearanceTheme,
   type AppSettings,
   type ProviderId,
   type ProviderSettings
 } from '@ipc/contracts'
 import type { AppDatabaseConnection } from '../db/connection'
-import { providerSettings } from '../db/schema'
+import { providerSettings, settings as settingsTable } from '../db/schema'
 import type { SecretCodec } from '../security/secret-codec'
 
 type ProviderSettingsDraft = {
@@ -24,6 +26,9 @@ type ProviderSettingsRow = {
   updated_at: string
 }
 
+const appearanceThemeKey = 'appearance.theme'
+const appearanceThemes = new Set<AppearanceTheme>(['light', 'dark', 'system'])
+
 export class SettingsRepository {
   constructor(
     private readonly database: AppDatabaseConnection,
@@ -32,6 +37,12 @@ export class SettingsRepository {
 
   getSettings(): AppSettings {
     const settings = createDefaultAppSettings()
+    const appearanceTheme = this.getSettingValue(appearanceThemeKey)
+
+    if (appearanceTheme !== null && appearanceThemes.has(appearanceTheme as AppearanceTheme)) {
+      settings.appearance.theme = appearanceTheme as AppearanceTheme
+    }
+
     const rows =
       this.database.kind === 'better-sqlite3'
         ? this.database.db.select().from(providerSettings).all()
@@ -59,6 +70,12 @@ export class SettingsRepository {
     }
 
     return settings
+  }
+
+  saveAppearance(draft: AppearanceSettings): AppSettings {
+    this.saveSettingValue(appearanceThemeKey, draft.theme)
+
+    return this.getSettings()
   }
 
   saveProvider(provider: ProviderId, draft: ProviderSettingsDraft): AppSettings {
@@ -132,5 +149,55 @@ export class SettingsRepository {
             .get<{ encryptedApiKey: string }>(provider)
 
     return row?.encryptedApiKey ?? null
+  }
+
+  private getSettingValue(key: string): string | null {
+    const row =
+      this.database.kind === 'better-sqlite3'
+        ? this.database.db
+            .select({ value: settingsTable.value })
+            .from(settingsTable)
+            .where(eq(settingsTable.key, key))
+            .get()
+        : this.database.client
+            .prepare('SELECT value FROM settings WHERE key = ?')
+            .get<{ value: string }>(key)
+
+    return row?.value ?? null
+  }
+
+  private saveSettingValue(key: string, value: string): void {
+    const updatedAt = new Date().toISOString()
+
+    if (this.database.kind === 'better-sqlite3') {
+      this.database.db
+        .insert(settingsTable)
+        .values({
+          key,
+          value,
+          updatedAt
+        })
+        .onConflictDoUpdate({
+          target: settingsTable.key,
+          set: {
+            value,
+            updatedAt
+          }
+        })
+        .run()
+      return
+    }
+
+    this.database.client
+      .prepare(
+        `
+          INSERT INTO settings (key, value, updated_at)
+          VALUES (?, ?, ?)
+          ON CONFLICT(key) DO UPDATE SET
+            value = excluded.value,
+            updated_at = excluded.updated_at
+        `
+      )
+      .run(key, value, updatedAt)
   }
 }
