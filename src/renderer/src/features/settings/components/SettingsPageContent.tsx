@@ -1,16 +1,40 @@
+import { useEffect } from 'react'
+
 import { useAppDispatch, useAppSelector } from '@renderer/app/store/hooks'
 import { SettingsChrome } from '@renderer/shell/SettingsChrome'
 
 import { settingsSections } from '../config/settings-sections'
 import { selectActiveSettingsSection } from '../model/settings.selectors'
-import { setActiveSettingsSection } from '../model/slices'
+import { loadAppSettings, setActiveSettingsSection } from '../model/slices'
+import type { SettingsSectionId } from '../model/settings.types'
 import { SettingsContent } from './SettingsContent'
 import { SettingsSidebar } from './SettingsSidebar'
+
+function readInitialSectionFromHash(): SettingsSectionId | null {
+  const [, query = ''] = window.location.hash.split('?')
+  const section = new URLSearchParams(query).get('section')
+
+  if (section === 'providers') {
+    return section
+  }
+
+  return null
+}
 
 export function SettingsPageContent(): React.JSX.Element {
   const dispatch = useAppDispatch()
   const activeSection = useAppSelector(selectActiveSettingsSection)
   const activeMeta = settingsSections.find((section) => section.id === activeSection)
+
+  useEffect(() => {
+    const initialSection = readInitialSectionFromHash()
+
+    if (initialSection !== null) {
+      dispatch(setActiveSettingsSection(initialSection))
+    }
+
+    void dispatch(loadAppSettings())
+  }, [dispatch])
 
   return (
     <div

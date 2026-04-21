@@ -1,8 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { electronAPI } from '@electron-toolkit/preload'
 
-import { ipcChannels } from '../main/ipc/channels'
-import type { AppIpcContractMap, MoonApi } from '../main/ipc/contracts'
+import { ipcChannels } from '../shared/ipc/channels'
+import type { AppIpcContractMap, MoonApi } from '../shared/ipc/contracts'
 
 function invokeIpcChannel<TChannel extends keyof AppIpcContractMap>(
   channel: TChannel,
@@ -24,7 +23,7 @@ const api: MoonApi = {
     close: () => invokeIpcChannel(ipcChannels.window.close),
     minimize: () => invokeIpcChannel(ipcChannels.window.minimize),
     toggleMaximize: () => invokeIpcChannel(ipcChannels.window.toggleMaximize),
-    openSettings: () => invokeIpcChannel(ipcChannels.window.openSettings),
+    openSettings: (input) => invokeIpcChannel(ipcChannels.window.openSettings, input),
     getState: () => invokeIpcChannel(ipcChannels.window.getState),
     onStateChange: (listener) => {
       const channel = ipcChannels.window.onStateChange
@@ -42,17 +41,14 @@ const api: MoonApi = {
 
 if (process.contextIsolated) {
   try {
-    contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld('api', api)
   } catch (error) {
     console.error(error)
   }
 } else {
   const windowWithBridge = window as unknown as Window & {
-    electron: typeof electronAPI
     api: MoonApi
   }
 
-  windowWithBridge.electron = electronAPI
   windowWithBridge.api = api
 }

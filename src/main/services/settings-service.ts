@@ -1,5 +1,5 @@
-import type { AppSettings, SaveProviderDraftInput } from '../ipc/contracts'
-import { saveProviderDraftInputSchema } from '../ipc/contracts'
+import type { AppSettings, SaveProviderInput } from '../../shared/ipc/contracts'
+import { saveProviderInputSchema } from '../../shared/ipc/contracts'
 import type { SettingsRepository } from '../repositories/settings-repository'
 
 export class SettingsService {
@@ -9,12 +9,13 @@ export class SettingsService {
     return this.settingsRepository.getSettings()
   }
 
-  saveProvider(input: SaveProviderDraftInput): AppSettings {
-    const parsedInput = saveProviderDraftInputSchema.parse(input)
+  saveProvider(input: SaveProviderInput): AppSettings {
+    const parsedInput = saveProviderInputSchema.parse(input)
 
-    return this.settingsRepository.saveProviderDraft(parsedInput.provider, {
+    return this.settingsRepository.saveProvider(parsedInput.provider, {
       apiKey: parsedInput.apiKey,
-      model: parsedInput.model
+      model: parsedInput.model,
+      baseUrl: parsedInput.provider === 'openai-compatible' ? parsedInput.baseUrl : ''
     })
   }
 }

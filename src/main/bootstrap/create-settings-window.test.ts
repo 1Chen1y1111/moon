@@ -103,6 +103,20 @@ describe('openSettingsWindow', () => {
     expect(firstWindow?.loadURL).toHaveBeenCalledWith('http://127.0.0.1:5173#/settings')
   })
 
+  it('loads the providers settings section when requested', async () => {
+    isMock.dev = true
+    env['ELECTRON_RENDERER_URL'] = 'http://127.0.0.1:5173'
+    const firstWindow = browserWindowInstances[0]
+
+    const { openSettingsWindow } = await import('./create-settings-window')
+
+    openSettingsWindow({ section: 'providers' })
+
+    expect(firstWindow?.loadURL).toHaveBeenCalledWith(
+      'http://127.0.0.1:5173#/settings?section=providers'
+    )
+  })
+
   it('loads the settings route when using the packaged renderer file', async () => {
     const firstWindow = browserWindowInstances[0]
     const { openSettingsWindow } = await import('./create-settings-window')
@@ -127,6 +141,21 @@ describe('openSettingsWindow', () => {
     expect(browserWindowMock).toHaveBeenCalledWith(
       expect.objectContaining({
         frame: false
+      })
+    )
+  })
+
+  it('keeps renderer Node access disabled behind the preload bridge', async () => {
+    const { openSettingsWindow } = await import('./create-settings-window')
+
+    openSettingsWindow()
+
+    expect(browserWindowMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        webPreferences: expect.objectContaining({
+          contextIsolation: true,
+          nodeIntegration: false
+        })
       })
     )
   })

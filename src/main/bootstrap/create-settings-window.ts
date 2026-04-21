@@ -8,10 +8,39 @@ import { registerWindowStateEvents } from './window-state-events'
 
 let settingsWindow: BrowserWindow | null = null
 
-export function openSettingsWindow(): BrowserWindow {
+type SettingsWindowOptions = {
+  section?: 'providers'
+}
+
+function createSettingsHash(options?: SettingsWindowOptions): string {
+  if (options?.section === 'providers') {
+    return '/settings?section=providers'
+  }
+
+  return '/settings'
+}
+
+function loadSettingsRoute(window: BrowserWindow, options?: SettingsWindowOptions): void {
+  const hash = createSettingsHash(options)
+
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    void window.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#${hash}`)
+    return
+  }
+
+  void window.loadFile(join(__dirname, '../renderer/index.html'), {
+    hash
+  })
+}
+
+export function openSettingsWindow(options?: SettingsWindowOptions): BrowserWindow {
   if (settingsWindow !== null && !settingsWindow.isDestroyed()) {
     if (settingsWindow.isMinimized()) {
       settingsWindow.restore()
+    }
+
+    if (options?.section !== undefined) {
+      loadSettingsRoute(settingsWindow, options)
     }
 
     settingsWindow.focus()
@@ -30,6 +59,8 @@ export function openSettingsWindow(): BrowserWindow {
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
       sandbox: false
     }
   })
@@ -57,12 +88,9 @@ export function openSettingsWindow(): BrowserWindow {
     settingsWindow.webContents.openDevTools({
       mode: 'detach'
     })
-    void settingsWindow.loadURL(`${process.env['ELECTRON_RENDERER_URL']}#/settings`)
-  } else {
-    void settingsWindow.loadFile(join(__dirname, '../renderer/index.html'), {
-      hash: '/settings'
-    })
   }
+
+  loadSettingsRoute(settingsWindow, options)
 
   return settingsWindow
 }

@@ -1,3 +1,5 @@
+import type { AppSettings } from '@shared/ipc/contracts'
+
 import type { SettingsSectionId, SettingsState } from './settings.types'
 
 type SettingsSliceState = {
@@ -6,4 +8,20 @@ type SettingsSliceState = {
 
 export function selectActiveSettingsSection(state: SettingsSliceState): SettingsSectionId {
   return state.settings.activeSection
+}
+
+export function selectAppSettings(state: SettingsSliceState): AppSettings {
+  return state.settings.appSettings
+}
+
+export function selectSettingsLoadStatus(state: SettingsSliceState): SettingsState['loadStatus'] {
+  return state.settings.loadStatus
+}
+
+export function selectSettingsSaveStatus(state: SettingsSliceState): SettingsState['saveStatus'] {
+  return state.settings.saveStatus
+}
+
+export function selectSettingsError(state: SettingsSliceState): string | null {
+  return state.settings.error
 }

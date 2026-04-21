@@ -44,7 +44,7 @@ describe('registerIpcHandlers', () => {
     fromWebContentsMock.mockReturnValue(browserWindow)
 
     const { registerIpcHandlers } = await import('./register-ipc')
-    const { ipcChannels } = await import('../ipc/channels')
+    const { ipcChannels } = await import('../../shared/ipc/channels')
 
     registerIpcHandlers({
       openSettingsWindow,
@@ -80,7 +80,7 @@ describe('registerIpcHandlers', () => {
 
   it('registers a handler that opens the dedicated settings window', async () => {
     const { registerIpcHandlers } = await import('./register-ipc')
-    const { ipcChannels } = await import('../ipc/channels')
+    const { ipcChannels } = await import('../../shared/ipc/channels')
 
     registerIpcHandlers({
       settingsService: settingsService as never,
@@ -106,7 +106,7 @@ describe('registerIpcHandlers', () => {
     fromWebContentsMock.mockReturnValue(browserWindow)
 
     const { registerIpcHandlers } = await import('./register-ipc')
-    const { ipcChannels } = await import('../ipc/channels')
+    const { ipcChannels } = await import('../../shared/ipc/channels')
 
     registerIpcHandlers({
       settingsService: settingsService as never,

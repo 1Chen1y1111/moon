@@ -1,10 +1,7 @@
-import type { ElectronAPI } from '@electron-toolkit/preload'
-
-import type { MoonApi } from '../main/ipc/contracts'
+import type { MoonApi } from '../shared/ipc/contracts'
 
 declare global {
   interface Window {
-    electron: ElectronAPI
     api: MoonApi
   }
 }

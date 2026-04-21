@@ -1,8 +1,23 @@
+import { useEffect, useState } from 'react'
 import { ChevronDown, FlaskConical } from 'lucide-react'
 
+import { useAppDispatch, useAppSelector } from '@renderer/app/store/hooks'
 import { Button } from '@shadcn/ui/button'
+import {
+  providerIds,
+  providerLabels,
+  saveProviderInputSchema,
+  type ProviderId,
+  type SaveProviderInput
+} from '@shared/ipc/contracts'
 
 import { settingsSections } from '../config/settings-sections'
+import {
+  selectAppSettings,
+  selectSettingsError,
+  selectSettingsSaveStatus
+} from '../model/settings.selectors'
+import { saveProviderSettings } from '../model/slices'
 import type { SettingsSectionId } from '../model/settings.types'
 
 type SettingsContentProps = {
@@ -11,6 +26,246 @@ type SettingsContentProps = {
 
 const panelClassName =
   'rounded-3xl border border-moon-panel-border bg-moon-panel-bg px-6 py-6 shadow-[var(--moon-shadow-shell)]'
+
+type ProviderDrafts = Record<
+  ProviderId,
+  {
+    apiKey: string
+    model: string
+    baseUrl: string
+  }
+>
+
+type ProviderFormErrors = Partial<Record<keyof SaveProviderInput, string>>
+type ProviderDirtyState = Record<ProviderId, boolean>
+
+function createDraftsFromSettings(
+  appSettings: ReturnType<typeof selectAppSettings>
+): ProviderDrafts {
+  return {
+    claude: {
+      apiKey: appSettings.providers.claude.apiKey,
+      model: appSettings.providers.claude.model,
+      baseUrl: appSettings.providers.claude.baseUrl
+    },
+    openai: {
+      apiKey: appSettings.providers.openai.apiKey,
+      model: appSettings.providers.openai.model,
+      baseUrl: appSettings.providers.openai.baseUrl
+    },
+    gemini: {
+      apiKey: appSettings.providers.gemini.apiKey,
+      model: appSettings.providers.gemini.model,
+      baseUrl: appSettings.providers.gemini.baseUrl
+    },
+    'openai-compatible': {
+      apiKey: appSettings.providers['openai-compatible'].apiKey,
+      model: appSettings.providers['openai-compatible'].model,
+      baseUrl: appSettings.providers['openai-compatible'].baseUrl
+    }
+  }
+}
+
+function ProviderSettingsContent(): React.JSX.Element {
+  const dispatch = useAppDispatch()
+  const appSettings = useAppSelector(selectAppSettings)
+  const saveStatus = useAppSelector(selectSettingsSaveStatus)
+  const saveError = useAppSelector(selectSettingsError)
+  const [drafts, setDrafts] = useState<ProviderDrafts>(() => createDraftsFromSettings(appSettings))
+  const [dirtyProviders, setDirtyProviders] = useState<ProviderDirtyState>({
+    claude: false,
+    openai: false,
+    gemini: false,
+    'openai-compatible': false
+  })
+  const [errors, setErrors] = useState<Record<ProviderId, ProviderFormErrors>>({
+    claude: {},
+    openai: {},
+    gemini: {},
+    'openai-compatible': {}
+  })
+
+  useEffect(() => {
+    const syncedDrafts = createDraftsFromSettings(appSettings)
+
+    setDrafts((current) => {
+      const nextDrafts = { ...current }
+
+      for (const provider of providerIds) {
+        if (!dirtyProviders[provider]) {
+          nextDrafts[provider] = syncedDrafts[provider]
+        }
+      }
+
+      return nextDrafts
+    })
+  }, [appSettings, dirtyProviders])
+
+  function updateDraft(
+    provider: ProviderId,
+    field: keyof ProviderDrafts[ProviderId],
+    value: string
+  ): void {
+    setDrafts((current) => ({
+      ...current,
+      [provider]: {
+        ...current[provider],
+        [field]: value
+      }
+    }))
+    setDirtyProviders((current) => ({
+      ...current,
+      [provider]: true
+    }))
+    setErrors((current) => ({
+      ...current,
+      [provider]: {
+        ...current[provider],
+        [field]: undefined
+      }
+    }))
+  }
+
+  async function saveProvider(provider: ProviderId): Promise<void> {
+    const parsed = saveProviderInputSchema.safeParse({
+      provider,
+      ...drafts[provider]
+    })
+
+    if (!parsed.success) {
+      const nextErrors: ProviderFormErrors = {}
+
+      for (const issue of parsed.error.issues) {
+        const field = issue.path[0]
+        if (
+          field === 'apiKey' ||
+          field === 'model' ||
+          field === 'baseUrl' ||
+          field === 'provider'
+        ) {
+          nextErrors[field] = issue.message
+        }
+      }
+
+      setErrors((current) => ({
+        ...current,
+        [provider]: nextErrors
+      }))
+      return
+    }
+
+    await dispatch(saveProviderSettings(parsed.data)).unwrap()
+    setDirtyProviders((current) => ({
+      ...current,
+      [provider]: false
+    }))
+  }
+
+  return (
+    <section className={panelClassName}>
+      <h2 className="text-[2rem] font-medium tracking-tight text-moon-text-primary">提供商</h2>
+      <p className="mt-6 max-w-3xl text-sm leading-7 text-moon-text-secondary">
+        为每个模型提供商保存一套本地配置。API Key 会在主进程使用系统安全存储能力加密后落库。
+      </p>
+
+      <div className="mt-8 grid gap-4 xl:grid-cols-2">
+        {providerIds.map((provider) => {
+          const draft = drafts[provider]
+          const providerErrors = errors[provider]
+          const requiresBaseUrl = provider === 'openai-compatible'
+
+          return (
+            <div
+              key={provider}
+              role="region"
+              aria-label={`${providerLabels[provider]} provider settings`}
+              className="rounded-2xl border border-moon-panel-border bg-moon-sidebar-bg p-5"
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-medium text-moon-text-primary">
+                    {providerLabels[provider]}
+                  </h3>
+                  <p className="mt-1 text-sm text-moon-text-secondary">
+                    {appSettings.providers[provider].updatedAt
+                      ? `已保存于 ${appSettings.providers[provider].updatedAt}`
+                      : '尚未保存'}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="h-10 rounded-2xl border border-moon-button-secondary-border bg-moon-button-secondary-bg px-4 text-sm text-moon-text-primary hover:bg-moon-button-secondary-bg-hover"
+                  disabled={saveStatus === 'saving'}
+                  onClick={() => {
+                    void saveProvider(provider)
+                  }}
+                >
+                  保存
+                </Button>
+              </div>
+
+              {requiresBaseUrl ? (
+                <label className="mt-5 block text-sm font-medium text-moon-text-primary">
+                  Base URL
+                  <input
+                    aria-label={`${providerLabels[provider]} Base URL`}
+                    value={draft.baseUrl}
+                    onChange={(event) => updateDraft(provider, 'baseUrl', event.target.value)}
+                    className="mt-2 h-11 w-full rounded-2xl border border-moon-button-secondary-border bg-moon-button-secondary-bg px-4 text-sm text-moon-text-primary outline-none transition-colors focus:border-moon-accent"
+                    placeholder="https://api.example.com/v1"
+                  />
+                  {providerErrors.baseUrl ? (
+                    <span className="mt-2 block text-sm text-amber-300">
+                      {providerErrors.baseUrl}
+                    </span>
+                  ) : null}
+                </label>
+              ) : null}
+
+              <label className="mt-5 block text-sm font-medium text-moon-text-primary">
+                API Key
+                <input
+                  aria-label={`${providerLabels[provider]} API Key`}
+                  type="password"
+                  value={draft.apiKey}
+                  onChange={(event) => updateDraft(provider, 'apiKey', event.target.value)}
+                  className="mt-2 h-11 w-full rounded-2xl border border-moon-button-secondary-border bg-moon-button-secondary-bg px-4 text-sm text-moon-text-primary outline-none transition-colors focus:border-moon-accent"
+                  placeholder="sk-..."
+                />
+                {providerErrors.apiKey ? (
+                  <span className="mt-2 block text-sm text-amber-300">{providerErrors.apiKey}</span>
+                ) : null}
+              </label>
+
+              <label className="mt-5 block text-sm font-medium text-moon-text-primary">
+                Model
+                <input
+                  aria-label={`${providerLabels[provider]} Model`}
+                  value={draft.model}
+                  onChange={(event) => updateDraft(provider, 'model', event.target.value)}
+                  className="mt-2 h-11 w-full rounded-2xl border border-moon-button-secondary-border bg-moon-button-secondary-bg px-4 text-sm text-moon-text-primary outline-none transition-colors focus:border-moon-accent"
+                  placeholder={
+                    provider === 'gemini'
+                      ? 'gemini-2.5-pro'
+                      : provider === 'openai'
+                        ? 'gpt-5.4'
+                        : 'claude-3-7-sonnet-latest'
+                  }
+                />
+                {providerErrors.model ? (
+                  <span className="mt-2 block text-sm text-amber-300">{providerErrors.model}</span>
+                ) : null}
+              </label>
+            </div>
+          )
+        })}
+      </div>
+
+      {saveError ? <p className="mt-4 text-sm text-amber-300">{saveError}</p> : null}
+    </section>
+  )
+}
 
 function FakeSelect({
   value,
@@ -104,6 +359,10 @@ export function SettingsContent({ activeSection }: SettingsContentProps): React.
 
   if (activeMeta?.kind === 'general') {
     return <GeneralSettingsContent />
+  }
+
+  if (activeMeta?.kind === 'providers') {
+    return <ProviderSettingsContent />
   }
 
   return (

@@ -42,7 +42,7 @@ export const settingsSections: SettingsSection[] = [
     title: '提供商',
     description: '模型提供商与认证相关设置。',
     icon: WalletCards,
-    kind: 'placeholder'
+    kind: 'providers'
   },
   {
     id: 'agents',

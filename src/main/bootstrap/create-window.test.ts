@@ -29,7 +29,17 @@ vi.mock('../../../resources/icon.png?asset', () => ({
   default: 'icon.png'
 }))
 
-function createBrowserWindowInstance() {
+function createBrowserWindowInstance(): {
+  on: ReturnType<typeof vi.fn>
+  show: ReturnType<typeof vi.fn>
+  loadURL: ReturnType<typeof vi.fn>
+  loadFile: ReturnType<typeof vi.fn>
+  setWindowButtonVisibility: ReturnType<typeof vi.fn>
+  webContents: {
+    openDevTools: ReturnType<typeof vi.fn>
+    setWindowOpenHandler: ReturnType<typeof vi.fn>
+  }
+} {
   return {
     on: vi.fn(),
     show: vi.fn(),
@@ -105,6 +115,21 @@ describe('createMainWindow', () => {
     expect(browserWindowMock).toHaveBeenCalledWith(
       expect.objectContaining({
         frame: false
+      })
+    )
+  })
+
+  it('keeps renderer Node access disabled behind the preload bridge', async () => {
+    const { createMainWindow } = await import('./create-window')
+
+    createMainWindow()
+
+    expect(browserWindowMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        webPreferences: expect.objectContaining({
+          contextIsolation: true,
+          nodeIntegration: false
+        })
       })
     )
   })

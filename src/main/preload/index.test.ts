@@ -13,10 +13,6 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('@electron-toolkit/preload', () => ({
-  electronAPI: {}
-}))
-
 describe('preload api', () => {
   beforeEach(() => {
     vi.resetModules()
@@ -33,5 +29,6 @@ describe('preload api', () => {
     const apiCall = exposeInMainWorldMock.mock.calls.find(([key]) => key === 'api')?.[1]
 
     expect(apiCall.windowControls.openSettings).toBeTypeOf('function')
+    expect(exposeInMainWorldMock.mock.calls.some(([key]) => key === 'electron')).toBe(false)
   })
 })

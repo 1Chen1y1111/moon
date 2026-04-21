@@ -2,6 +2,14 @@ import LogoIcon from '@renderer/assets/logo.svg'
 import { Button } from '@shadcn/ui/button'
 
 export function HomeEmptyState(): React.JSX.Element {
+  const handleOpenProviderSettings = (): void => {
+    void window.api.windowControls.openSettings({ section: 'providers' })
+  }
+
+  const handleOpenSettings = (): void => {
+    void window.api.windowControls.openSettings()
+  }
+
   return (
     <section
       aria-label="Moon landing view"
@@ -35,6 +43,7 @@ export function HomeEmptyState(): React.JSX.Element {
               variant="secondary"
               size="lg"
               className="h-12 rounded-full border border-moon-button-secondary-border bg-moon-button-secondary-bg text-moon-text-primary hover:bg-moon-button-secondary-bg-hover"
+              onClick={handleOpenProviderSettings}
             >
               配置提供商
             </Button>
@@ -43,6 +52,7 @@ export function HomeEmptyState(): React.JSX.Element {
               variant="secondary"
               size="lg"
               className="h-12 rounded-full border border-moon-button-secondary-border bg-moon-button-secondary-bg text-moon-text-primary hover:bg-moon-button-secondary-bg-hover"
+              onClick={handleOpenSettings}
             >
               设置
             </Button>

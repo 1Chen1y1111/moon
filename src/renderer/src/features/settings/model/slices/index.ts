@@ -1,1 +1,6 @@
-export { setActiveSettingsSection, settingsReducer } from './settings.slice'
+export {
+  loadAppSettings,
+  saveProviderSettings,
+  setActiveSettingsSection,
+  settingsReducer
+} from './settings.slice'

@@ -1,5 +1,7 @@
 import type { LucideIcon } from 'lucide-react'
 
+import type { AppSettings } from '@shared/ipc/contracts'
+
 export type SettingsSectionId =
   | 'general'
   | 'providers'
@@ -27,7 +29,7 @@ export type SettingsSectionId =
   | 'usage'
   | 'about'
 
-export type SettingsSectionKind = 'general' | 'placeholder'
+export type SettingsSectionKind = 'general' | 'providers' | 'placeholder'
 
 export type SettingsSection = {
   id: SettingsSectionId
@@ -40,4 +42,8 @@ export type SettingsSection = {
 
 export type SettingsState = {
   activeSection: SettingsSectionId
+  appSettings: AppSettings
+  loadStatus: 'idle' | 'loading' | 'succeeded' | 'failed'
+  saveStatus: 'idle' | 'saving' | 'succeeded' | 'failed'
+  error: string | null
 }

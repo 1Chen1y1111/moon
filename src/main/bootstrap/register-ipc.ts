@@ -1,11 +1,12 @@
 import { BrowserWindow, ipcMain } from 'electron'
 
-import { ipcChannels } from '../ipc/channels'
+import { ipcChannels } from '../../shared/ipc/channels'
+import { openSettingsInputSchema } from '../../shared/ipc/contracts'
 import type { SettingsService } from '../services/settings-service'
 
 type RegisterIpcDependencies = {
   settingsService: SettingsService
-  openSettingsWindow: () => BrowserWindow
+  openSettingsWindow: (input?: { section?: 'providers' }) => BrowserWindow
 }
 
 export function registerIpcHandlers({
@@ -44,8 +45,8 @@ export function registerIpcHandlers({
 
     senderWindow.maximize()
   })
-  ipcMain.handle(ipcChannels.window.openSettings, () => {
-    openSettingsWindow()
+  ipcMain.handle(ipcChannels.window.openSettings, (_event, input) => {
+    openSettingsWindow(openSettingsInputSchema.parse(input))
   })
   ipcMain.handle(ipcChannels.window.getState, (event) => {
     const senderWindow = BrowserWindow.fromWebContents(event.sender)

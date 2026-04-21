@@ -8,11 +8,12 @@ import { openSettingsWindow } from './bootstrap/create-settings-window'
 import { createMainWindow } from './bootstrap/create-window'
 import { registerIpcHandlers } from './bootstrap/register-ipc'
 import { bootstrapDatabase } from './db/bootstrap'
-import { createDatabaseConnection, type DatabaseConnection } from './db/connection'
+import { createDatabaseConnection, type AppDatabaseConnection } from './db/connection'
 import { SettingsRepository } from './repositories/settings-repository'
+import { createSafeStorageSecretCodec } from './security/safe-storage-secret-codec'
 import { SettingsService } from './services/settings-service'
 
-let databaseConnection: DatabaseConnection | null = null
+let databaseConnection: AppDatabaseConnection | null = null
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
@@ -30,7 +31,9 @@ app.whenReady().then(() => {
 
   registerIpcHandlers({
     openSettingsWindow,
-    settingsService: new SettingsService(new SettingsRepository(databaseConnection))
+    settingsService: new SettingsService(
+      new SettingsRepository(databaseConnection, createSafeStorageSecretCodec())
+    )
   })
 
   createMainWindow()

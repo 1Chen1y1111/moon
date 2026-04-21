@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, within } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { AppProviders } from '@renderer/app/providers'
 import { WorkspaceShell } from '@renderer/shell/WorkspaceShell'
@@ -17,6 +17,23 @@ function renderInShell(): void {
 }
 
 describe('HomeEmptyState', () => {
+  beforeEach(() => {
+    ;(window as Window & { api: Record<string, unknown> }).api = {
+      settings: {
+        get: vi.fn(),
+        saveProvider: vi.fn()
+      },
+      windowControls: {
+        close: vi.fn(),
+        minimize: vi.fn(),
+        toggleMaximize: vi.fn(),
+        openSettings: vi.fn(),
+        getState: vi.fn().mockResolvedValue({ isMaximized: false }),
+        onStateChange: vi.fn().mockReturnValue(() => undefined)
+      }
+    }
+  })
+
   it('renders the Moon landing hero content', () => {
     render(<HomeEmptyState />)
     const section = screen.getByRole('region', { name: 'Moon landing view' })
@@ -44,7 +61,7 @@ describe('HomeEmptyState', () => {
     expect(within(shellMain).queryByRole('textbox')).not.toBeInTheDocument()
   })
 
-  it('keeps provider and settings CTAs inert', () => {
+  it('opens the dedicated settings window from provider and settings CTAs', () => {
     renderInShell()
 
     const section = screen.getByRole('region', { name: 'Moon landing view' })
@@ -53,7 +70,7 @@ describe('HomeEmptyState', () => {
     fireEvent.click(scoped.getByRole('button', { name: '配置提供商' }))
     fireEvent.click(scoped.getByRole('button', { name: '设置' }))
 
-    expect(screen.queryByRole('dialog', { name: 'Configure Provider' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('dialog', { name: '设置' })).not.toBeInTheDocument()
+    expect(window.api.windowControls.openSettings).toHaveBeenCalledWith({ section: 'providers' })
+    expect(window.api.windowControls.openSettings).toHaveBeenCalledWith()
   })
 })
