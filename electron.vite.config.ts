@@ -4,14 +4,26 @@ import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
-  main: {},
-  preload: {},
+  main: {
+    resolve: {
+      alias: {
+        '@ipc': resolve('src/ipc')
+      }
+    }
+  },
+  preload: {
+    resolve: {
+      alias: {
+        '@ipc': resolve('src/ipc')
+      }
+    }
+  },
   renderer: {
     resolve: {
       alias: {
         '@renderer': resolve('src/renderer/src'),
         '@shadcn': resolve('src/shadcn'),
-        '@shared': resolve('src/shared')
+        '@ipc': resolve('src/ipc')
       }
     },
     plugins: [react(), tailwindcss()]

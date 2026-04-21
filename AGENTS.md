@@ -28,11 +28,11 @@ Use `pnpm` for dependency management.
 
 Follow `.editorconfig` and Prettier: 2-space indentation, LF endings, UTF-8, single quotes, no semicolons, `printWidth: 100`, and no trailing commas.
 
-Use TypeScript for source files. React components use `PascalCase.tsx`; tests colocate as `*.test.ts` or `*.test.tsx`. Keep slices named `*.slice.ts`, selectors as `*.selectors.ts`, and type modules as `*.types.ts`. Prefer aliases such as `@renderer`, `@shadcn`, and `@shared`.
+Use TypeScript for source files. React components use `PascalCase.tsx`; tests live under `tests/` with source-mirroring folders. Keep slices named `*.slice.ts`, selectors as `*.selectors.ts`, and type modules as `*.types.ts`. Prefer aliases such as `@renderer`, `@shadcn`, `@ipc`, `@main`, and `@tests`.
 
 ## Testing Guidelines
 
-Vitest uses `jsdom`, globals, and `src/renderer/src/test/setup.ts`. Test files are included from `src/renderer/src/**/*.test.{ts,tsx}` and `src/main/**/*.test.ts`.
+Vitest uses `jsdom`, globals, and `tests/helpers/renderer/setup.ts`. Test files are included from `tests/**/*.test.{ts,tsx}`, and `tsconfig.test.json` provides test-only TypeScript alias coverage. Put unit tests under `tests/unit/`, repository/database tests under `tests/integration/`, and shared test helpers under `tests/helpers/`.
 
 Add focused regression tests for IPC contracts, repository behavior, shell/window behavior, and user-facing renderer changes. No coverage threshold is configured, so keep coverage proportional to change risk.
 

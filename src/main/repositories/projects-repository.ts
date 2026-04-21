@@ -1,6 +1,6 @@
 import { desc } from 'drizzle-orm'
 
-import type { ProjectRecord } from '../../shared/ipc/contracts'
+import type { ProjectRecord } from '@ipc/contracts'
 import type { AppDatabaseConnection } from '../db/connection'
 import { projects } from '../db/schema'
 

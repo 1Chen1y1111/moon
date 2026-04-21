@@ -1,6 +1,6 @@
 import { configureStore } from '@reduxjs/toolkit'
 
-import { settingsReducer } from '@renderer/features/settings'
+import { settingsReducer } from '@renderer/entities/settings'
 
 export const store = configureStore({
   reducer: {

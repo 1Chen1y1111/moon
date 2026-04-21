@@ -32,3 +32,17 @@ $ pnpm build:mac
 # For Linux
 $ pnpm build:linux
 ```
+
+### Test
+
+```bash
+$ pnpm exec vitest run
+```
+
+Tests live under `tests/`:
+
+- `tests/unit/` for main/preload/renderer unit and boundary tests.
+- `tests/integration/` for SQLite, repository, and database bootstrap tests.
+- `tests/helpers/` for shared test setup and helpers.
+
+`tsconfig.test.json` provides TypeScript alias support for the centralized test tree.

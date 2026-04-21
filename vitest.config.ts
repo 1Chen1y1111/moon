@@ -6,15 +6,18 @@ export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
+      '@main': resolve('src/main'),
+      '@preload': resolve('src/preload'),
       '@renderer': resolve('src/renderer/src'),
       '@shadcn': resolve('src/shadcn'),
-      '@shared': resolve('src/shared')
+      '@ipc': resolve('src/ipc'),
+      '@tests': resolve('tests')
     }
   },
   test: {
     environment: 'jsdom',
     globals: true,
-    setupFiles: ['src/renderer/src/test/setup.ts'],
-    include: ['src/renderer/src/**/*.test.{ts,tsx}', 'src/main/**/*.test.ts']
+    setupFiles: ['tests/helpers/renderer/setup.ts'],
+    include: ['tests/**/*.test.{ts,tsx}']
   }
 })

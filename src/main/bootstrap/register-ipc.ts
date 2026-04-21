@@ -1,7 +1,7 @@
 import { BrowserWindow, ipcMain } from 'electron'
 
-import { ipcChannels } from '../../shared/ipc/channels'
-import { openSettingsInputSchema } from '../../shared/ipc/contracts'
+import { ipcChannels } from '@ipc/channels'
+import { openSettingsInputSchema } from '@ipc/contracts'
 import type { SettingsService } from '../services/settings-service'
 
 type RegisterIpcDependencies = {

@@ -1,5 +1,5 @@
-import type { AppSettings, SaveProviderInput } from '../../shared/ipc/contracts'
-import { saveProviderInputSchema } from '../../shared/ipc/contracts'
+import type { AppSettings, SaveProviderInput } from '@ipc/contracts'
+import { saveProviderInputSchema } from '@ipc/contracts'
 import type { SettingsRepository } from '../repositories/settings-repository'
 
 export class SettingsService {

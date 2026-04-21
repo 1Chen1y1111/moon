@@ -1,4 +1,4 @@
-import type { MoonApi } from '../shared/ipc/contracts'
+import type { MoonApi } from '@ipc/contracts'
 
 declare global {
   interface Window {

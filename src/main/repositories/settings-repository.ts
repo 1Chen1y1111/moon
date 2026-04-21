@@ -5,7 +5,7 @@ import {
   type AppSettings,
   type ProviderId,
   type ProviderSettings
-} from '../../shared/ipc/contracts'
+} from '@ipc/contracts'
 import type { AppDatabaseConnection } from '../db/connection'
 import { providerSettings } from '../db/schema'
 import type { SecretCodec } from '../security/secret-codec'

@@ -1,6 +1,6 @@
 import type { BrowserWindow } from 'electron'
 
-import { ipcChannels } from '../../shared/ipc/channels'
+import { ipcChannels } from '@ipc/channels'
 
 export function registerWindowStateEvents(window: BrowserWindow): void {
   const publishWindowState = (): void => {

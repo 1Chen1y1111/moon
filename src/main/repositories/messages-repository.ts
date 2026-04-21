@@ -1,6 +1,6 @@
 import { desc } from 'drizzle-orm'
 
-import type { MessageRecord, MessageSearchResult } from '../../shared/ipc/contracts'
+import type { MessageRecord, MessageSearchResult } from '@ipc/contracts'
 import type { AppDatabaseConnection } from '../db/connection'
 import { messages } from '../db/schema'
 

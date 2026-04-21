@@ -1,7 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
-import { ipcChannels } from '../shared/ipc/channels'
-import type { AppIpcContractMap, MoonApi } from '../shared/ipc/contracts'
+import { ipcChannels } from '@ipc/channels'
+import type { AppIpcContractMap, MoonApi } from '@ipc/contracts'
 
 function invokeIpcChannel<TChannel extends keyof AppIpcContractMap>(
   channel: TChannel,

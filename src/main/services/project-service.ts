@@ -1,4 +1,4 @@
-import type { ProjectRecord } from '../../shared/ipc/contracts'
+import type { ProjectRecord } from '@ipc/contracts'
 import type { ProjectsRepository } from '../repositories/projects-repository'
 
 export class ProjectService {

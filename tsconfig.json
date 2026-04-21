@@ -1,18 +1,28 @@
 {
   "files": [],
-  "references": [{ "path": "./tsconfig.node.json" }, { "path": "./tsconfig.web.json" }],
+  "references": [
+    { "path": "./tsconfig.node.json" },
+    { "path": "./tsconfig.web.json" },
+    { "path": "./tsconfig.test.json" }
+  ],
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
       "@renderer": ["src/renderer/src"],
       "@renderer/*": ["src/renderer/src/*"],
-      "@shared": ["src/shared"],
-      "@shared/*": ["src/shared/*"],
+      "@ipc": ["src/ipc"],
+      "@ipc/*": ["src/ipc/*"],
+      "@main": ["src/main"],
+      "@main/*": ["src/main/*"],
+      "@preload": ["src/preload"],
+      "@preload/*": ["src/preload/*"],
       "@shadcn": ["src/shadcn"],
       "@shadcn/ui": ["src/shadcn/ui"],
       "@shadcn/lib": ["src/shadcn/lib"],
       "@shadcn/lib/utils": ["src/shadcn/lib/utils.ts"],
-      "@shadcn/*": ["src/shadcn/*"]
+      "@shadcn/*": ["src/shadcn/*"],
+      "@tests": ["tests"],
+      "@tests/*": ["tests/*"]
     }
   }
 }
