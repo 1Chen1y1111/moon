@@ -10,6 +10,10 @@ const projectRoot = join(__dirname, '..')
 
 const components = ['button', 'tooltip']
 
+/**
+ * @returns {void}
+ */
+// eslint-disable-next-line @typescript-eslint/explicit-function-return-type
 function updateComponents() {
   if (components.length === 0) {
     console.log('组件列表为空，请在脚本中配置组件')

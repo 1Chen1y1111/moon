@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import {
   saveProviderSettings,
@@ -23,7 +23,7 @@ import {
 } from './ProviderSettingsCard'
 
 type ProviderDrafts = Record<ProviderId, ProviderDraft>
-type ProviderDirtyState = Record<ProviderId, boolean>
+type ProviderDraftOverrides = Partial<ProviderDrafts>
 
 function createDraftsFromSettings(appSettings: AppSettings): ProviderDrafts {
   return {
@@ -55,47 +55,31 @@ export function ProviderSettingsSection(): React.JSX.Element {
   const appSettings = useSettingsSelector(selectAppSettings)
   const saveStatus = useSettingsSelector(selectSettingsSaveStatus)
   const saveError = useSettingsSelector(selectSettingsError)
-  const [drafts, setDrafts] = useState<ProviderDrafts>(() => createDraftsFromSettings(appSettings))
-  const [dirtyProviders, setDirtyProviders] = useState<ProviderDirtyState>({
-    claude: false,
-    openai: false,
-    gemini: false,
-    'openai-compatible': false
-  })
+  const syncedDrafts = useMemo(() => createDraftsFromSettings(appSettings), [appSettings])
+  const [draftOverrides, setDraftOverrides] = useState<ProviderDraftOverrides>({})
   const [errors, setErrors] = useState<Record<ProviderId, ProviderFormErrors>>({
     claude: {},
     openai: {},
     gemini: {},
     'openai-compatible': {}
   })
+  const drafts = useMemo(() => {
+    const nextDrafts = { ...syncedDrafts }
 
-  useEffect(() => {
-    const syncedDrafts = createDraftsFromSettings(appSettings)
+    for (const provider of providerIds) {
+      nextDrafts[provider] = draftOverrides[provider] ?? syncedDrafts[provider]
+    }
 
-    setDrafts((current) => {
-      const nextDrafts = { ...current }
-
-      for (const provider of providerIds) {
-        if (!dirtyProviders[provider]) {
-          nextDrafts[provider] = syncedDrafts[provider]
-        }
-      }
-
-      return nextDrafts
-    })
-  }, [appSettings, dirtyProviders])
+    return nextDrafts
+  }, [draftOverrides, syncedDrafts])
 
   function updateDraft(provider: ProviderId, field: keyof ProviderDraft, value: string): void {
-    setDrafts((current) => ({
+    setDraftOverrides((current) => ({
       ...current,
       [provider]: {
-        ...current[provider],
+        ...(current[provider] ?? syncedDrafts[provider]),
         [field]: value
       }
-    }))
-    setDirtyProviders((current) => ({
-      ...current,
-      [provider]: true
     }))
     setErrors((current) => ({
       ...current,
@@ -135,10 +119,12 @@ export function ProviderSettingsSection(): React.JSX.Element {
     }
 
     await dispatch(saveProviderSettings(parsed.data)).unwrap()
-    setDirtyProviders((current) => ({
-      ...current,
-      [provider]: false
-    }))
+    setDraftOverrides((current) => {
+      const nextDraftOverrides = { ...current }
+      delete nextDraftOverrides[provider]
+
+      return nextDraftOverrides
+    })
   }
 
   return (

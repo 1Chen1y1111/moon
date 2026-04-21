@@ -49,5 +49,3 @@ export function createMainWindow(): BrowserWindow {
 
   return mainWindow
 }
-
-export const createWindow = createMainWindow

@@ -7,7 +7,7 @@ type SettingsSliceState = {
   settings: SettingsState
 }
 
-export type SettingsDispatch = ThunkDispatch<SettingsSliceState, unknown, UnknownAction>
+type SettingsDispatch = ThunkDispatch<SettingsSliceState, unknown, UnknownAction>
 
 export const useSettingsDispatch = useDispatch.withTypes<SettingsDispatch>()
 export const useSettingsSelector: TypedUseSelectorHook<SettingsSliceState> = useSelector

@@ -7,18 +7,18 @@ import { Provider } from 'react-redux'
 import { createDefaultAppSettings } from '@ipc/contracts'
 import { settingsReducer, type SettingsState } from '@renderer/entities/settings'
 
-export type TestRootState = {
+type TestRootState = {
   settings: SettingsState
 }
 
-export type TestStore = EnhancedStore<TestRootState>
+type TestStore = EnhancedStore<TestRootState>
 
 type RenderWithProvidersOptions = Omit<RenderOptions, 'wrapper'> & {
   preloadedSettings?: Partial<SettingsState>
   store?: TestStore
 }
 
-export function createTestStore(preloadedSettings?: Partial<SettingsState>): TestStore {
+function createTestStore(preloadedSettings?: Partial<SettingsState>): TestStore {
   const baseSettingsState: SettingsState = {
     activeSection: 'general',
     appSettings: createDefaultAppSettings(),

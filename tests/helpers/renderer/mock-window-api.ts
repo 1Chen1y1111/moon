@@ -32,7 +32,7 @@ type MockWindowApiOptions = {
   windowState?: WindowState
 }
 
-export function createMockWindowApi(options: MockWindowApiOptions = {}): MockMoonApi {
+function createMockWindowApi(options: MockWindowApiOptions = {}): MockMoonApi {
   const appSettings = options.appSettings ?? createDefaultAppSettings()
   const savedSettings = options.savedSettings ?? appSettings
   const windowState = options.windowState ?? { isMaximized: false }

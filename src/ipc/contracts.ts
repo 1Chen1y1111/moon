@@ -81,16 +81,6 @@ export const openSettingsInputSchema = z
 
 export type OpenSettingsInput = z.infer<typeof openSettingsInputSchema>
 
-export const projectRecordSchema = z.object({
-  id: z.string(),
-  path: z.string(),
-  name: z.string(),
-  createdAt: z.string(),
-  updatedAt: z.string()
-})
-
-export type ProjectRecord = z.infer<typeof projectRecordSchema>
-
 export const sessionRecordSchema = z.object({
   id: z.string(),
   projectId: z.string().nullable(),
@@ -170,7 +160,7 @@ export type MoonApi = {
   }
 }
 
-export function createDefaultProviderSettings(provider: ProviderId): ProviderSettings {
+function createDefaultProviderSettings(provider: ProviderId): ProviderSettings {
   return {
     provider,
     apiKey: '',
@@ -189,8 +179,4 @@ export function createDefaultAppSettings(): AppSettings {
       'openai-compatible': createDefaultProviderSettings('openai-compatible')
     }
   }
-}
-
-export function isProviderId(value: string): value is ProviderId {
-  return providerIds.includes(value as ProviderId)
 }

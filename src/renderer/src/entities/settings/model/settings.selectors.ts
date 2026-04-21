@@ -14,10 +14,6 @@ export function selectAppSettings(state: SettingsSliceState): AppSettings {
   return state.settings.appSettings
 }
 
-export function selectSettingsLoadStatus(state: SettingsSliceState): SettingsState['loadStatus'] {
-  return state.settings.loadStatus
-}
-
 export function selectSettingsSaveStatus(state: SettingsSliceState): SettingsState['saveStatus'] {
   return state.settings.saveStatus
 }
