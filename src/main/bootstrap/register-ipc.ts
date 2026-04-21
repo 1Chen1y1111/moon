@@ -18,6 +18,7 @@ export function registerIpcHandlers({
   ipcMain.removeHandler(ipcChannels.window.minimize)
   ipcMain.removeHandler(ipcChannels.window.toggleMaximize)
   ipcMain.removeHandler(ipcChannels.window.openSettings)
+  ipcMain.removeHandler(ipcChannels.window.getState)
 
   ipcMain.handle(ipcChannels.settings.get, () => settingsService.getSettings())
   ipcMain.handle(ipcChannels.settings.saveProvider, (_event, input) =>
@@ -45,5 +46,12 @@ export function registerIpcHandlers({
   })
   ipcMain.handle(ipcChannels.window.openSettings, () => {
     openSettingsWindow()
+  })
+  ipcMain.handle(ipcChannels.window.getState, (event) => {
+    const senderWindow = BrowserWindow.fromWebContents(event.sender)
+
+    return {
+      isMaximized: senderWindow?.isMaximized() ?? false
+    }
   })
 }

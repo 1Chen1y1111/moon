@@ -97,4 +97,27 @@ describe('registerIpcHandlers', () => {
 
     expect(openSettingsWindow).toHaveBeenCalledTimes(1)
   })
+
+  it('registers a handler that reads the sender window state', async () => {
+    const browserWindow = {
+      isMaximized: vi.fn(() => true)
+    }
+
+    fromWebContentsMock.mockReturnValue(browserWindow)
+
+    const { registerIpcHandlers } = await import('./register-ipc')
+    const { ipcChannels } = await import('../ipc/channels')
+
+    registerIpcHandlers({
+      settingsService: settingsService as never,
+      openSettingsWindow
+    })
+
+    const getStateHandler = handleMock.mock.calls.find(
+      ([channel]) => channel === ipcChannels.window.getState
+    )?.[1]
+
+    expect(getStateHandler).toBeTypeOf('function')
+    expect(getStateHandler?.({ sender: {} })).toEqual({ isMaximized: true })
+  })
 })

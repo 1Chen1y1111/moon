@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { is } from '@electron-toolkit/utils'
 
 import icon from '../../../resources/icon.png?asset'
+import { registerWindowStateEvents } from './window-state-events'
 
 let settingsWindow: BrowserWindow | null = null
 
@@ -36,6 +37,8 @@ export function openSettingsWindow(): BrowserWindow {
   if (process.platform === 'darwin') {
     settingsWindow.setWindowButtonVisibility(false)
   }
+
+  registerWindowStateEvents(settingsWindow)
 
   settingsWindow.on('ready-to-show', () => {
     settingsWindow?.show()
