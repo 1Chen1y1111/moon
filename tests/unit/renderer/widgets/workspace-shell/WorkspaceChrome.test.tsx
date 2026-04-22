@@ -21,17 +21,32 @@ describe('WorkspaceChrome', () => {
     await user.click(screen.getByRole('button', { name: '最小化窗口' }))
     await user.click(screen.getByRole('button', { name: '切换缩放窗口' }))
 
+    expect(screen.getByTestId('mac-window-control-close-icon').closest('button')).not.toHaveClass(
+      'hover:brightness-75'
+    )
     expect(screen.getByTestId('mac-window-control-close-icon')).toHaveClass(
       'opacity-0',
       'group-hover:opacity-70'
+    )
+    expect(screen.getByTestId('mac-window-control-close-icon')).toHaveAttribute(
+      'stroke',
+      'var(--moon-window-control-glyph)'
     )
     expect(screen.getByTestId('mac-window-control-minimize-icon')).toHaveClass(
       'opacity-0',
       'group-hover:opacity-70'
     )
+    expect(screen.getByTestId('mac-window-control-minimize-icon')).toHaveAttribute(
+      'stroke',
+      'var(--moon-window-control-glyph)'
+    )
     expect(screen.getByTestId('mac-window-control-maximize-icon')).toHaveClass(
       'opacity-0',
       'group-hover:opacity-70'
+    )
+    expect(screen.getByTestId('mac-window-control-maximize-icon')).toHaveAttribute(
+      'stroke',
+      'var(--moon-window-control-glyph)'
     )
     expect(api.windowControls.close).toHaveBeenCalledTimes(1)
     expect(api.windowControls.minimize).toHaveBeenCalledTimes(1)

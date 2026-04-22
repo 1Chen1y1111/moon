@@ -3,7 +3,7 @@ import { join } from 'node:path'
 
 import { is } from '@electron-toolkit/utils'
 
-import icon from '../../../resources/icon.png?asset'
+import { browserWindowIcon } from './app-icon'
 import { registerWindowStateEvents } from './window-state-events'
 
 let settingsWindow: BrowserWindow | null = null
@@ -50,13 +50,14 @@ export function openSettingsWindow(options?: SettingsWindowOptions): BrowserWind
   settingsWindow = new BrowserWindow({
     width: 1200,
     height: 800,
+    title: 'Moon',
     minWidth: 780,
     minHeight: 640,
     show: false,
     autoHideMenuBar: true,
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hidden' as const } : {}),
     ...(process.platform === 'win32' ? { frame: false } : {}),
-    ...(process.platform === 'linux' ? { icon } : {}),
+    ...(process.platform !== 'darwin' ? { icon: browserWindowIcon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,

@@ -1,6 +1,9 @@
 import { app } from 'electron'
 
+import windowsIcon from '../../../build/icon.ico?asset'
 import icon from '../../../resources/icon.png?asset'
+
+export const browserWindowIcon = process.platform === 'win32' ? windowsIcon : icon
 
 export function setApplicationIcon(): void {
   if (process.platform === 'darwin') {

@@ -377,6 +377,7 @@
   --moon-window-control-close: #b53333;
   --moon-window-control-minimize: #8a6a2d;
   --moon-window-control-maximize: #5e5d59;
+  --moon-window-control-glyph: #ffffff;
   --moon-scrollbar-track: var(--moon-warm-sand);
   --moon-scrollbar-thumb: var(--moon-warm-silver);
   --moon-scrollbar-thumb-hover: var(--moon-stone);
@@ -576,6 +577,7 @@
   --moon-window-control-close: #ff5f57;
   --moon-window-control-minimize: #ffbd2e;
   --moon-window-control-maximize: #28c840;
+  --moon-window-control-glyph: var(--moon-near-black);
   --moon-scrollbar-track: #252931;
   --moon-scrollbar-thumb: #c8ccd4;
   --moon-scrollbar-thumb-hover: #d6dae2;

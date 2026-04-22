@@ -7,7 +7,7 @@ type MacWindowControlsProps = {
 }
 
 const trafficLightButtonClassName =
-  'group relative flex size-moon-traffic-light items-center justify-center rounded-full transition-[filter,transform] hover:scale-110 hover:brightness-75 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-ring-subtle'
+  'group relative flex size-moon-traffic-light items-center justify-center rounded-full transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-ring-subtle'
 
 const trafficLightGlyphClassName =
   'pointer-events-none absolute inset-0 size-full p-moon-traffic-light-icon opacity-0 transition-opacity group-hover:opacity-70'
@@ -29,7 +29,7 @@ export function MacWindowControls({
           aria-hidden="true"
           className={trafficLightGlyphClassName}
           data-testid="mac-window-control-close-icon"
-          stroke="var(--moon-near-black)"
+          stroke="var(--moon-window-control-glyph)"
           strokeWidth={3}
         />
       </button>
@@ -43,7 +43,7 @@ export function MacWindowControls({
           aria-hidden="true"
           className={trafficLightGlyphClassName}
           data-testid="mac-window-control-minimize-icon"
-          stroke="var(--moon-near-black)"
+          stroke="var(--moon-window-control-glyph)"
           strokeWidth={3}
         />
       </button>
@@ -57,7 +57,7 @@ export function MacWindowControls({
           aria-hidden="true"
           className={trafficLightGlyphClassName}
           data-testid="mac-window-control-maximize-icon"
-          stroke="var(--moon-near-black)"
+          stroke="var(--moon-window-control-glyph)"
           strokeWidth={3}
         />
       </button>
