@@ -1,6 +1,6 @@
 import { index, sqliteTable, text } from 'drizzle-orm/sqlite-core'
 
-import type { ProviderId } from '@ipc/contracts'
+import type { ProviderId } from '../../shared/domain/provider'
 
 export const databaseSchemaVersion = 1
 

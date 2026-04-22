@@ -14,7 +14,8 @@ describe('SettingsPage', () => {
       ...createDefaultAppSettings().providers,
       claude: {
         provider: 'claude',
-        apiKey: 'sk-ant-demo',
+        hasApiKey: true,
+        apiKeyPreview: '****demo',
         model: 'claude-3-7-sonnet-latest',
         baseUrl: '',
         updatedAt: '2026-04-21T00:00:00.000Z'
@@ -90,6 +91,53 @@ describe('SettingsPage', () => {
       apiKey: 'sk-ant-demo',
       model: 'claude-3-7-sonnet-latest',
       baseUrl: ''
+    })
+  })
+
+  it('keeps saved API keys out of renderer form values', async () => {
+    const existingSettings: AppSettings = {
+      ...createDefaultAppSettings(),
+      providers: {
+        ...createDefaultAppSettings().providers,
+        openai: {
+          provider: 'openai',
+          hasApiKey: true,
+          apiKeyPreview: '****demo',
+          model: 'gpt-5.4',
+          baseUrl: '',
+          updatedAt: '2026-04-21T00:00:00.000Z'
+        }
+      }
+    }
+
+    api = installMockWindowApi({
+      appSettings: existingSettings,
+      savedSettings: existingSettings
+    })
+
+    const { user } = renderWithProviders(<SettingsPage />, {
+      preloadedSettings: {
+        activeSection: 'providers',
+        appSettings: existingSettings,
+        loadStatus: 'succeeded'
+      }
+    })
+
+    expect(screen.getByLabelText('OpenAI API Key')).toHaveValue('')
+    expect(screen.queryByDisplayValue('sk-openai-demo')).not.toBeInTheDocument()
+    expect(screen.getByText('Current key: ****demo')).toBeInTheDocument()
+
+    await user.click(
+      within(screen.getByRole('region', { name: 'OpenAI provider settings' })).getByRole('button')
+    )
+
+    await waitFor(() => {
+      expect(api.settings.saveProvider).toHaveBeenCalledWith({
+        provider: 'openai',
+        apiKey: '',
+        model: 'gpt-5.4',
+        baseUrl: ''
+      })
     })
   })
 

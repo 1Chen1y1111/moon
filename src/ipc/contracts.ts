@@ -1,41 +1,36 @@
 import { z } from 'zod'
 
+import { providerIds } from '../shared/domain/provider'
+import { appearanceThemes } from '../shared/domain/settings'
+import type { AppSettings } from '../shared/domain/settings'
 import { ipcChannels } from './channels'
 
-export const providerIds = ['claude', 'openai', 'gemini', 'openai-compatible'] as const
+export { providerIds, providerLabels } from '../shared/domain/provider'
+export type { ProviderId } from '../shared/domain/provider'
+export { appearanceThemes, createDefaultAppSettings } from '../shared/domain/settings'
+export type {
+  AppearanceSettings,
+  AppearanceTheme,
+  AppSettings,
+  ProviderSettings
+} from '../shared/domain/settings'
 
 export const providerIdSchema = z.enum(providerIds)
 
-export type ProviderId = z.infer<typeof providerIdSchema>
-
-export const providerLabels = {
-  claude: 'Claude',
-  openai: 'OpenAI',
-  gemini: 'Gemini',
-  'openai-compatible': 'OpenAI Compatible'
-} as const satisfies Record<ProviderId, string>
-
-export const appearanceThemes = ['light', 'dark', 'system'] as const
-
 export const appearanceThemeSchema = z.enum(appearanceThemes)
-
-export type AppearanceTheme = z.infer<typeof appearanceThemeSchema>
 
 export const appearanceSettingsSchema = z.object({
   theme: appearanceThemeSchema
 })
 
-export type AppearanceSettings = z.infer<typeof appearanceSettingsSchema>
-
 export const providerSettingsSchema = z.object({
   provider: providerIdSchema,
-  apiKey: z.string(),
+  hasApiKey: z.boolean(),
+  apiKeyPreview: z.string(),
   model: z.string(),
   baseUrl: z.string(),
   updatedAt: z.string()
 })
-
-export type ProviderSettings = z.infer<typeof providerSettingsSchema>
 
 export const appSettingsSchema = z.object({
   appearance: appearanceSettingsSchema,
@@ -47,12 +42,10 @@ export const appSettingsSchema = z.object({
   })
 })
 
-export type AppSettings = z.infer<typeof appSettingsSchema>
-
 export const saveProviderInputSchema = z
   .object({
     provider: providerIdSchema,
-    apiKey: z.string().trim().min(1, 'API key is required.'),
+    apiKey: z.string().trim().optional().default(''),
     model: z.string().trim().min(1, 'Model is required.'),
     baseUrl: z.string().trim().optional().default('')
   })
@@ -99,35 +92,6 @@ export const openSettingsInputSchema = z
   .optional()
 
 export type OpenSettingsInput = z.infer<typeof openSettingsInputSchema>
-
-export const sessionRecordSchema = z.object({
-  id: z.string(),
-  projectId: z.string().nullable(),
-  provider: providerIdSchema,
-  title: z.string(),
-  status: z.string(),
-  createdAt: z.string(),
-  updatedAt: z.string()
-})
-
-export type SessionRecord = z.infer<typeof sessionRecordSchema>
-
-export const messageRecordSchema = z.object({
-  id: z.string(),
-  sessionId: z.string(),
-  role: z.string(),
-  content: z.string(),
-  createdAt: z.string(),
-  updatedAt: z.string()
-})
-
-export type MessageRecord = z.infer<typeof messageRecordSchema>
-
-export type MessageSearchResult = {
-  messageId: string
-  sessionId: string
-  content: string
-}
 
 export type WindowState = {
   isMaximized: boolean
@@ -182,29 +146,5 @@ export type MoonApi = {
     openSettings: (input?: OpenSettingsInput) => Promise<void>
     getState: () => Promise<WindowState>
     onStateChange: (listener: (state: WindowState) => void) => () => void
-  }
-}
-
-function createDefaultProviderSettings(provider: ProviderId): ProviderSettings {
-  return {
-    provider,
-    apiKey: '',
-    model: '',
-    baseUrl: '',
-    updatedAt: ''
-  }
-}
-
-export function createDefaultAppSettings(): AppSettings {
-  return {
-    appearance: {
-      theme: 'system'
-    },
-    providers: {
-      claude: createDefaultProviderSettings('claude'),
-      openai: createDefaultProviderSettings('openai'),
-      gemini: createDefaultProviderSettings('gemini'),
-      'openai-compatible': createDefaultProviderSettings('openai-compatible')
-    }
   }
 }

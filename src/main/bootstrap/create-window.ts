@@ -1,9 +1,10 @@
-import { BrowserWindow, shell } from 'electron'
+import { BrowserWindow } from 'electron'
 import { join } from 'node:path'
 
 import { is } from '@electron-toolkit/utils'
 
 import { browserWindowIcon } from './app-icon'
+import { registerWindowSecurity } from './window-security'
 import { registerWindowStateEvents } from './window-state-events'
 
 export function createMainWindow(): BrowserWindow {
@@ -20,7 +21,7 @@ export function createMainWindow(): BrowserWindow {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: true
     }
   })
 
@@ -29,14 +30,10 @@ export function createMainWindow(): BrowserWindow {
   }
 
   registerWindowStateEvents(mainWindow)
+  registerWindowSecurity(mainWindow)
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
-  })
-
-  mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
-    return { action: 'deny' }
   })
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {

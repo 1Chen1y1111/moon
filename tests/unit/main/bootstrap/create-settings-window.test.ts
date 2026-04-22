@@ -42,6 +42,7 @@ function createBrowserWindowInstance(): {
   webContents: {
     openDevTools: ReturnType<typeof vi.fn>
     setWindowOpenHandler: ReturnType<typeof vi.fn>
+    on: ReturnType<typeof vi.fn>
   }
 } {
   return {
@@ -56,7 +57,8 @@ function createBrowserWindowInstance(): {
     setWindowButtonVisibility: vi.fn(),
     webContents: {
       openDevTools: vi.fn(),
-      setWindowOpenHandler: vi.fn()
+      setWindowOpenHandler: vi.fn(),
+      on: vi.fn()
     }
   }
 }
@@ -154,7 +156,8 @@ describe('openSettingsWindow', () => {
       expect.objectContaining({
         webPreferences: expect.objectContaining({
           contextIsolation: true,
-          nodeIntegration: false
+          nodeIntegration: false,
+          sandbox: true
         })
       })
     )

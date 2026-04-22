@@ -1,13 +1,13 @@
 import { eq } from 'drizzle-orm'
 
 import {
+  appearanceThemes,
   createDefaultAppSettings,
   type AppearanceSettings,
   type AppearanceTheme,
-  type AppSettings,
-  type ProviderId,
-  type ProviderSettings
-} from '@ipc/contracts'
+  type AppSettings
+} from '../../shared/domain/settings'
+import type { ProviderId } from '../../shared/domain/provider'
 import type { AppDatabaseConnection } from '../db/connection'
 import { providerSettings, settings as settingsTable } from '../db/schema'
 import type { SecretCodec } from '../security/secret-codec'
@@ -27,7 +27,21 @@ type ProviderSettingsRow = {
 }
 
 const appearanceThemeKey = 'appearance.theme'
-const appearanceThemes = new Set<AppearanceTheme>(['light', 'dark', 'system'])
+const appearanceThemeSet = new Set<AppearanceTheme>(appearanceThemes)
+
+function createApiKeyPreview(apiKey: string): string {
+  const trimmedApiKey = apiKey.trim()
+
+  if (trimmedApiKey.length === 0) {
+    return ''
+  }
+
+  if (trimmedApiKey.length <= 4) {
+    return '****'
+  }
+
+  return `****${trimmedApiKey.slice(-4)}`
+}
 
 export class SettingsRepository {
   constructor(
@@ -39,7 +53,7 @@ export class SettingsRepository {
     const settings = createDefaultAppSettings()
     const appearanceTheme = this.getSettingValue(appearanceThemeKey)
 
-    if (appearanceTheme !== null && appearanceThemes.has(appearanceTheme as AppearanceTheme)) {
+    if (appearanceTheme !== null && appearanceThemeSet.has(appearanceTheme as AppearanceTheme)) {
       settings.appearance.theme = appearanceTheme as AppearanceTheme
     }
 
@@ -60,9 +74,12 @@ export class SettingsRepository {
             }))
 
     for (const row of rows) {
+      const apiKey = this.secretCodec.decrypt(row.encryptedApiKey)
+
       settings.providers[row.provider] = {
         provider: row.provider,
-        apiKey: this.secretCodec.decrypt(row.encryptedApiKey),
+        hasApiKey: apiKey.trim().length > 0,
+        apiKeyPreview: createApiKeyPreview(apiKey),
         model: row.model,
         baseUrl: row.baseUrl,
         updatedAt: row.updatedAt
@@ -80,30 +97,31 @@ export class SettingsRepository {
 
   saveProvider(provider: ProviderId, draft: ProviderSettingsDraft): AppSettings {
     const updatedAt = new Date().toISOString()
-    const nextProviderSettings: ProviderSettings = {
-      provider,
-      apiKey: draft.apiKey.trim(),
-      model: draft.model.trim(),
-      baseUrl: draft.baseUrl.trim(),
-      updatedAt
+    const apiKey = draft.apiKey.trim()
+    const model = draft.model.trim()
+    const baseUrl = draft.baseUrl.trim()
+    const encryptedApiKey =
+      apiKey.length > 0 ? this.secretCodec.encrypt(apiKey) : this.getEncryptedProviderKey(provider)
+
+    if (encryptedApiKey === null) {
+      throw new Error('API key is required.')
     }
-    const encryptedApiKey = this.secretCodec.encrypt(nextProviderSettings.apiKey)
 
     if (this.database.kind === 'better-sqlite3') {
       this.database.db
         .insert(providerSettings)
         .values({
           provider,
-          model: nextProviderSettings.model,
-          baseUrl: nextProviderSettings.baseUrl,
+          model,
+          baseUrl,
           encryptedApiKey,
           updatedAt
         })
         .onConflictDoUpdate({
           target: providerSettings.provider,
           set: {
-            model: nextProviderSettings.model,
-            baseUrl: nextProviderSettings.baseUrl,
+            model,
+            baseUrl,
             encryptedApiKey,
             updatedAt
           }
@@ -122,13 +140,7 @@ export class SettingsRepository {
               updated_at = excluded.updated_at
           `
         )
-        .run(
-          provider,
-          nextProviderSettings.model,
-          nextProviderSettings.baseUrl,
-          encryptedApiKey,
-          updatedAt
-        )
+        .run(provider, model, baseUrl, encryptedApiKey, updatedAt)
     }
 
     return this.getSettings()

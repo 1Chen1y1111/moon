@@ -38,7 +38,8 @@ describe('SettingsRepository', () => {
 
     expect(firstRepository.getSettings().providers.claude).toEqual({
       provider: 'claude',
-      apiKey: '',
+      hasApiKey: false,
+      apiKeyPreview: '',
       model: '',
       baseUrl: '',
       updatedAt: ''
@@ -63,12 +64,48 @@ describe('SettingsRepository', () => {
 
     expect(persistedSettings.providers.claude).toMatchObject({
       provider: 'claude',
-      apiKey: 'sk-ant-demo',
+      hasApiKey: true,
+      apiKeyPreview: '****demo',
       model: 'claude-3-7-sonnet-latest',
       baseUrl: ''
     })
+    expect(persistedSettings.providers.claude).not.toHaveProperty('apiKey')
 
     secondConnection.close()
+  })
+
+  it('keeps the encrypted provider key when saving provider metadata without a new key', () => {
+    const directoryPath = mkdtempSync(join(tmpdir(), 'moon-settings-repository-'))
+    const databasePath = join(directoryPath, 'moon.sqlite')
+    tempDirectories.push(directoryPath)
+
+    const connection = createDatabaseConnection(databasePath)
+    bootstrapDatabase(connection)
+
+    const repository = new SettingsRepository(connection, fakeSecretCodec)
+
+    repository.saveProvider('openai', {
+      apiKey: 'sk-openai-demo',
+      model: 'gpt-5.4',
+      baseUrl: ''
+    })
+
+    repository.saveProvider('openai', {
+      apiKey: '',
+      model: 'gpt-5.4-mini',
+      baseUrl: ''
+    })
+
+    const settings = repository.getSettings()
+
+    expect(repository.getEncryptedProviderKey('openai')).toBe('encrypted:c2stb3BlbmFpLWRlbW8=')
+    expect(settings.providers.openai).toMatchObject({
+      hasApiKey: true,
+      apiKeyPreview: '****demo',
+      model: 'gpt-5.4-mini'
+    })
+
+    connection.close()
   })
 
   it('persists appearance theme across database connections', () => {

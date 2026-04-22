@@ -1,6 +1,6 @@
 import { desc } from 'drizzle-orm'
 
-import type { SessionRecord } from '@ipc/contracts'
+import type { SessionRecord } from '../../shared/domain/chat'
 import type { AppDatabaseConnection } from '../db/connection'
 import { sessions } from '../db/schema'
 

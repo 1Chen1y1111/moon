@@ -28,22 +28,22 @@ type ProviderDraftOverrides = Partial<ProviderDrafts>
 function createDraftsFromSettings(appSettings: AppSettings): ProviderDrafts {
   return {
     claude: {
-      apiKey: appSettings.providers.claude.apiKey,
+      apiKey: '',
       model: appSettings.providers.claude.model,
       baseUrl: appSettings.providers.claude.baseUrl
     },
     openai: {
-      apiKey: appSettings.providers.openai.apiKey,
+      apiKey: '',
       model: appSettings.providers.openai.model,
       baseUrl: appSettings.providers.openai.baseUrl
     },
     gemini: {
-      apiKey: appSettings.providers.gemini.apiKey,
+      apiKey: '',
       model: appSettings.providers.gemini.model,
       baseUrl: appSettings.providers.gemini.baseUrl
     },
     'openai-compatible': {
-      apiKey: appSettings.providers['openai-compatible'].apiKey,
+      apiKey: '',
       model: appSettings.providers['openai-compatible'].model,
       baseUrl: appSettings.providers['openai-compatible'].baseUrl
     }
@@ -91,14 +91,18 @@ export function ProviderSettingsSection(): React.JSX.Element {
   }
 
   async function saveProvider(provider: ProviderId): Promise<void> {
+    const nextErrors: ProviderFormErrors = {}
+    const providerSettings = appSettings.providers[provider]
     const parsed = saveProviderInputSchema.safeParse({
       provider,
       ...drafts[provider]
     })
 
-    if (!parsed.success) {
-      const nextErrors: ProviderFormErrors = {}
+    if (!providerSettings.hasApiKey && drafts[provider].apiKey.trim().length === 0) {
+      nextErrors.apiKey = 'API key is required.'
+    }
 
+    if (!parsed.success) {
       for (const issue of parsed.error.issues) {
         const field = issue.path[0]
         if (
@@ -110,7 +114,9 @@ export function ProviderSettingsSection(): React.JSX.Element {
           nextErrors[field] = issue.message
         }
       }
+    }
 
+    if (!parsed.success || Object.keys(nextErrors).length > 0) {
       setErrors((current) => ({
         ...current,
         [provider]: nextErrors
@@ -143,6 +149,8 @@ export function ProviderSettingsSection(): React.JSX.Element {
             provider={provider}
             draft={drafts[provider]}
             errors={errors[provider]}
+            hasApiKey={appSettings.providers[provider].hasApiKey}
+            apiKeyPreview={appSettings.providers[provider].apiKeyPreview}
             isSaving={saveStatus === 'saving'}
             updatedAt={appSettings.providers[provider].updatedAt}
             onDraftChange={updateDraft}

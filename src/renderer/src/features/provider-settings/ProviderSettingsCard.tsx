@@ -13,6 +13,8 @@ type ProviderSettingsCardProps = {
   provider: ProviderId
   draft: ProviderDraft
   errors: ProviderFormErrors
+  hasApiKey: boolean
+  apiKeyPreview: string
   isSaving: boolean
   updatedAt: string
   onDraftChange: (provider: ProviderId, field: keyof ProviderDraft, value: string) => void
@@ -23,6 +25,8 @@ export function ProviderSettingsCard({
   provider,
   draft,
   errors,
+  hasApiKey,
+  apiKeyPreview,
   isSaving,
   updatedAt,
   onDraftChange,
@@ -82,11 +86,15 @@ export function ProviderSettingsCard({
           value={draft.apiKey}
           onChange={(event) => onDraftChange(provider, 'apiKey', event.target.value)}
           className="mt-moon-md h-moon-field w-full rounded-moon-control border border-moon-button-secondary-border bg-moon-button-secondary-bg px-moon-lg text-moon-body leading-moon-body text-moon-text-primary outline-none transition-colors focus:border-moon-accent"
-          placeholder="sk-..."
+          placeholder={hasApiKey ? 'Leave blank to keep saved key' : 'sk-...'}
         />
         {errors.apiKey ? (
           <span className="mt-moon-md block text-moon-caption leading-moon-caption text-moon-state-danger">
             {errors.apiKey}
+          </span>
+        ) : apiKeyPreview ? (
+          <span className="mt-moon-md block text-moon-caption leading-moon-caption text-moon-text-muted">
+            Current key: {apiKeyPreview}
           </span>
         ) : null}
       </label>
