@@ -21,6 +21,12 @@ describe('route layouts', () => {
 
     expect(screen.getByRole('complementary', { name: 'Workspace navigation' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Workspace child' })).toBeInTheDocument()
+    expect(screen.queryByTestId('workspace-window-drag-strip')).not.toBeInTheDocument()
+    expect(screen.getByTestId('workspace-content-drag-region')).toHaveClass(
+      'moon-window-drag-region',
+      'h-moon-chrome',
+      'shrink-0'
+    )
   })
 
   it('renders the settings layout without the workspace rail', () => {
@@ -38,5 +44,6 @@ describe('route layouts', () => {
     ).not.toBeInTheDocument()
     expect(screen.getByTestId('settings-window-shell')).toHaveClass('h-screen', 'overflow-hidden')
     expect(screen.getByTestId('settings-window-shell')).not.toHaveClass('min-h-screen')
+    expect(screen.queryByTestId('settings-window-drag-strip')).not.toBeInTheDocument()
   })
 })

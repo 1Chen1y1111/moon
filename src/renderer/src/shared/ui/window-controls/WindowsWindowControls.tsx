@@ -17,7 +17,7 @@ export function WindowsWindowControls({
   onToggleMaximize
 }: WindowsWindowControlsProps): React.JSX.Element {
   return (
-    <div className="flex items-center">
+    <div className="moon-window-no-drag relative z-20 flex items-center">
       <button
         type="button"
         aria-label="最小化窗口"

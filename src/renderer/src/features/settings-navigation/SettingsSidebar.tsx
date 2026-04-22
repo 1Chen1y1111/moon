@@ -17,7 +17,7 @@ export function SettingsSidebar({
       className="flex h-full w-moon-settings-sidebar shrink-0 overflow-hidden rounded-moon-panel border-r border-moon-sidebar-border bg-moon-sidebar-bg py-moon-option-gap"
     >
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="px-moon-nav-x pb-moon-lg">{headerSlot}</div>
+        <div className="moon-window-drag-region px-moon-nav-x pb-moon-lg">{headerSlot}</div>
 
         <div
           role="tablist"
@@ -36,8 +36,8 @@ export function SettingsSidebar({
                 aria-selected={isActive}
                 className={
                   isActive
-                    ? 'flex items-center gap-moon-option-gap rounded-moon-control border border-moon-menu-item-border-hover bg-moon-menu-item-bg-hover px-moon-nav-x py-moon-nav-y text-left text-moon-body-lead font-moon-title leading-moon-body-lead text-moon-accent'
-                    : 'flex items-center gap-moon-option-gap rounded-moon-control border border-transparent px-moon-nav-x py-moon-nav-y text-left text-moon-body-lead font-moon-title leading-moon-body-lead text-moon-text-primary transition-colors hover:bg-moon-button-ghost-bg-hover hover:text-moon-text-primary'
+                    ? 'moon-window-no-drag relative z-20 flex items-center gap-moon-option-gap rounded-moon-control border border-moon-button-secondary-border bg-moon-button-secondary-bg px-moon-nav-x py-moon-nav-y text-left text-moon-body-lead font-moon-title leading-moon-body-lead text-moon-text-primary'
+                    : 'moon-window-no-drag relative z-20 flex items-center gap-moon-option-gap rounded-moon-control border border-transparent px-moon-nav-x py-moon-nav-y text-left text-moon-body-lead font-moon-title leading-moon-body-lead text-moon-text-primary transition-colors hover:bg-moon-button-ghost-bg-hover hover:text-moon-text-primary'
                 }
                 onClick={() => onSectionChange(section.id)}
               >

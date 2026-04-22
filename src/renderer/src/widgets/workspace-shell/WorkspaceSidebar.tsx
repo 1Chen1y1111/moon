@@ -52,7 +52,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
       aria-label="Workspace navigation"
       className="flex w-moon-workspace-sidebar shrink-0 p-moon-md"
     >
-      <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-moon-panel border border-moon-sidebar-border bg-moon-sidebar-bg shadow-moon-shell">
+      <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-moon-panel border border-moon-sidebar-border bg-moon-sidebar-bg">
         <WorkspaceChrome />
         <div
           role="group"
@@ -150,7 +150,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
 
           <button
             type="button"
-            className="inline-flex h-moon-compact-control items-center gap-moon-md rounded-moon-compact border border-moon-button-update-border bg-moon-button-update-bg px-moon-md text-moon-label leading-moon-label text-moon-button-update-fg transition-[background-color,border-color,color,box-shadow] shadow-moon-menu-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
+            className="inline-flex h-moon-compact-control items-center gap-moon-md rounded-moon-compact border border-moon-button-update-border bg-moon-button-update-bg px-moon-md text-moon-label leading-moon-label text-moon-button-update-fg transition-[background-color,border-color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
           >
             <CircleFadingArrowUp aria-hidden="true" className="size-moon-icon-xs" />
             更新

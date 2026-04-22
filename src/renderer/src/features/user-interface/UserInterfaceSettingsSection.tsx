@@ -70,7 +70,7 @@ export function UserInterfaceSettingsSection(): React.JSX.Element {
                 aria-pressed={isActive}
                 className={
                   isActive
-                    ? 'flex flex-col items-center rounded-moon-control border border-moon-menu-item-border-hover bg-moon-menu-item-bg-hover p-moon-option-gap text-moon-accent shadow-moon-menu-hover transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent'
+                    ? 'flex flex-col items-center rounded-moon-control border border-moon-button-secondary-border bg-moon-button-secondary-bg p-moon-option-gap text-moon-text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent'
                     : 'flex flex-col items-center rounded-moon-control border border-moon-button-secondary-border bg-moon-button-secondary-bg p-moon-option-gap text-moon-text-primary transition-colors hover:border-moon-menu-item-border-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent'
                 }
                 disabled={isSaving}

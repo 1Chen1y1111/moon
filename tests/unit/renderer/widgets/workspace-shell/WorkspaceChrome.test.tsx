@@ -17,10 +17,16 @@ describe('WorkspaceChrome', () => {
 
     render(<WorkspaceChrome />)
 
+    expect(screen.getByRole('banner')).toHaveClass('moon-window-drag-region', 'p-moon-md')
+    expect(screen.getByRole('banner')).not.toHaveClass('h-moon-chrome')
+
     await user.click(screen.getByRole('button', { name: '关闭窗口' }))
     await user.click(screen.getByRole('button', { name: '最小化窗口' }))
     await user.click(screen.getByRole('button', { name: '切换缩放窗口' }))
 
+    expect(
+      screen.getByTestId('mac-window-control-close-icon').closest('.moon-window-no-drag')
+    ).toHaveClass('moon-window-no-drag', 'relative', 'z-20')
     expect(screen.getByTestId('mac-window-control-close-icon').closest('button')).not.toHaveClass(
       'hover:brightness-75'
     )
@@ -54,5 +60,30 @@ describe('WorkspaceChrome', () => {
     expect(screen.getByTestId('window-chrome-collapse-trigger')).toBeInTheDocument()
     expect(screen.getByTestId('window-chrome-search-trigger')).toBeInTheDocument()
     expect(screen.getByTestId('window-chrome-compose-trigger')).toBeInTheDocument()
+
+    for (const trigger of [
+      screen.getByTestId('window-chrome-collapse-trigger'),
+      screen.getByTestId('window-chrome-search-trigger'),
+      screen.getByTestId('window-chrome-compose-trigger')
+    ]) {
+      const utilityCard = trigger.firstElementChild as HTMLElement
+
+      expect(trigger.closest('.moon-window-no-drag')).toHaveClass(
+        'moon-window-no-drag',
+        'relative',
+        'z-20'
+      )
+      expect(utilityCard).toHaveClass(
+        'border-transparent',
+        'group-hover:border-moon-button-secondary-border',
+        'group-hover:bg-moon-button-ghost-bg-hover',
+        'group-hover:text-moon-text-primary'
+      )
+      expect(utilityCard).not.toHaveClass(
+        'group-hover:bg-moon-menu-item-bg-hover',
+        'group-hover:text-moon-fg-inverse',
+        'group-hover:shadow-moon-menu-hover'
+      )
+    }
   })
 })

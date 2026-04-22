@@ -33,14 +33,38 @@ describe('SettingsPage', () => {
 
     const sidebarShell = screen.getByTestId('settings-sidebar-shell')
 
-    expect(screen.getByRole('tab', { name: '通用' })).toHaveAttribute('aria-selected', 'true')
+    const activeGeneralTab = screen.getByRole('tab', { name: '通用' })
+
+    expect(activeGeneralTab).toHaveAttribute('aria-selected', 'true')
+    expect(activeGeneralTab).toHaveClass(
+      'moon-window-no-drag',
+      'relative',
+      'z-20',
+      'border-moon-button-secondary-border',
+      'bg-moon-button-secondary-bg',
+      'text-moon-text-primary'
+    )
+    expect(activeGeneralTab).not.toHaveClass(
+      'border-moon-menu-item-border-hover',
+      'bg-moon-menu-item-bg-hover',
+      'text-moon-accent'
+    )
     expect(screen.getByText('工具模型')).toBeInTheDocument()
     expect(sidebarShell).toHaveClass(
       'border-moon-sidebar-border',
       'bg-moon-sidebar-bg',
       'py-moon-option-gap'
     )
-    expect(within(sidebarShell).getByRole('button', { name: '切换缩放窗口' })).toBeInTheDocument()
+    expect(
+      within(sidebarShell)
+        .getByRole('button', { name: '切换缩放窗口' })
+        .closest('.moon-window-drag-region')
+    ).toHaveClass('moon-window-drag-region', 'px-moon-nav-x', 'pb-moon-lg')
+    expect(
+      within(sidebarShell)
+        .getByRole('button', { name: '切换缩放窗口' })
+        .closest('.moon-window-drag-region')
+    ).not.toHaveClass('h-moon-chrome')
     expect(within(sidebarShell).getByRole('button', { name: '最小化窗口' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '放大窗口' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '保存' })).toBeInTheDocument()
@@ -149,10 +173,38 @@ describe('SettingsPage', () => {
     expect(screen.getAllByRole('heading', { name: '用户界面' }).length).toBeGreaterThan(0)
     expect(screen.getByRole('button', { name: '浅色' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '深色' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '跟随系统' })).toHaveAttribute('aria-pressed', 'true')
-    expect(screen.getByTestId('appearance-preview-light')).toBeInTheDocument()
-    expect(screen.getByTestId('appearance-preview-dark')).toBeInTheDocument()
-    expect(screen.getByTestId('appearance-preview-system')).toBeInTheDocument()
+    const activeThemeButton = screen.getByRole('button', { name: '跟随系统' })
+
+    expect(activeThemeButton).toHaveAttribute('aria-pressed', 'true')
+    expect(activeThemeButton).toHaveClass(
+      'border-moon-button-secondary-border',
+      'bg-moon-button-secondary-bg',
+      'text-moon-text-primary'
+    )
+    expect(activeThemeButton).not.toHaveClass(
+      'border-moon-menu-item-border-hover',
+      'bg-moon-menu-item-bg-hover',
+      'text-moon-accent',
+      'shadow-moon-menu-hover'
+    )
+
+    const previewColorValues = (preview: HTMLElement): string[] =>
+      Array.from(preview.querySelectorAll<SVGElement>('[fill],[stroke]')).flatMap((node) =>
+        [node.getAttribute('fill'), node.getAttribute('stroke')].filter((value): value is string =>
+          Boolean(value)
+        )
+      )
+    const lightPreview = screen.getByTestId('appearance-preview-light')
+    const darkPreview = screen.getByTestId('appearance-preview-dark')
+    const systemPreview = screen.getByTestId('appearance-preview-system')
+
+    expect(lightPreview).toBeInTheDocument()
+    expect(darkPreview).toHaveClass('dark')
+    expect(systemPreview.querySelector('g.dark')).toBeInTheDocument()
+
+    for (const preview of [lightPreview, darkPreview, systemPreview]) {
+      expect(previewColorValues(preview).some((value) => value.startsWith('#'))).toBe(false)
+    }
 
     await user.click(screen.getByRole('button', { name: '深色' }))
 

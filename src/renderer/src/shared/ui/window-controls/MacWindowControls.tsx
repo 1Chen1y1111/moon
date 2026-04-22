@@ -18,7 +18,7 @@ export function MacWindowControls({
   onToggleMaximize
 }: MacWindowControlsProps): React.JSX.Element {
   return (
-    <div className="flex items-center gap-moon-md">
+    <div className="moon-window-no-drag relative z-20 flex items-center gap-moon-md">
       <button
         type="button"
         aria-label="关闭窗口"

@@ -9,7 +9,7 @@ Moon 是一个基于 Electron、React、TypeScript 的桌面应用。当前产�
 - Electron 主窗口和独立设置窗口。
 - 通过 preload 暴露的受控 `window.api`。
 - 设置数据（外观与 provider）的 IPC、校验、仓储和 SQLite 持久化链路。
-- React 渲染层的路由、壳层、设置页和 provider 本地草稿状态。
+- React 渲染层的路由、壳层、设置页、主题选择和 provider 本地草稿状态。
 - 面向后续项目、会话、Agent、插件等能力的初始目录和数据表预留。
 
 核心架构倾向是：主进程负责系统能力、窗口和持久化；preload 作为安全桥；renderer 只通过显式 IPC API 访问主进程能力。
@@ -137,9 +137,9 @@ preload 的职责是把主进程能力收敛为受控 API。当前只暴露 `win
 .
   build/                         electron-builder 打包图标和平台构建资源
   docs/                          架构、规格、计划等工程文档
-  resources/                     Electron 运行期资源，例如应用图标
+  resources/                     Electron 运行期资源、源 logo、生成图标和 tray 图标
   screenshorts/                  UI 截图参考和视觉回归素材
-  scripts/                       本地维护脚本，例如 shadcn 组件更新
+  scripts/                       本地维护脚本，例如图标生成和 shadcn 组件更新
   tests/                         集中式测试目录
     helpers/                     测试工具和环境 setup
       renderer/                  renderer/jsdom 测试 helper
@@ -187,6 +187,7 @@ preload 的职责是把主进程能力收敛为受控 API。当前只暴露 `win
         general-settings/        通用设置展示和交互
         provider-settings/       Provider 表单、本地草稿、保存校验
         settings-navigation/     设置分类侧边栏导航
+        user-interface/          用户界面主题选择和外观保存
 
       entities/                  业务实体模型和状态
         settings/                settings 实体聚合
@@ -443,7 +444,7 @@ app
 +----------------------------------------------------------------+
 ```
 
-`WorkspaceShell` 挂载 `modal-root`、`popover-root`。设置窗口使用 `SettingsWindowShell` 提供独立窗口外框，`SettingsPage` 组合 `SettingsSidebar`、`SettingsChrome`、`SettingsContent` 和 footer。`SettingsContent` 位于 `widgets/settings-content`，根据 active section 分发到 `features/general-settings`、`features/provider-settings` 或占位内容。
+`WorkspaceShell` 挂载 `modal-root`、`popover-root`。设置窗口使用 `SettingsWindowShell` 提供独立窗口外框，`SettingsPage` 组合 `SettingsSidebar`、`SettingsChrome`、`SettingsContent` 和 footer。`SettingsContent` 位于 `widgets/settings-content`，根据 active section 分发到 `features/general-settings`、`features/provider-settings`、`features/user-interface` 或占位内容。
 
 ## 8. UI 与设计系统
 
@@ -474,8 +475,9 @@ app
 - 设置获取/保存的集中 IPC 契约、Zod 校验、服务层、仓储层和 SQLite 持久化。
 - 外观主题保存、启动加载和跨窗口 `settings:on-change` 同步。
 - Provider 设置支持 Claude、OpenAI、Gemini、OpenAI Compatible，并在主进程加密保存 API Key。
-- 设置页 section 导航、通用设置展示、Provider 表单和占位设置分类。
+- 设置页 section 导航、通用设置展示、用户界面主题选择、Provider 表单和占位设置分类。
 - 主窗口的“配置提供商”和“设置”按钮会打开独立设置窗口。
+- 应用图标从 `resources/logo.png` 生成，运行时由 `app-icon.ts` 统一选择 macOS Dock 图标和非 macOS BrowserWindow 图标。
 - `messages` 表与 `messages_fts` 搜索索引的 repository 基础能力。
 - 主进程、仓储、窗口、renderer 关键 UI 的 Vitest 测试。
 
@@ -510,7 +512,7 @@ tests/
 测试覆盖重点：
 
 - IPC channel 和 handler 注册。
-- BrowserWindow 创建参数与设置窗口单例行为。
+- BrowserWindow 创建参数、应用图标资源选择与设置窗口单例行为。
 - 窗口状态事件发布。
 - 数据库 bootstrap、SettingsRepository 跨数据库连接持久化、外观主题持久化和加密失败回滚。
 - Provider 设置表单保存、校验，以及保存单个 provider 时保留其他未保存草稿。
@@ -570,6 +572,7 @@ renderer settings UI
 pnpm install
 pnpm dev
 pnpm build
+pnpm build:icons
 pnpm lint
 pnpm exec vitest run
 ```
@@ -579,6 +582,19 @@ pnpm exec vitest run
 - `electron-vite` 负责编译 main、preload、renderer。
 - `electron-builder` 负责平台打包。
 - `electron-builder.yml` 当前配置了 macOS、Windows、Linux 目标，并把 `resources/**` 放入 `asarUnpack`。
+
+图标资源链路：
+
+```text
+resources/logo.png
+  -> pnpm build:icons
+  -> resources/icons/{size}x{size}.png
+  -> resources/icon.png
+  -> resources/tray_icon.png + resources/tray_icon@2x.png
+  -> build/icon.png + build/icon.icns + build/icon.ico
+```
+
+`scripts/build-icons.mjs` 依赖 macOS 自带的 `sips` 和 `iconutil`，要求源 logo 是至少 1024x1024 的正方形 PNG。运行时 `src/main/bootstrap/app-icon.ts` 在 macOS 设置 Dock 图标，在 Windows 使用 `build/icon.ico`，其他非 macOS 平台使用 `resources/icon.png` 作为 `BrowserWindow` 图标。
 
 ## 13. 架构原则
 
