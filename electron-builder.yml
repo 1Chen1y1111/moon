@@ -1,5 +1,5 @@
-appId: com.electron.app
-productName: moon
+appId: com.moon.app
+productName: Moon
 directories:
   buildResources: build
 files:
