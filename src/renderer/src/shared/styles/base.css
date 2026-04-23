@@ -1,0 +1,29 @@
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-geist-sans);
+    font-style: normal;
+    letter-spacing: var(--tracking-moon-body);
+    line-height: var(--leading-moon-body);
+    margin: 0;
+  }
+
+  em,
+  i,
+  cite,
+  dfn,
+  address,
+  var {
+    font-style: normal;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+}

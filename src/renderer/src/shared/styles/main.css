@@ -1,0 +1,11 @@
+@import 'tailwindcss' source('../../..');
+@import 'tw-animate-css';
+@import 'shadcn/tailwind.css';
+
+@import './theme.css';
+@import './tokens.css';
+@import './tokens.dark.css';
+@import './print.css';
+@import './recipes.css';
+@import './scrollbar.css';
+@import './base.css';

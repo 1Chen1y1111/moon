@@ -1,0 +1,21 @@
+@page {
+  size: A4;
+  margin: var(--moon-page-margin-long-doc);
+  background: var(--moon-page-bg);
+}
+
+@layer components {
+  .moon-print-avoid,
+  .moon-card,
+  .moon-metric,
+  .moon-quote,
+  .moon-code-block,
+  .moon-code-card,
+  figure {
+    break-inside: avoid;
+  }
+
+  .moon-page-break {
+    break-before: page;
+  }
+}

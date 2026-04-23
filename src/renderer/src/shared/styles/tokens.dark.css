@@ -1,0 +1,179 @@
+.dark {
+  --moon-neutral-0: #1b1f27;
+  --moon-neutral-50: #1e222a;
+  --moon-neutral-100: #252931;
+  --moon-neutral-200: #282c34;
+  --moon-neutral-300: #31353d;
+  --moon-neutral-400: #42464e;
+  --moon-neutral-500: #565c64;
+  --moon-neutral-600: #6f737b;
+  --moon-neutral-700: #abb2bf;
+  --moon-neutral-800: #c8ccd4;
+
+  --moon-blue-500: #62aeee;
+  --moon-blue-600: #5ca2dc;
+  --moon-blue-700: #3f6687;
+  --moon-blue-800: #31475f;
+
+  --moon-red-500: #e06c75;
+  --moon-yellow-500: #e7c787;
+  --moon-green-500: #98c379;
+  --moon-purple-500: #c678dd;
+  --moon-orange-500: #d19a66;
+  --moon-cyan-500: #56b6c2;
+
+  --moon-white: var(--moon-neutral-700);
+  --moon-darker-black: var(--moon-neutral-0);
+  --moon-black: var(--moon-neutral-50);
+  --moon-black-2: var(--moon-neutral-100);
+  --moon-one-bg: var(--moon-neutral-200);
+  --moon-one-bg-2: #353b45;
+  --moon-one-bg-3: #373b43;
+  --moon-grey: var(--moon-neutral-400);
+  --moon-grey-fg: var(--moon-neutral-500);
+  --moon-grey-fg-2: var(--moon-neutral-600);
+  --moon-light-grey: var(--moon-neutral-600);
+  --moon-red: var(--moon-red-500);
+  --moon-baby-pink: #de8c92;
+  --moon-pink: #ff75a0;
+  --moon-line: var(--moon-neutral-300);
+  --moon-green: var(--moon-green-500);
+  --moon-vibrant-green: #7eca9c;
+  --moon-nord-blue: #81a1c1;
+  --moon-blue: var(--moon-blue-500);
+  --moon-yellow: var(--moon-yellow-500);
+  --moon-sun: #ebcb8b;
+  --moon-purple: #de98fd;
+  --moon-dark-purple: #c882e7;
+  --moon-teal: var(--moon-blue-600);
+  --moon-orange: #fca2aa;
+  --moon-cyan: #a3b8ef;
+  --moon-statusline-bg: #22262e;
+  --moon-lightbg: #2d3139;
+  --moon-pmenu-bg: var(--moon-blue-500);
+  --moon-folder-bg: var(--moon-blue-500);
+
+  --moon-base00: var(--moon-neutral-50);
+  --moon-base01: #353b45;
+  --moon-base02: #3e4451;
+  --moon-base03: #545862;
+  --moon-base04: var(--moon-neutral-500);
+  --moon-base05: var(--moon-neutral-700);
+  --moon-base06: #b6bdca;
+  --moon-base07: var(--moon-neutral-800);
+  --moon-base08: var(--moon-red-500);
+  --moon-base09: var(--moon-orange-500);
+  --moon-base0a: #e5c07b;
+  --moon-base0b: var(--moon-green-500);
+  --moon-base0c: var(--moon-cyan-500);
+  --moon-base0d: var(--moon-blue-500);
+  --moon-base0e: var(--moon-purple-500);
+  --moon-base0f: #be5046;
+
+  --moon-bg-canvas: var(--moon-neutral-200);
+  --moon-bg-elevated: var(--moon-neutral-50);
+  --moon-bg-overlay: #262b34;
+
+  --moon-surface-1: var(--moon-neutral-50);
+  --moon-surface-2: var(--moon-neutral-100);
+  --moon-surface-3: var(--moon-neutral-200);
+
+  --moon-border-subtle: var(--moon-neutral-300);
+  --moon-border-default: var(--moon-neutral-400);
+  --moon-border-strong: var(--moon-neutral-500);
+
+  --moon-text-primary: var(--moon-neutral-800);
+  --moon-text-secondary: var(--moon-neutral-700);
+  --moon-text-muted: var(--moon-neutral-600);
+  --moon-fg-inverse: #ffffff;
+
+  --moon-accent-primary: var(--moon-blue-500);
+  --moon-accent-primary-hover: var(--moon-blue-600);
+  --moon-accent-soft: var(--moon-blue-800);
+  --moon-accent-soft-border: var(--moon-blue-700);
+
+  --moon-tag-bg-subtle: var(--moon-accent-soft);
+  --moon-tag-bg-standard: var(--moon-accent-soft);
+  --moon-tag-bg-strong: var(--moon-accent-soft-border);
+  --moon-tag-bg-brush-start: var(--moon-accent-soft-border);
+  --moon-tag-bg-brush-mid: var(--moon-accent-soft);
+  --moon-tag-bg-brush-end: var(--moon-bg-elevated);
+  --moon-tag-fg: var(--moon-accent-primary);
+
+  --moon-state-danger: var(--moon-red-500);
+  --moon-state-warning: var(--moon-yellow-500);
+  --moon-state-success: var(--moon-green-500);
+
+  --moon-card-bg: var(--moon-bg-elevated);
+  --moon-card-border: var(--moon-border-subtle);
+  --moon-quote-border: var(--moon-accent-primary);
+  --moon-quote-fg: var(--moon-text-secondary);
+  --moon-code-bg: var(--moon-bg-elevated);
+  --moon-code-border: var(--moon-border-subtle);
+  --moon-section-title-border: var(--moon-accent-primary);
+  --moon-section-rule: var(--moon-border-default);
+  --moon-metric-value-fg: var(--moon-accent-primary);
+
+  --moon-app-bg: var(--moon-bg-canvas);
+  --moon-sidebar-bg: var(--moon-surface-1);
+  --moon-sidebar-border: var(--moon-border-subtle);
+  --moon-panel-bg: var(--moon-surface-2);
+  --moon-panel-border: var(--moon-border-default);
+  --moon-menu-bg: var(--moon-surface-1);
+  --moon-menu-item-bg-hover: var(--moon-accent-soft);
+  --moon-menu-item-border-hover: var(--moon-accent-soft-border);
+  --moon-tooltip-bg: var(--moon-bg-overlay);
+  --moon-tooltip-border: rgb(255 255 255 / 0.1);
+  --moon-tooltip-fg: var(--moon-fg-inverse);
+
+  --moon-button-primary-bg: var(--moon-accent-primary);
+  --moon-button-primary-bg-hover: var(--moon-accent-primary-hover);
+  --moon-button-primary-fg: var(--moon-neutral-0);
+  --moon-button-secondary-bg: rgb(255 255 255 / 0.04);
+  --moon-button-secondary-border: var(--moon-border-subtle);
+  --moon-button-secondary-bg-hover: rgb(255 255 255 / 0.08);
+  --moon-button-ghost-bg-hover: rgb(255 255 255 / 0.03);
+  --moon-button-update-bg: var(--moon-accent-soft);
+  --moon-button-update-border: var(--moon-accent-soft-border);
+  --moon-button-update-fg: var(--moon-accent-primary);
+  --moon-ring-subtle: rgb(255 255 255 / 0.5);
+
+  --moon-window-control-close: #ff5f57;
+  --moon-window-control-minimize: #ffbd2e;
+  --moon-window-control-maximize: #28c840;
+  --moon-window-control-glyph: var(--moon-near-black);
+  --moon-scrollbar-track: #252931;
+  --moon-scrollbar-thumb: #c8ccd4;
+  --moon-scrollbar-thumb-hover: #d6dae2;
+  --moon-scrollbar-button-bg: #252931;
+  --moon-scrollbar-button-icon: #8f97a5;
+
+  --moon-shadow-ring: 0 0 0 1px var(--moon-ring-subtle);
+  --moon-shadow-ring-deep: 0 0 0 1px var(--moon-border-strong);
+  --moon-shadow-whisper: 0 18px 50px rgba(6, 9, 14, 0.45);
+  --moon-shadow-shell: 0 28px 80px rgba(5, 8, 15, 0.45);
+  --moon-shadow-menu-hover: 0 18px 40px rgba(46, 87, 124, 0.28);
+  --moon-shadow-menu-panel: 0 18px 40px rgba(5, 8, 15, 0.45);
+  --moon-shadow-tooltip: 0 18px 50px rgba(6, 9, 14, 0.45);
+  --moon-shadow-accent: 0 20px 60px rgba(97, 175, 240, 0.22);
+
+  --background: var(--moon-bg-canvas);
+  --foreground: var(--moon-text-primary);
+  --card: var(--moon-panel-bg);
+  --card-foreground: var(--moon-text-primary);
+  --popover: var(--moon-tooltip-bg);
+  --popover-foreground: var(--moon-tooltip-fg);
+  --primary: var(--moon-button-primary-bg);
+  --primary-foreground: var(--moon-button-primary-fg);
+  --secondary: var(--moon-button-secondary-bg);
+  --secondary-foreground: var(--moon-text-primary);
+  --muted: var(--moon-surface-3);
+  --muted-foreground: var(--moon-text-muted);
+  --accent: var(--moon-accent-primary);
+  --accent-foreground: var(--moon-button-primary-fg);
+  --destructive: var(--moon-state-danger);
+  --destructive-foreground: var(--moon-text-primary);
+  --border: var(--moon-border-subtle);
+  --input: var(--moon-border-default);
+  --ring: var(--moon-accent-primary);
+}

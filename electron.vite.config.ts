@@ -26,6 +26,6 @@ export default defineConfig({
         '@ipc': resolve('src/ipc')
       }
     },
-    plugins: [react(), tailwindcss()]
+    plugins: [tailwindcss(), react()]
   }
 })
