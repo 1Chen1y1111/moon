@@ -8,7 +8,8 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { bootstrapDatabase } from '@main/db/bootstrap'
 import { createDatabaseConnection } from '@main/db/connection'
-import { databaseSchemaVersion } from '@main/db/schema'
+
+const pgliteTestTimeout = 30_000
 
 describe('bootstrapDatabase', () => {
   const tempDirectories: string[] = []
@@ -19,49 +20,61 @@ describe('bootstrapDatabase', () => {
     }
   })
 
-  it('creates the current schema and sets the user version', () => {
-    const directoryPath = mkdtempSync(join(tmpdir(), 'moon-bootstrap-'))
-    tempDirectories.push(directoryPath)
-    const connection = createDatabaseConnection(join(directoryPath, 'moon.sqlite'))
+  it(
+    'runs PGlite migrations and records them in the public migration table',
+    async () => {
+      const directoryPath = mkdtempSync(join(tmpdir(), 'moon-bootstrap-'))
+      tempDirectories.push(directoryPath)
+      const connection = await createDatabaseConnection(join(directoryPath, 'moon-pglite'))
 
-    bootstrapDatabase(connection)
+      await bootstrapDatabase(connection)
 
-    expect(connection.client.pragma('user_version', { simple: true })).toBe(databaseSchemaVersion)
-    expect(
-      connection.client
-        .prepare(
-          "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'provider_settings'"
-        )
-        .get()
-    ).toBeTruthy()
-    expect(
-      connection.client
-        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'messages_fts'")
-        .get()
-    ).toBeTruthy()
+      const providerTables = await connection.client.query<{ table_name: string }>(
+        `
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'provider_settings'
+      `
+      )
+      const migrationTables = await connection.client.query<{ table_name: string }>(
+        `
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = '__drizzle_migrations'
+      `
+      )
 
-    connection.close()
-  })
+      expect(providerTables.rows).toEqual([{ table_name: 'provider_settings' }])
+      expect(migrationTables.rows).toEqual([{ table_name: '__drizzle_migrations' }])
 
-  it('rebuilds known tables when the stored schema version is stale', () => {
-    const directoryPath = mkdtempSync(join(tmpdir(), 'moon-bootstrap-'))
-    tempDirectories.push(directoryPath)
-    const connection = createDatabaseConnection(join(directoryPath, 'moon.sqlite'))
+      await connection.close()
+    },
+    pgliteTestTimeout
+  )
 
-    connection.client.exec('CREATE TABLE provider_settings (provider TEXT PRIMARY KEY)')
-    connection.client.pragma('user_version = 0')
+  it(
+    'can run migrations repeatedly without dropping existing PGlite data',
+    async () => {
+      const directoryPath = mkdtempSync(join(tmpdir(), 'moon-bootstrap-'))
+      tempDirectories.push(directoryPath)
+      const connection = await createDatabaseConnection(join(directoryPath, 'moon-pglite'))
 
-    bootstrapDatabase(connection)
+      await bootstrapDatabase(connection)
+      await connection.client.query(
+        'INSERT INTO settings (key, value, updated_at) VALUES ($1, $2, $3)',
+        ['appearance.theme', 'dark', '2026-04-21T00:00:00.000Z']
+      )
+      await bootstrapDatabase(connection)
 
-    expect(connection.client.pragma('user_version', { simple: true })).toBe(databaseSchemaVersion)
-    expect(
-      connection.client
-        .prepare(
-          "SELECT name FROM pragma_table_info('provider_settings') WHERE name = 'encrypted_api_key'"
-        )
-        .get()
-    ).toBeTruthy()
+      const settings = await connection.client.query<{ value: string }>(
+        'SELECT value FROM settings WHERE key = $1',
+        ['appearance.theme']
+      )
 
-    connection.close()
-  })
+      expect(settings.rows).toEqual([{ value: 'dark' }])
+
+      await connection.close()
+    },
+    pgliteTestTimeout
+  )
 })

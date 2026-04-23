@@ -6,11 +6,11 @@ import type { SettingsRepository } from '../repositories/settings-repository'
 export class SettingsService {
   constructor(private readonly settingsRepository: SettingsRepository) {}
 
-  getSettings(): AppSettings {
+  async getSettings(): Promise<AppSettings> {
     return this.settingsRepository.getSettings()
   }
 
-  saveProvider(input: SaveProviderInput): AppSettings {
+  async saveProvider(input: SaveProviderInput): Promise<AppSettings> {
     const parsedInput = saveProviderInputSchema.parse(input)
 
     return this.settingsRepository.saveProvider(parsedInput.provider, {
@@ -20,7 +20,7 @@ export class SettingsService {
     })
   }
 
-  saveAppearance(input: SaveAppearanceInput): AppSettings {
+  async saveAppearance(input: SaveAppearanceInput): Promise<AppSettings> {
     const parsedInput = saveAppearanceInputSchema.parse(input)
 
     return this.settingsRepository.saveAppearance(parsedInput)

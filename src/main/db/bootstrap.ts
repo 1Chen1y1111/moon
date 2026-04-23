@@ -1,28 +1,16 @@
+import { join } from 'node:path'
+
+import { migrate } from 'drizzle-orm/pglite/migrator'
+
 import type { AppDatabaseConnection } from './connection'
-import { databaseDropStatements, databaseSchemaStatements, databaseSchemaVersion } from './schema'
 
-function readUserVersion(database: AppDatabaseConnection): number {
-  const version = database.client.pragma('user_version', { simple: true })
-
-  return Number(version)
-}
-
-export function bootstrapDatabase(database: AppDatabaseConnection): void {
-  const bootstrap = database.client.transaction(() => {
-    const userVersion = readUserVersion(database)
-
-    if (userVersion !== databaseSchemaVersion) {
-      for (const statement of databaseDropStatements) {
-        database.client.exec(statement)
-      }
-    }
-
-    for (const statement of databaseSchemaStatements) {
-      database.client.exec(statement)
-    }
-
-    database.client.pragma(`user_version = ${databaseSchemaVersion}`)
+export async function bootstrapDatabase(
+  database: AppDatabaseConnection,
+  migrationsFolder = join(process.cwd(), 'drizzle')
+): Promise<void> {
+  await migrate(database.db, {
+    migrationsFolder,
+    migrationsSchema: 'public',
+    migrationsTable: '__drizzle_migrations'
   })
-
-  bootstrap()
 }

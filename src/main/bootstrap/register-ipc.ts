@@ -30,15 +30,15 @@ export function registerIpcHandlers({
   ipcMain.removeHandler(ipcChannels.window.getState)
 
   ipcMain.handle(ipcChannels.settings.get, () => settingsService.getSettings())
-  ipcMain.handle(ipcChannels.settings.saveProvider, (_event, input) => {
-    const settings = settingsService.saveProvider(input)
+  ipcMain.handle(ipcChannels.settings.saveProvider, async (_event, input) => {
+    const settings = await settingsService.saveProvider(input)
 
     broadcastSettingsChange(settings)
 
     return settings
   })
-  ipcMain.handle(ipcChannels.settings.saveAppearance, (_event, input) => {
-    const settings = settingsService.saveAppearance(input)
+  ipcMain.handle(ipcChannels.settings.saveAppearance, async (_event, input) => {
+    const settings = await settingsService.saveAppearance(input)
 
     broadcastSettingsChange(settings)
 

@@ -14,11 +14,27 @@ import { createSafeStorageSecretCodec } from './security/safe-storage-secret-cod
 import { SettingsService } from './services/settings-service'
 
 let databaseConnection: AppDatabaseConnection | null = null
+let isClosingDatabase = false
+
+function getMigrationsFolder(): string {
+  return app.isPackaged ? join(process.resourcesPath, 'drizzle') : join(app.getAppPath(), 'drizzle')
+}
+
+async function closeDatabaseConnection(): Promise<void> {
+  const connection = databaseConnection
+
+  if (connection === null) {
+    return
+  }
+
+  databaseConnection = null
+  await connection.close()
+}
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   electronApp.setAppUserModelId('com.moon.app')
   setApplicationIcon()
 
@@ -26,8 +42,8 @@ app.whenReady().then(() => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  databaseConnection = createDatabaseConnection(join(app.getPath('userData'), 'moon.sqlite'))
-  bootstrapDatabase(databaseConnection)
+  databaseConnection = await createDatabaseConnection(join(app.getPath('userData'), 'moon-pglite'))
+  await bootstrapDatabase(databaseConnection, getMigrationsFolder())
 
   registerIpcHandlers({
     openSettingsWindow,
@@ -49,9 +65,25 @@ app.on('window-all-closed', () => {
   }
 })
 
-app.on('will-quit', () => {
-  if (databaseConnection !== null) {
-    databaseConnection.close()
-    databaseConnection = null
+app.on('will-quit', (event) => {
+  if (isClosingDatabase) {
+    event.preventDefault()
+    return
   }
+
+  if (databaseConnection === null) {
+    return
+  }
+
+  event.preventDefault()
+
+  isClosingDatabase = true
+  void closeDatabaseConnection()
+    .catch((error) => {
+      console.error('Failed to close database connection', error)
+    })
+    .finally(() => {
+      isClosingDatabase = false
+      app.quit()
+    })
 })

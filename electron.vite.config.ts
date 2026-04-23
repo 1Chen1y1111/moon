@@ -5,6 +5,9 @@ import tailwindcss from '@tailwindcss/vite'
 
 export default defineConfig({
   main: {
+    optimizeDeps: {
+      exclude: ['@electric-sql/pglite']
+    },
     resolve: {
       alias: {
         '@ipc': resolve('src/ipc')

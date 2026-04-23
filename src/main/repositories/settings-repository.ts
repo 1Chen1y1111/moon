@@ -10,20 +10,13 @@ import {
 import type { ProviderId } from '../../shared/domain/provider'
 import type { AppDatabaseConnection } from '../db/connection'
 import { providerSettings, settings as settingsTable } from '../db/schema'
+import { toIsoTimestamp } from '../db/timestamps'
 import type { SecretCodec } from '../security/secret-codec'
 
 type ProviderSettingsDraft = {
   apiKey: string
   model: string
   baseUrl: string
-}
-
-type ProviderSettingsRow = {
-  provider: ProviderId
-  model: string
-  base_url: string
-  encrypted_api_key: string
-  updated_at: string
 }
 
 const appearanceThemeKey = 'appearance.theme'
@@ -49,29 +42,15 @@ export class SettingsRepository {
     private readonly secretCodec: SecretCodec
   ) {}
 
-  getSettings(): AppSettings {
+  async getSettings(): Promise<AppSettings> {
     const settings = createDefaultAppSettings()
-    const appearanceTheme = this.getSettingValue(appearanceThemeKey)
+    const appearanceTheme = await this.getSettingValue(appearanceThemeKey)
 
     if (appearanceTheme !== null && appearanceThemeSet.has(appearanceTheme as AppearanceTheme)) {
       settings.appearance.theme = appearanceTheme as AppearanceTheme
     }
 
-    const rows =
-      this.database.kind === 'better-sqlite3'
-        ? this.database.db.select().from(providerSettings).all()
-        : this.database.client
-            .prepare(
-              'SELECT provider, model, base_url, encrypted_api_key, updated_at FROM provider_settings'
-            )
-            .all<ProviderSettingsRow>()
-            .map((row) => ({
-              provider: row.provider,
-              model: row.model,
-              baseUrl: row.base_url,
-              encryptedApiKey: row.encrypted_api_key,
-              updatedAt: row.updated_at
-            }))
+    const rows = await this.database.db.select().from(providerSettings)
 
     for (const row of rows) {
       const apiKey = this.secretCodec.decrypt(row.encryptedApiKey)
@@ -82,134 +61,91 @@ export class SettingsRepository {
         apiKeyPreview: createApiKeyPreview(apiKey),
         model: row.model,
         baseUrl: row.baseUrl,
-        updatedAt: row.updatedAt
+        updatedAt: toIsoTimestamp(row.updatedAt)
       }
     }
 
     return settings
   }
 
-  saveAppearance(draft: AppearanceSettings): AppSettings {
-    this.saveSettingValue(appearanceThemeKey, draft.theme)
+  async saveAppearance(draft: AppearanceSettings): Promise<AppSettings> {
+    await this.saveSettingValue(appearanceThemeKey, draft.theme)
 
     return this.getSettings()
   }
 
-  saveProvider(provider: ProviderId, draft: ProviderSettingsDraft): AppSettings {
+  async saveProvider(provider: ProviderId, draft: ProviderSettingsDraft): Promise<AppSettings> {
     const updatedAt = new Date().toISOString()
     const apiKey = draft.apiKey.trim()
     const model = draft.model.trim()
     const baseUrl = draft.baseUrl.trim()
     const encryptedApiKey =
-      apiKey.length > 0 ? this.secretCodec.encrypt(apiKey) : this.getEncryptedProviderKey(provider)
+      apiKey.length > 0
+        ? this.secretCodec.encrypt(apiKey)
+        : await this.getEncryptedProviderKey(provider)
 
     if (encryptedApiKey === null) {
       throw new Error('API key is required.')
     }
 
-    if (this.database.kind === 'better-sqlite3') {
-      this.database.db
-        .insert(providerSettings)
-        .values({
-          provider,
+    await this.database.db
+      .insert(providerSettings)
+      .values({
+        provider,
+        model,
+        baseUrl,
+        encryptedApiKey,
+        updatedAt
+      })
+      .onConflictDoUpdate({
+        target: providerSettings.provider,
+        set: {
           model,
           baseUrl,
           encryptedApiKey,
           updatedAt
-        })
-        .onConflictDoUpdate({
-          target: providerSettings.provider,
-          set: {
-            model,
-            baseUrl,
-            encryptedApiKey,
-            updatedAt
-          }
-        })
-        .run()
-    } else {
-      this.database.client
-        .prepare(
-          `
-            INSERT INTO provider_settings (provider, model, base_url, encrypted_api_key, updated_at)
-            VALUES (?, ?, ?, ?, ?)
-            ON CONFLICT(provider) DO UPDATE SET
-              model = excluded.model,
-              base_url = excluded.base_url,
-              encrypted_api_key = excluded.encrypted_api_key,
-              updated_at = excluded.updated_at
-          `
-        )
-        .run(provider, model, baseUrl, encryptedApiKey, updatedAt)
-    }
+        }
+      })
 
     return this.getSettings()
   }
 
-  getEncryptedProviderKey(provider: ProviderId): string | null {
-    const row =
-      this.database.kind === 'better-sqlite3'
-        ? this.database.db
-            .select({ encryptedApiKey: providerSettings.encryptedApiKey })
-            .from(providerSettings)
-            .where(eq(providerSettings.provider, provider))
-            .get()
-        : this.database.client
-            .prepare(
-              'SELECT encrypted_api_key AS encryptedApiKey FROM provider_settings WHERE provider = ?'
-            )
-            .get<{ encryptedApiKey: string }>(provider)
+  async getEncryptedProviderKey(provider: ProviderId): Promise<string | null> {
+    const row = await this.database.db
+      .select({ encryptedApiKey: providerSettings.encryptedApiKey })
+      .from(providerSettings)
+      .where(eq(providerSettings.provider, provider))
+      .then((rows) => rows[0])
 
     return row?.encryptedApiKey ?? null
   }
 
-  private getSettingValue(key: string): string | null {
-    const row =
-      this.database.kind === 'better-sqlite3'
-        ? this.database.db
-            .select({ value: settingsTable.value })
-            .from(settingsTable)
-            .where(eq(settingsTable.key, key))
-            .get()
-        : this.database.client
-            .prepare('SELECT value FROM settings WHERE key = ?')
-            .get<{ value: string }>(key)
+  private async getSettingValue(key: string): Promise<string | null> {
+    const row = await this.database.db
+      .select({ value: settingsTable.value })
+      .from(settingsTable)
+      .where(eq(settingsTable.key, key))
+      .then((rows) => rows[0])
 
     return row?.value ?? null
   }
 
-  private saveSettingValue(key: string, value: string): void {
+  private async saveSettingValue(key: string, value: string): Promise<void> {
     const updatedAt = new Date().toISOString()
 
-    if (this.database.kind === 'better-sqlite3') {
-      this.database.db
-        .insert(settingsTable)
-        .values({
-          key,
+    await this.database.db
+      .insert(settingsTable)
+      .values({
+        key,
+        value,
+        updatedAt
+      })
+      .onConflictDoUpdate({
+        target: settingsTable.key,
+        set: {
           value,
           updatedAt
-        })
-        .onConflictDoUpdate({
-          target: settingsTable.key,
-          set: {
-            value,
-            updatedAt
-          }
-        })
-        .run()
-      return
-    }
-
-    this.database.client
-      .prepare(
-        `
-          INSERT INTO settings (key, value, updated_at)
-          VALUES (?, ?, ?)
-          ON CONFLICT(key) DO UPDATE SET
-            value = excluded.value,
-            updated_at = excluded.updated_at
-        `
-      )
-      .run(key, value, updatedAt)
+        }
+      })
   }
 }

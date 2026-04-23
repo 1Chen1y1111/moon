@@ -54,9 +54,9 @@ describe('registerIpcHandlers', () => {
       baseUrl: ''
     }
 
-    settingsService.getSettings.mockReturnValue(settings)
-    settingsService.saveAppearance.mockReturnValue(settings)
-    settingsService.saveProvider.mockReturnValue(settings)
+    settingsService.getSettings.mockResolvedValue(settings)
+    settingsService.saveAppearance.mockResolvedValue(settings)
+    settingsService.saveProvider.mockResolvedValue(settings)
 
     registerIpcHandlers({
       openSettingsWindow,
@@ -85,7 +85,7 @@ describe('registerIpcHandlers', () => {
     const firstWebContents = { send: vi.fn() }
     const secondWebContents = { send: vi.fn() }
 
-    settingsService.saveAppearance.mockReturnValue(settings)
+    settingsService.saveAppearance.mockResolvedValue(settings)
     getAllWindowsMock.mockReturnValue([
       { webContents: firstWebContents },
       { webContents: secondWebContents }

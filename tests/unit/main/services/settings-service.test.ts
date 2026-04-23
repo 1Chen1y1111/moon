@@ -13,36 +13,36 @@ function createSettingsRepositoryMock(): {
   const appSettings = createDefaultAppSettings()
 
   return {
-    getSettings: vi.fn().mockReturnValue(appSettings),
-    saveAppearance: vi.fn().mockReturnValue(appSettings),
-    saveProvider: vi.fn().mockReturnValue(appSettings)
+    getSettings: vi.fn().mockResolvedValue(appSettings),
+    saveAppearance: vi.fn().mockResolvedValue(appSettings),
+    saveProvider: vi.fn().mockResolvedValue(appSettings)
   }
 }
 
 describe('SettingsService', () => {
-  it('validates and saves appearance settings', () => {
+  it('validates and saves appearance settings', async () => {
     const settingsRepository = createSettingsRepositoryMock()
     const service = new SettingsService(settingsRepository as never)
 
-    const settings = service.saveAppearance({ theme: 'dark' })
+    const settings = await service.saveAppearance({ theme: 'dark' })
 
     expect(settings).toEqual(createDefaultAppSettings())
     expect(settingsRepository.saveAppearance).toHaveBeenCalledWith({ theme: 'dark' })
   })
 
-  it('rejects unsupported appearance themes before writing to the repository', () => {
+  it('rejects unsupported appearance themes before writing to the repository', async () => {
     const settingsRepository = createSettingsRepositoryMock()
     const service = new SettingsService(settingsRepository as never)
 
-    expect(() => service.saveAppearance({ theme: 'blue' } as never)).toThrow()
+    await expect(service.saveAppearance({ theme: 'blue' } as never)).rejects.toThrow()
     expect(settingsRepository.saveAppearance).not.toHaveBeenCalled()
   })
 
-  it('normalizes first-party provider drafts before writing to the repository', () => {
+  it('normalizes first-party provider drafts before writing to the repository', async () => {
     const settingsRepository = createSettingsRepositoryMock()
     const service = new SettingsService(settingsRepository as never)
 
-    const settings = service.saveProvider({
+    const settings = await service.saveProvider({
       provider: 'openai',
       apiKey: ' sk-openai-demo ',
       model: ' gpt-5.4 ',
@@ -57,34 +57,34 @@ describe('SettingsService', () => {
     })
   })
 
-  it('requires a valid HTTP base url for the OpenAI-compatible provider', () => {
+  it('requires a valid HTTP base url for the OpenAI-compatible provider', async () => {
     const settingsRepository = createSettingsRepositoryMock()
     const service = new SettingsService(settingsRepository as never)
 
-    expect(() =>
+    await expect(
       service.saveProvider({
         provider: 'openai-compatible',
         apiKey: 'sk-compatible-demo',
         model: 'gpt-compatible',
         baseUrl: ''
       })
-    ).toThrow(/Base URL is required/)
-    expect(() =>
+    ).rejects.toThrow(/Base URL is required/)
+    await expect(
       service.saveProvider({
         provider: 'openai-compatible',
         apiKey: 'sk-compatible-demo',
         model: 'gpt-compatible',
         baseUrl: 'ftp://api.example.com'
       })
-    ).toThrow(/Base URL must be a valid HTTP URL/)
+    ).rejects.toThrow(/Base URL must be a valid HTTP URL/)
     expect(settingsRepository.saveProvider).not.toHaveBeenCalled()
   })
 
-  it('keeps the compatible provider base url when validation passes', () => {
+  it('keeps the compatible provider base url when validation passes', async () => {
     const settingsRepository = createSettingsRepositoryMock()
     const service = new SettingsService(settingsRepository as never)
 
-    service.saveProvider({
+    await service.saveProvider({
       provider: 'openai-compatible',
       apiKey: ' sk-compatible-demo ',
       model: ' gpt-compatible ',
