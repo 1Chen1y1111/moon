@@ -1,6 +1,6 @@
 # Moon 架构设计文档
 
-本文档基于 2026-04-22 当前源码整理，目标是描述 Moon 现有架构、模块边界、运行时数据流，以及继续扩展时应优先遵守的设计约束。
+本文档基于 2026-04-23 当前源码整理，目标是描述 Moon 现有架构、模块边界、运行时数据流，以及继续扩展时应优先遵守的设计约束。
 
 ## 1. 设计目标
 
@@ -8,7 +8,7 @@ Moon 是一个基于 Electron、React、TypeScript 的桌面应用。当前产�
 
 - Electron 主窗口和独立设置窗口。
 - 通过 preload 暴露的受控 `window.api`。
-- 设置数据（外观与 provider）的 IPC、校验、仓储和 SQLite 持久化链路。
+- 设置数据（外观与 provider）的 IPC、校验、仓储和 PGlite 持久化链路。
 - React 渲染层的路由、壳层、设置页、主题选择和 provider 本地草稿状态。
 - 面向后续项目、会话、Agent、插件等能力的初始目录和数据表预留。
 
@@ -41,13 +41,13 @@ Moon 是一个基于 Electron、React、TypeScript 的桌面应用。当前产�
 |                                        |                         |
 |                                        v                         |
 |                              +----------------------+             |
-|                              | SQLite               |             |
-|                              | userData/moon.sqlite |             |
+|                              | PGlite / Drizzle     |             |
+|                              | userData/moon-pglite |             |
 |                              +----------------------+             |
 |                                                                 |
-|  Cross-process Contracts                                        |
-|  src/ipc                                                         |
-|  @ipc/channels + @ipc/contracts                                  |
+|  Cross-process Contracts + Domain Types                         |
+|  src/ipc + src/shared/domain                                     |
+|  @ipc/channels + @ipc/contracts + shared domain                  |
 |                                                                 |
 |  Preload                                                        |
 |  src/preload/index.ts                                           |
@@ -85,7 +85,7 @@ Moon 是一个基于 Electron、React、TypeScript 的桌面应用。当前产�
 
 - Electron 生命周期：`app.whenReady`、`activate`、`window-all-closed`、`will-quit`。
 - 应用图标和窗口创建：`src/main/bootstrap/app-icon.ts`、`create-window.ts`、`create-settings-window.ts`。
-- 数据库连接和 schema 初始化：`src/main/db/connection.ts`、`bootstrap.ts`、`schema.ts`。
+- 数据库连接、Drizzle migration 和 schema 定义：`src/main/db/connection.ts`、`bootstrap.ts`、`schema.ts`。
 - IPC handler 注册：`src/main/bootstrap/register-ipc.ts`。
 - 注入服务和仓储依赖：目前 settings 链路使用 `SettingsService + SettingsRepository`。
 
@@ -95,7 +95,7 @@ Moon 是一个基于 Electron、React、TypeScript 的桌面应用。当前产�
 app.whenReady
   -> setAppUserModelId
   -> setApplicationIcon
-  -> createDatabaseConnection(userData/moon.sqlite)
+  -> createDatabaseConnection(userData/moon-pglite)
   -> bootstrapDatabase
   -> registerIpcHandlers
   -> createMainWindow
@@ -137,6 +137,7 @@ preload 的职责是把主进程能力收敛为受控 API。当前只暴露 `win
 .
   build/                         electron-builder 打包图标和平台构建资源
   docs/                          架构、规格、计划等工程文档
+  drizzle/                       Drizzle 生成的 PGlite/Postgres migration
   resources/                     Electron 运行期资源、源 logo、生成图标和 tray 图标
   screenshorts/                  UI 截图参考和视觉回归素材
   scripts/                       本地维护脚本，例如图标生成和 shadcn 组件更新
@@ -148,7 +149,7 @@ preload 的职责是把主进程能力收敛为受控 API。当前只暴露 `win
       preload/                   preload bridge 暴露行为测试
       renderer/                  renderer 页面、widget、entity 测试
     integration/                 轻集成测试
-      main/                      SQLite、repository、database bootstrap 测试
+      main/                      PGlite、repository、database bootstrap 测试
 
   src/
     ipc/                         app-wide 跨进程协议层
@@ -157,7 +158,7 @@ preload 的职责是把主进程能力收敛为受控 API。当前只暴露 `win
 
     main/                        Electron main process 源码
       bootstrap/                 应用图标、窗口创建、IPC 注册、窗口状态事件
-      db/                        SQLite 连接、schema、数据库初始化和版本控制
+      db/                        PGlite 连接、Drizzle schema、migration bootstrap
       repositories/              按表/聚合组织的数据访问层
       security/                  secret codec 和 Electron safeStorage 封装
       services/                  面向业务用例的服务层，编排校验和 repository
@@ -196,12 +197,16 @@ preload 的职责是把主进程能力收敛为受控 API。当前只暴露 `win
             slices/              Redux slice
 
       shared/                    renderer-only 共享基础设施
-        assets/                  renderer 全局样式、设计 token、静态资源
+        assets/                  renderer 静态资源，例如 logo
+        styles/                  renderer 全局样式、设计 token、暗色覆盖和 recipe
         ui/                      无业务依赖的 renderer UI primitives
           settings-panel/        设置面板共享样式
           window-controls/       mac/windows 自定义窗口控制组件
 
       main.tsx                   renderer 入口
+
+    shared/                      跨 main/preload/renderer 的纯领域类型和常量
+      domain/                    provider、settings、chat 等无运行时副作用模型
 
     shadcn/                      本地 shadcn 代码
       ui/                        本地 shadcn UI primitives
@@ -214,22 +219,24 @@ preload 的职责是把主进程能力收敛为受控 API。当前只暴露 `win
 - `src/main` 可以依赖 `@ipc`，不能依赖 `@renderer` 或 renderer-only 文件。
 - `src/preload` 只做桥接和类型映射，不承载业务逻辑或持久化逻辑。
 - `src/renderer/src/shared` 只服务 renderer 内部，不能被 main/preload 反向依赖。
+- `src/shared/domain` 只放跨进程共享的纯领域类型、常量和默认值；不放 UI、Electron、数据库连接或业务编排。
 - `src/shadcn` 是本地 vendor 化 UI primitive，业务组合应放在 renderer 的 `shared/ui`、`features` 或 `widgets`。
 - `tests` 使用镜像源码结构集中组织测试；测试可以依赖 `@main`、`@preload`、`@renderer`、`@ipc` 和 `@tests` alias，但源码不应依赖 `@tests`。
 
 ## 5. IPC 契约与数据流
 
-IPC channel 集中定义在 `src/ipc/channels.ts`，契约和 schema 集中定义在 `src/ipc/contracts.ts`。`main`、`preload` 和 `renderer` 共同依赖这层跨进程契约，避免类型漂移。
+IPC channel 集中定义在 `src/ipc/channels.ts`，契约和 schema 集中定义在 `src/ipc/contracts.ts`。跨进程共享的纯领域类型放在 `src/shared/domain`，再由 `src/ipc/contracts.ts` 复用和必要时 re-export。`main`、`preload` 和 `renderer` 共同依赖这层协议，避免类型漂移。
 
 导入约定：
 
 ```text
 @ipc/channels              IPC channel 常量
 @ipc/contracts             request/response 类型、Zod schema、跨进程 DTO
+src/shared/domain          provider、settings、chat 等纯领域类型和默认值，当前无专用 alias
 @renderer/shared/...       renderer 内部共享 UI、样式和静态资源
 ```
 
-`src/ipc` 是 app-wide 的跨进程协议层，不放 renderer 组件、样式或主进程实现。`src/renderer/src/shared` 是 renderer bounded context 内的共享层，两者不要混用。
+`src/ipc` 是 app-wide 的跨进程协议层，不放 renderer 组件、样式或主进程实现。`src/shared/domain` 是更底层的纯领域模型层，不引入 Zod、Electron、Drizzle 或 React。`src/renderer/src/shared` 是 renderer bounded context 内的共享层，三者不要混用。
 
 当前 channel：
 
@@ -257,7 +264,7 @@ Renderer UI
   -> saveProviderInputSchema.parse(input)
   -> SettingsRepository.saveProvider
   -> SafeStorageSecretCodec encrypt(apiKey)
-  -> SQLite provider_settings table
+  -> Drizzle upsert provider_settings table
   -> AppSettings response
   -> broadcastSettingsChange(settings)
   -> all windows receive settings:on-change
@@ -274,7 +281,7 @@ Renderer UI
   -> SettingsService.saveAppearance
   -> saveAppearanceInputSchema.parse(input)
   -> SettingsRepository.saveAppearance
-  -> SQLite settings table, key = appearance.theme
+  -> Drizzle upsert settings table, key = appearance.theme
   -> AppSettings response and settings:on-change broadcast
 ```
 
@@ -300,16 +307,16 @@ BrowserWindow maximize/unmaximize/restore
 
 ## 6. 数据持久化设计
 
-数据库文件位于 Electron `app.getPath('userData')` 下，文件名为 `moon.sqlite`。
+数据库目录位于 Electron `app.getPath('userData')` 下，当前目录名为 `moon-pglite`。开发期 Drizzle Kit 配置使用 `./.moon-pglite-dev` 作为本地数据库目录。
 
 连接抽象：`src/main/db/connection.ts`
 
-- 优先使用 `better-sqlite3`。
-- 如果加载失败，回退到 Node `node:sqlite` 的 `DatabaseSync`。
-- 统一暴露 `AppDatabaseConnection`，包含底层 `client` 的 `exec`、`pragma`、`prepare`、`transaction`、`close`。
-- `better-sqlite3` 路径额外提供 Drizzle `db`，用于类型化 repository 查询。
-- 默认开启 `WAL`、`foreign_keys`、`busy_timeout = 5000`。
-- 当前 schema 版本为 `databaseSchemaVersion = 1`。版本不匹配时会重建已知表；本阶段不做旧数据迁移。
+- 使用 `@electric-sql/pglite` 创建嵌入式 Postgres-compatible 数据库。
+- 使用 `drizzle-orm/pglite` 创建类型化 `db`，repository 统一通过 Drizzle 查询和写入。
+- 统一暴露 `AppDatabaseConnection`，包含 `db`、底层 PGlite `client` 和异步 `close()`。
+- `createDatabaseConnection('memory://')` 可用于测试；非内存路径会先确保目录存在。
+- `bootstrapDatabase` 使用 `drizzle-orm/pglite/migrator` 执行 `drizzle/` 下的 migration，migration 状态表为 `public.__drizzle_migrations`。
+- 打包时 `electron-builder.yml` 通过 `extraResources` 把 `drizzle/` 放入应用资源目录，运行期 `getMigrationsFolder()` 会在 packaged 与开发环境之间选择正确路径。
 
 Schema：`src/main/db/schema.ts`
 
@@ -317,21 +324,21 @@ Schema：`src/main/db/schema.ts`
 settings
   key TEXT PRIMARY KEY
   value TEXT NOT NULL
-  updated_at TEXT NOT NULL
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL
 
 provider_settings
   provider TEXT PRIMARY KEY
   model TEXT NOT NULL
   base_url TEXT NOT NULL
   encrypted_api_key TEXT NOT NULL
-  updated_at TEXT NOT NULL
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL
 
 projects
   id TEXT PRIMARY KEY
   path TEXT NOT NULL UNIQUE
   name TEXT NOT NULL
-  created_at TEXT NOT NULL
-  updated_at TEXT NOT NULL
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL
 
 sessions
   id TEXT PRIMARY KEY
@@ -339,22 +346,22 @@ sessions
   provider TEXT NOT NULL
   title TEXT NOT NULL
   status TEXT NOT NULL
-  created_at TEXT NOT NULL
-  updated_at TEXT NOT NULL
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL
+  INDEX sessions_project_id_idx(project_id)
 
 messages
   id TEXT PRIMARY KEY
   session_id TEXT NOT NULL REFERENCES sessions(id) ON DELETE CASCADE
   role TEXT NOT NULL
   content TEXT NOT NULL
-  created_at TEXT NOT NULL
-  updated_at TEXT NOT NULL
-
-messages_fts
-  FTS5(message_id UNINDEXED, session_id UNINDEXED, content)
+  created_at TIMESTAMP WITH TIME ZONE NOT NULL
+  updated_at TIMESTAMP WITH TIME ZONE NOT NULL
+  INDEX messages_session_id_idx(session_id)
+  GIN INDEX messages_content_search_idx(to_tsvector('simple', content))
 ```
 
-当前实际接入 IPC 的持久化对象是外观设置和 provider 设置。外观主题以 `appearance.theme` 写入 `settings` 表；API Key 由主进程使用 Electron `safeStorage` 加密后写入 `provider_settings.encrypted_api_key`，renderer 收到的是解密后的 `AppSettings`。`sessions` 与 `messages` 已有 repository，但还没有注册对应 IPC handler；`projects` 目前只保留表结构，等待明确 UI 用例后再接入。
+当前实际接入 IPC 的持久化对象是外观设置和 provider 设置。外观主题以 `appearance.theme` 写入 `settings` 表；API Key 由主进程使用 Electron `safeStorage` 加密后写入 `provider_settings.encrypted_api_key`，renderer 收到的是解密后派生出的 `hasApiKey` 和 `apiKeyPreview`，不会收到明文 API Key。`sessions` 与 `messages` 已有 repository，但还没有注册对应 IPC handler；`projects` 目前只保留表结构，等待明确 UI 用例后再接入。
 
 ## 7. Renderer 架构
 
@@ -472,13 +479,13 @@ app
 
 - 应用启动、主窗口创建、设置窗口单例管理。
 - 自定义窗口控制 IPC。
-- 设置获取/保存的集中 IPC 契约、Zod 校验、服务层、仓储层和 SQLite 持久化。
+- 设置获取/保存的集中 IPC 契约、Zod 校验、服务层、仓储层和 PGlite/Drizzle 持久化。
 - 外观主题保存、启动加载和跨窗口 `settings:on-change` 同步。
 - Provider 设置支持 Claude、OpenAI、Gemini、OpenAI Compatible，并在主进程加密保存 API Key。
 - 设置页 section 导航、通用设置展示、用户界面主题选择、Provider 表单和占位设置分类。
 - 主窗口的“配置提供商”和“设置”按钮会打开独立设置窗口。
 - 应用图标从 `resources/logo.png` 生成，运行时由 `app-icon.ts` 统一选择 macOS Dock 图标和非 macOS BrowserWindow 图标。
-- `messages` 表与 `messages_fts` 搜索索引的 repository 基础能力。
+- `sessions` 与 `messages` repository 基础能力，包括基于 Postgres full-text search 的消息搜索。
 - 主进程、仓储、窗口、renderer 关键 UI 的 Vitest 测试。
 
 尚未接入或仍是占位：
@@ -506,7 +513,7 @@ tests/
   unit/main/                     main process mock 边界测试
   unit/preload/                  preload bridge 测试
   unit/renderer/                 React 页面、widget、slice 测试
-  integration/main/              真实 SQLite/repository/bootstrap 测试
+  integration/main/              真实 PGlite/repository/bootstrap 测试
 ```
 
 测试覆盖重点：
@@ -514,9 +521,9 @@ tests/
 - IPC channel 和 handler 注册。
 - BrowserWindow 创建参数、应用图标资源选择与设置窗口单例行为。
 - 窗口状态事件发布。
-- 数据库 bootstrap、SettingsRepository 跨数据库连接持久化、外观主题持久化和加密失败回滚。
+- 数据库 migration bootstrap、SettingsRepository 跨数据库连接持久化、外观主题持久化和加密失败回滚。
 - Provider 设置表单保存、校验，以及保存单个 provider 时保留其他未保存草稿。
-- MessagesRepository FTS 索引与搜索。
+- MessagesRepository Postgres full-text search 索引与搜索。
 - Settings 页面布局、滚动区和 section 切换。
 
 建议继续保持“按风险补测试”的策略：新增 IPC、仓储、窗口行为或用户可见 UI 时，增加聚焦回归测试。
@@ -558,7 +565,7 @@ renderer settings UI
 
 已有基础：
 
-- `projects`、`sessions`、`messages`、`messages_fts` 表。
+- `projects`、`sessions`、`messages` 表，以及 `messages_content_search_idx` 全文搜索索引。
 - `SessionsRepository`、`MessagesRepository`。
 - `SessionRecord`、`MessageRecord`、`MessageSearchResult` 类型。
 
@@ -581,7 +588,7 @@ pnpm exec vitest run
 
 - `electron-vite` 负责编译 main、preload、renderer。
 - `electron-builder` 负责平台打包。
-- `electron-builder.yml` 当前配置了 macOS、Windows、Linux 目标，并把 `resources/**` 放入 `asarUnpack`。
+- `electron-builder.yml` 当前配置了 macOS、Windows、Linux 目标，把 `resources/**` 放入 `asarUnpack`，并通过 `extraResources` 携带 `drizzle/` migration。
 
 图标资源链路：
 
@@ -602,7 +609,7 @@ resources/logo.png
 - IPC channel、契约、schema 集中定义在 `src/ipc`，避免字符串散落。
 - 服务层负责校验和业务编排，仓储层只做数据读写。
 - renderer 以 `app -> pages -> widgets -> features -> entities -> shared` 分层组织。
-- 根部不使用泛化的 `shared` 目录；跨进程契约叫 `ipc`，renderer 内共享资源才叫 `shared`。
+- 根级 `src/shared/domain` 只用于跨进程纯领域类型和常量；跨进程 IPC 契约放在 `src/ipc`，renderer 内共享 UI/样式/资源放在 `src/renderer/src/shared`。
 - UI 状态使用 Redux；跨进程状态以 IPC 和持久化结果为准。
 - 只暴露必要 preload API，避免扩大 Electron/Node 能力边界。
 - 新能力先定义可验证目标，再补最小测试闭环。
