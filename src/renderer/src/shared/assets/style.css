@@ -352,8 +352,8 @@
   --moon-panel-border: var(--moon-border-default);
 
   --moon-menu-bg: var(--moon-surface-1);
-  --moon-menu-item-bg-hover: var(--moon-accent-soft);
-  --moon-menu-item-border-hover: var(--moon-accent-soft-border);
+  --moon-menu-item-bg-hover: var(--moon-button-ghost-bg-hover);
+  --moon-menu-item-border-hover: var(--moon-button-secondary-border);
 
   --moon-tooltip-bg: var(--moon-bg-overlay);
   --moon-tooltip-border: var(--moon-charcoal);

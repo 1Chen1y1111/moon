@@ -77,9 +77,7 @@ export function UserInterfaceSettingsSection(): React.JSX.Element {
                 onClick={() => handleThemeChange(theme)}
               >
                 <Preview />
-                <span className="text-center text-moon-caption font-moon-label leading-moon-caption">
-                  {label}
-                </span>
+                <span className="text-center text-moon-caption leading-moon-caption">{label}</span>
               </button>
             )
           })}

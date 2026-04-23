@@ -61,8 +61,10 @@ export function ProviderSettingsCard({
       </div>
 
       {requiresBaseUrl ? (
-        <label className="mt-moon-card block text-moon-body-lead font-moon-label leading-moon-body-lead text-moon-text-primary">
-          Base URL
+        <label className="mt-moon-card block">
+          <span className="block text-moon-body-lead font-moon-label leading-moon-body-lead text-moon-text-primary">
+            Base URL
+          </span>
           <input
             aria-label={`${providerLabels[provider]} Base URL`}
             value={draft.baseUrl}
@@ -78,8 +80,10 @@ export function ProviderSettingsCard({
         </label>
       ) : null}
 
-      <label className="mt-moon-card block text-moon-body-lead font-moon-label leading-moon-body-lead text-moon-text-primary">
-        API Key
+      <label className="mt-moon-card block">
+        <span className="block text-moon-body-lead font-moon-label leading-moon-body-lead text-moon-text-primary">
+          API Key
+        </span>
         <input
           aria-label={`${providerLabels[provider]} API Key`}
           type="password"
@@ -99,8 +103,10 @@ export function ProviderSettingsCard({
         ) : null}
       </label>
 
-      <label className="mt-moon-card block text-moon-body-lead font-moon-label leading-moon-body-lead text-moon-text-primary">
-        Model
+      <label className="mt-moon-card block">
+        <span className="block text-moon-body-lead font-moon-label leading-moon-body-lead text-moon-text-primary">
+          Model
+        </span>
         <input
           aria-label={`${providerLabels[provider]} Model`}
           value={draft.model}
