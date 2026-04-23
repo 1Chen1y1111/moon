@@ -6,7 +6,7 @@ This is an Electron + React + TypeScript app built with electron-vite.
 
 - `src/main/` contains the Electron main process, including window bootstrapping, IPC, database setup, repositories, and services.
 - `src/preload/` contains preload entry points and exposed bridge types.
-- `src/renderer/src/` contains the React renderer app: `app/` for providers, router, and store setup; `pages/` for route surfaces; `features/` for domain UI and state; `shell/` for app chrome; `assets/` for global CSS.
+- `src/renderer/src/` contains the React renderer app: `app/` for providers, router, and store setup; `pages/` for route surfaces; `features/` for domain UI and state; `shell/` for app chrome; `shared/styles/` for global CSS; `shared/assets/` for static assets.
 - `src/shadcn/` contains local shadcn UI primitives and utilities.
 - `docs/superpowers/` stores specs and plans.
 - Build assets live in `build/`; packaged resources live in `resources/`.
@@ -36,10 +36,12 @@ The renderer follows the Moon design system: warm parchment surfaces, ink-blue f
 warm neutral grays, serif authority for headings, and no hard drop shadows. This is a
 typeset document aesthetic, not a dashboard aesthetic.
 
-Use `src/renderer/src/shared/assets/style.css` as the source of truth for all visual
-tokens and component recipes. Prefer existing `moon-*` tokens and `.moon-*` recipes
-before adding new values. Do not introduce `kami-*` names; this project uses `moon-*`
-only.
+Use `src/renderer/src/shared/styles/` as the source of truth for global styling:
+`main.css` is the Tailwind entrypoint, `theme.css` maps Tailwind v4 tokens,
+`tokens.css` and `tokens.dark.css` define Moon variables, and `recipes.css` contains
+`.moon-*` component recipes. Prefer existing `moon-*` tokens and `.moon-*` recipes
+before adding new values. Do not introduce `kami-*` names; this project uses
+`moon-*` only.
 
 For UI styling, avoid raw Tailwind visual scale utilities when a Moon token exists:
 do not add `text-sm`, `text-xs`, `text-lg`, `leading-6`, `gap-3`, `px-6`, `py-4`,

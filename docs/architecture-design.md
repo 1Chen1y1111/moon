@@ -448,11 +448,11 @@ app
 
 ## 8. UI 与设计系统
 
-全局样式入口：`src/renderer/src/shared/assets/main.css`，实际导入 `style.css`。`components.json` 的 shadcn CSS 配置也指向这个路径，避免工具把样式写回旧目录。
+全局样式入口：`src/renderer/src/shared/styles/main.css`。`components.json` 的 shadcn CSS 配置也指向这个路径，避免工具把样式写回旧目录。
 
 设计系统现状：
 
-- Tailwind CSS v4 的 `@theme` 映射 Moon 语义 token，`style.css` 是视觉 token 和 `.moon-*` 组件 recipe 的来源。
+- Tailwind CSS v4 的 `@theme` 映射 Moon 语义 token；`tokens.css`、`tokens.dark.css` 和 `recipes.css` 分别维护视觉 token、暗色覆盖和 `.moon-*` 组件 recipe。
 - Light mode 使用 parchment、ivory、warm neutral gray 与稀疏 ink blue accent；dark mode 通过 `.dark` token overrides 保留独立暗色调。
 - 本地 shadcn primitives 位于 `src/shadcn/ui`，当前有 `Button` 和 `Tooltip`。
 - 图标主要来自 `lucide-react`。
