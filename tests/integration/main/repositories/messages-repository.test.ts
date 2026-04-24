@@ -95,6 +95,70 @@ describe('MessagesRepository', () => {
   )
 
   it(
+    'rejects unsupported session statuses before writing',
+    async () => {
+      const directoryPath = mkdtempSync(join(tmpdir(), 'moon-messages-repository-'))
+      tempDirectories.push(directoryPath)
+      const connection = await createBootstrappedConnection(directoryPath)
+      const repository = new SessionsRepository(connection)
+
+      await expect(
+        repository.save({
+          id: 'session-1',
+          projectId: null,
+          provider: 'claude',
+          title: 'Invalid Status Test',
+          status: 'paused',
+          createdAt: '2026-04-21T00:00:00.000Z',
+          updatedAt: '2026-04-21T00:00:00.000Z'
+        } as never)
+      ).rejects.toThrow()
+
+      expect(await repository.list()).toEqual([])
+
+      await connection.close()
+    },
+    pgliteTestTimeout
+  )
+
+  it(
+    'rejects unsupported message roles before writing',
+    async () => {
+      const directoryPath = mkdtempSync(join(tmpdir(), 'moon-messages-repository-'))
+      tempDirectories.push(directoryPath)
+      const connection = await createBootstrappedConnection(directoryPath)
+
+      await new SessionsRepository(connection).save({
+        id: 'session-1',
+        projectId: null,
+        provider: 'claude',
+        title: 'Invalid Role Test',
+        status: 'active',
+        createdAt: '2026-04-21T00:00:00.000Z',
+        updatedAt: '2026-04-21T00:00:00.000Z'
+      })
+
+      const repository = new MessagesRepository(connection)
+
+      await expect(
+        repository.save({
+          id: 'message-1',
+          sessionId: 'session-1',
+          role: 'developer',
+          content: 'This role is not part of the persisted chat domain.',
+          createdAt: '2026-04-21T00:00:00.000Z',
+          updatedAt: '2026-04-21T00:00:00.000Z'
+        } as never)
+      ).rejects.toThrow()
+
+      expect(await repository.list()).toEqual([])
+
+      await connection.close()
+    },
+    pgliteTestTimeout
+  )
+
+  it(
     'cascades messages when their session is deleted',
     async () => {
       const directoryPath = mkdtempSync(join(tmpdir(), 'moon-messages-repository-'))

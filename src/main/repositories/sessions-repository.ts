@@ -1,5 +1,7 @@
 import { desc } from 'drizzle-orm'
 
+import { sessionRecordSchema } from '@shared/domain/chat-validation'
+
 import type { SessionRecord } from '../../shared/domain/chat'
 import type { AppDatabaseConnection } from '../db/connection'
 import { sessions } from '../db/schema'
@@ -19,20 +21,22 @@ export class SessionsRepository {
   }
 
   async save(session: SessionRecord): Promise<SessionRecord> {
+    const parsedSession = sessionRecordSchema.parse(session)
+
     await this.database.db
       .insert(sessions)
-      .values(session)
+      .values(parsedSession)
       .onConflictDoUpdate({
         target: sessions.id,
         set: {
-          projectId: session.projectId,
-          provider: session.provider,
-          title: session.title,
-          status: session.status,
-          updatedAt: session.updatedAt
+          projectId: parsedSession.projectId,
+          provider: parsedSession.provider,
+          title: parsedSession.title,
+          status: parsedSession.status,
+          updatedAt: parsedSession.updatedAt
         }
       })
 
-    return session
+    return parsedSession
   }
 }

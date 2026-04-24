@@ -1,5 +1,7 @@
 import { desc, sql } from 'drizzle-orm'
 
+import { messageRecordSchema } from '@shared/domain/chat-validation'
+
 import type { MessageRecord, MessageSearchResult } from '../../shared/domain/chat'
 import type { AppDatabaseConnection } from '../db/connection'
 import { messages } from '../db/schema'
@@ -19,20 +21,22 @@ export class MessagesRepository {
   }
 
   async save(message: MessageRecord): Promise<MessageRecord> {
+    const parsedMessage = messageRecordSchema.parse(message)
+
     await this.database.db
       .insert(messages)
-      .values(message)
+      .values(parsedMessage)
       .onConflictDoUpdate({
         target: messages.id,
         set: {
-          sessionId: message.sessionId,
-          role: message.role,
-          content: message.content,
-          updatedAt: message.updatedAt
+          sessionId: parsedMessage.sessionId,
+          role: parsedMessage.role,
+          content: parsedMessage.content,
+          updatedAt: parsedMessage.updatedAt
         }
       })
 
-    return message
+    return parsedMessage
   }
 
   async search(query: string, limit = 20): Promise<MessageSearchResult[]> {

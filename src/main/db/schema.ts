@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { index, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
 
+import type { MessageRole, SessionStatus } from '../../shared/domain/chat'
 import type { ProviderId } from '../../shared/domain/provider'
 
 export const tableNames = {
@@ -40,7 +41,7 @@ export const sessions = pgTable(
     projectId: text('project_id').references(() => projects.id, { onDelete: 'set null' }),
     provider: text('provider').notNull().$type<ProviderId>(),
     title: text('title').notNull(),
-    status: text('status').notNull(),
+    status: text('status').notNull().$type<SessionStatus>(),
     createdAt: timestamp('created_at', { mode: 'string', withTimezone: true }).notNull(),
     updatedAt: timestamp('updated_at', { mode: 'string', withTimezone: true }).notNull()
   },
@@ -54,7 +55,7 @@ export const messages = pgTable(
     sessionId: text('session_id')
       .notNull()
       .references(() => sessions.id, { onDelete: 'cascade' }),
-    role: text('role').notNull(),
+    role: text('role').notNull().$type<MessageRole>(),
     content: text('content').notNull(),
     createdAt: timestamp('created_at', { mode: 'string', withTimezone: true }).notNull(),
     updatedAt: timestamp('updated_at', { mode: 'string', withTimezone: true }).notNull()
