@@ -1,7 +1,6 @@
 import { useEffect } from 'react'
 
 import {
-  loadAppSettings,
   selectActiveSettingsSection,
   setActiveSettingsSection,
   settingsSections,
@@ -58,8 +57,6 @@ export function SettingsPage(): React.JSX.Element {
     if (initialSection !== null) {
       dispatch(setActiveSettingsSection(initialSection))
     }
-
-    void dispatch(loadAppSettings())
   }, [dispatch])
 
   return (

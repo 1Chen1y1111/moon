@@ -18,7 +18,9 @@ describe('AppProviders', () => {
     installMockWindowApi()
   })
 
-  it('provides the Redux store to renderer children', () => {
+  it('provides the Redux store and loads settings from the app provider boundary', async () => {
+    const api = installMockWindowApi()
+
     render(
       <AppProviders>
         <SettingsProbe />
@@ -26,6 +28,9 @@ describe('AppProviders', () => {
     )
 
     expect(screen.getByText('general')).toBeInTheDocument()
+    await waitFor(() => {
+      expect(api.settings.get).toHaveBeenCalledTimes(1)
+    })
   })
 
   it('applies theme changes received from another renderer window', async () => {

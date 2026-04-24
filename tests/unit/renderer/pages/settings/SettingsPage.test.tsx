@@ -70,6 +70,12 @@ describe('SettingsPage', () => {
     expect(screen.getByRole('button', { name: '保存' })).toBeInTheDocument()
   })
 
+  it('does not reload settings from the page boundary', () => {
+    renderWithProviders(<SettingsPage />)
+
+    expect(api.settings.get).not.toHaveBeenCalled()
+  })
+
   it('keeps the header and footer fixed while the sidebar and content own scrolling', async () => {
     const { user } = renderWithProviders(<SettingsPage />)
 
