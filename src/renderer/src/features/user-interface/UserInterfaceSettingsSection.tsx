@@ -6,7 +6,7 @@ import {
   useSettingsSelector
 } from '@renderer/entities/settings'
 import { settingsPanelClassName } from '@renderer/shared/ui/settings-panel'
-import type { AppearanceTheme } from '@ipc/contracts'
+import type { AppearanceTheme } from '@shared/domain/settings'
 
 import DarkAppearance from './appearance/DarkAppearance'
 import LightAppearance from './appearance/LightAppearance'

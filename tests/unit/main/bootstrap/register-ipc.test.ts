@@ -43,7 +43,7 @@ describe('registerIpcHandlers', () => {
   })
 
   it('registers settings handlers that delegate through the settings service', async () => {
-    const { createDefaultAppSettings } = await import('@ipc/contracts')
+    const { createDefaultAppSettings } = await import('@shared/domain/settings')
     const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
     const { ipcChannels } = await import('@ipc/channels')
     const settings = createDefaultAppSettings()
@@ -78,7 +78,7 @@ describe('registerIpcHandlers', () => {
   })
 
   it('broadcasts saved settings to open renderer windows', async () => {
-    const { createDefaultAppSettings } = await import('@ipc/contracts')
+    const { createDefaultAppSettings } = await import('@shared/domain/settings')
     const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
     const { ipcChannels } = await import('@ipc/channels')
     const settings = createDefaultAppSettings()

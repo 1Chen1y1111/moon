@@ -1,9 +1,9 @@
 import { act, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { createDefaultAppSettings } from '@ipc/contracts'
 import { AppProviders } from '@renderer/app/providers'
 import { useAppSelector } from '@renderer/app/store/hooks'
+import { createDefaultAppSettings } from '@shared/domain/settings'
 import { installMockWindowApi } from '@tests/helpers/renderer/mock-window-api'
 
 function SettingsProbe(): React.JSX.Element {

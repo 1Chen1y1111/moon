@@ -9,7 +9,7 @@ import {
   useSettingsDispatch,
   useSettingsSelector
 } from '@renderer/entities/settings'
-import type { AppearanceTheme } from '@ipc/contracts'
+import type { AppearanceTheme } from '@shared/domain/settings'
 
 import { AppRouterContextStore, type AppRouteState } from './router/router-context'
 import { store } from './store'

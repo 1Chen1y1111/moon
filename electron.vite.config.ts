@@ -10,14 +10,16 @@ export default defineConfig({
     },
     resolve: {
       alias: {
-        '@ipc': resolve('src/ipc')
+        '@ipc': resolve('src/ipc'),
+        '@shared': resolve('src/shared')
       }
     }
   },
   preload: {
     resolve: {
       alias: {
-        '@ipc': resolve('src/ipc')
+        '@ipc': resolve('src/ipc'),
+        '@shared': resolve('src/shared')
       }
     }
   },
@@ -26,7 +28,8 @@ export default defineConfig({
       alias: {
         '@renderer': resolve('src/renderer/src'),
         '@shadcn': resolve('src/shadcn'),
-        '@ipc': resolve('src/ipc')
+        '@ipc': resolve('src/ipc'),
+        '@shared': resolve('src/shared')
       }
     },
     plugins: [tailwindcss(), react()]

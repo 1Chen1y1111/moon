@@ -1,7 +1,7 @@
 import { BrowserWindow, ipcMain } from 'electron'
 
 import { ipcChannels } from '@ipc/channels'
-import { openSettingsInputSchema } from '@ipc/contracts'
+import { openSettingsInputSchema } from '@ipc/window-contracts'
 import type { AppSettings } from '../../shared/domain/settings'
 import type { SettingsService } from '../services/settings-service'
 

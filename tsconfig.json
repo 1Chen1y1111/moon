@@ -12,6 +12,8 @@
       "@renderer/*": ["src/renderer/src/*"],
       "@ipc": ["src/ipc"],
       "@ipc/*": ["src/ipc/*"],
+      "@shared": ["src/shared"],
+      "@shared/*": ["src/shared/*"],
       "@main": ["src/main"],
       "@main/*": ["src/main/*"],
       "@preload": ["src/preload"],

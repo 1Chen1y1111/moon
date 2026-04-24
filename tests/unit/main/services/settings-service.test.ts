@@ -2,8 +2,8 @@
 
 import { describe, expect, it, vi } from 'vitest'
 
-import { createDefaultAppSettings } from '@ipc/contracts'
 import { SettingsService } from '@main/services/settings-service'
+import { createDefaultAppSettings } from '@shared/domain/settings'
 
 function createSettingsRepositoryMock(): {
   getSettings: ReturnType<typeof vi.fn>

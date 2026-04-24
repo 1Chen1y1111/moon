@@ -1,4 +1,4 @@
-import type { AppSettings } from '@ipc/contracts'
+import type { AppSettings } from '@shared/domain/settings'
 
 import type { SettingsSectionId, SettingsState } from './settings.types'
 

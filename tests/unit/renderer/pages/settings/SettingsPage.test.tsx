@@ -1,8 +1,8 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 
-import { createDefaultAppSettings, type AppSettings } from '@ipc/contracts'
 import { SettingsPage } from '@renderer/pages/settings/SettingsPage'
+import { createDefaultAppSettings, type AppSettings } from '@shared/domain/settings'
 import { installMockWindowApi, type MockMoonApi } from '@tests/helpers/renderer/mock-window-api'
 import { renderWithProviders } from '@tests/helpers/renderer/render-with-providers'
 

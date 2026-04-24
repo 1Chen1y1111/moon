@@ -95,7 +95,7 @@ describe('preload api', () => {
   })
 
   it('cleans up the settings change event subscription', async () => {
-    const { createDefaultAppSettings } = await import('@ipc/contracts')
+    const { createDefaultAppSettings } = await import('@shared/domain/settings')
     await import('@preload/index')
 
     const api = getExposedApi()

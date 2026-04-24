@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react'
 
-import type { AppSettings } from '@ipc/contracts'
+import type { AppSettings } from '@shared/domain/settings'
 
 export type SettingsSectionId =
   | 'general'

@@ -1,14 +1,9 @@
 import { vi } from 'vitest'
 
-import {
-  createDefaultAppSettings,
-  type AppSettings,
-  type MoonApi,
-  type OpenSettingsInput,
-  type SaveAppearanceInput,
-  type SaveProviderInput,
-  type WindowState
-} from '@ipc/contracts'
+import type { MoonApi } from '@ipc/contracts'
+import type { OpenSettingsInput, WindowState } from '@ipc/window-contracts'
+import { createDefaultAppSettings, type AppSettings } from '@shared/domain/settings'
+import type { SaveAppearanceInput, SaveProviderInput } from '@shared/domain/settings-validation'
 
 type MockFn<T extends (...args: never[]) => unknown> = ReturnType<typeof vi.fn<T>>
 

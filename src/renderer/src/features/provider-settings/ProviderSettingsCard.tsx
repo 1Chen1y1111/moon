@@ -1,5 +1,6 @@
 import { Button } from '@shadcn/ui/button'
-import { providerLabels, type ProviderId, type SaveProviderInput } from '@ipc/contracts'
+import { providerLabels, type ProviderId } from '@shared/domain/provider'
+import type { SaveProviderInput } from '@shared/domain/settings-validation'
 
 export type ProviderDraft = {
   apiKey: string

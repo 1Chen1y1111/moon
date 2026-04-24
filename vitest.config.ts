@@ -11,6 +11,7 @@ export default defineConfig({
       '@renderer': resolve('src/renderer/src'),
       '@shadcn': resolve('src/shadcn'),
       '@ipc': resolve('src/ipc'),
+      '@shared': resolve('src/shared'),
       '@tests': resolve('tests')
     }
   },

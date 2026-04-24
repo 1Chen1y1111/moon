@@ -1,11 +1,7 @@
 import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/toolkit'
 
-import {
-  createDefaultAppSettings,
-  type AppSettings,
-  type SaveAppearanceInput,
-  type SaveProviderInput
-} from '@ipc/contracts'
+import { createDefaultAppSettings, type AppSettings } from '@shared/domain/settings'
+import type { SaveAppearanceInput, SaveProviderInput } from '@shared/domain/settings-validation'
 
 import type { SettingsSectionId, SettingsState } from '../settings.types'
 

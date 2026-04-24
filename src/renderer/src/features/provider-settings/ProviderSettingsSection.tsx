@@ -9,12 +9,9 @@ import {
   useSettingsSelector
 } from '@renderer/entities/settings'
 import { settingsPanelClassName } from '@renderer/shared/ui/settings-panel'
-import {
-  providerIds,
-  saveProviderInputSchema,
-  type AppSettings,
-  type ProviderId
-} from '@ipc/contracts'
+import { providerIds, type ProviderId } from '@shared/domain/provider'
+import type { AppSettings } from '@shared/domain/settings'
+import { saveProviderInputSchema } from '@shared/domain/settings-validation'
 
 import {
   ProviderSettingsCard,

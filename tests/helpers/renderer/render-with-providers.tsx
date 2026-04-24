@@ -4,8 +4,8 @@ import { render, type RenderOptions, type RenderResult } from '@testing-library/
 import userEvent from '@testing-library/user-event'
 import { Provider } from 'react-redux'
 
-import { createDefaultAppSettings } from '@ipc/contracts'
 import { settingsReducer, type SettingsState } from '@renderer/entities/settings'
+import { createDefaultAppSettings } from '@shared/domain/settings'
 
 type TestRootState = {
   settings: SettingsState
