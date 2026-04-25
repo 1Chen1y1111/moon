@@ -41,7 +41,7 @@ export function WindowsWindowControls({
       <button
         type="button"
         aria-label="关闭窗口"
-        className={`${windowsButtonClassName} hover:bg-moon-state-danger hover:text-moon-fg-inverse`}
+        className={windowsButtonClassName}
         onClick={onClose}
       >
         <X aria-hidden="true" className="size-moon-icon" strokeWidth={1.75} />

@@ -41,10 +41,28 @@ describe('HomePage', () => {
 
     const section = screen.getByRole('region', { name: 'Moon landing view' })
     const shellMain = screen.getByRole('main')
+    const workspaceChrome = within(screen.getByTestId('workspace-content-drag-region'))
 
     expect(shellMain).toContainElement(section)
     expect(screen.getByRole('complementary', { name: 'Workspace navigation' })).toBeInTheDocument()
+    expect(workspaceChrome.getByRole('button', { name: '最小化窗口' })).toBeInTheDocument()
+    expect(workspaceChrome.getByRole('button', { name: '放大窗口' })).toBeInTheDocument()
+    expect(workspaceChrome.getByRole('button', { name: '关闭窗口' })).toBeInTheDocument()
     expect(within(shellMain).queryByRole('textbox')).not.toBeInTheDocument()
+  })
+
+  it('runs window controls from the workspace top chrome on the landing page', () => {
+    renderInShell()
+
+    const workspaceChrome = within(screen.getByTestId('workspace-content-drag-region'))
+
+    fireEvent.click(workspaceChrome.getByRole('button', { name: '最小化窗口' }))
+    fireEvent.click(workspaceChrome.getByRole('button', { name: '放大窗口' }))
+    fireEvent.click(workspaceChrome.getByRole('button', { name: '关闭窗口' }))
+
+    expect(api.windowControls.minimize).toHaveBeenCalledTimes(1)
+    expect(api.windowControls.toggleMaximize).toHaveBeenCalledTimes(1)
+    expect(api.windowControls.close).toHaveBeenCalledTimes(1)
   })
 
   it('opens the dedicated settings window from provider and settings CTAs', () => {

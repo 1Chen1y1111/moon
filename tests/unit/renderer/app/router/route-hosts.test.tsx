@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { AppProviders } from '@renderer/app/providers'
@@ -22,11 +22,20 @@ describe('route layouts', () => {
     expect(screen.getByRole('complementary', { name: 'Workspace navigation' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Workspace child' })).toBeInTheDocument()
     expect(screen.queryByTestId('workspace-window-drag-strip')).not.toBeInTheDocument()
-    expect(screen.getByTestId('workspace-content-drag-region')).toHaveClass(
+    const workspaceDragRegion = screen.getByTestId('workspace-content-drag-region')
+    const workspaceChrome = within(workspaceDragRegion)
+
+    expect(workspaceDragRegion).toHaveClass(
       'moon-window-drag-region',
+      'flex',
       'h-moon-chrome',
-      'shrink-0'
+      'shrink-0',
+      'items-center',
+      'justify-end'
     )
+    expect(workspaceChrome.getByRole('button', { name: '最小化窗口' })).toBeInTheDocument()
+    expect(workspaceChrome.getByRole('button', { name: '放大窗口' })).toBeInTheDocument()
+    expect(workspaceChrome.getByRole('button', { name: '关闭窗口' })).toBeInTheDocument()
   })
 
   it('renders the settings layout without the workspace rail', () => {
