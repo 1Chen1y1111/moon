@@ -93,29 +93,42 @@ describe('SettingsPage', () => {
     expect(screen.getByText('页面内容待补齐')).toBeInTheDocument()
   })
 
-  it('renders provider forms and saves a provider through the settings api', async () => {
+  it('renders the provider catalog and saves the selected provider from the footer', async () => {
     const { user } = renderWithProviders(<SettingsPage />)
 
     await user.click(screen.getByRole('tab', { name: '提供商' }))
 
     expect(screen.getAllByRole('heading', { name: '提供商' }).length).toBeGreaterThan(0)
-    expect(screen.getByLabelText('Claude API Key')).toBeInTheDocument()
-    expect(screen.getByLabelText('OpenAI API Key')).toBeInTheDocument()
-    expect(screen.getByLabelText('Gemini API Key')).toBeInTheDocument()
-    expect(screen.getByLabelText('OpenAI Compatible Base URL')).toBeInTheDocument()
+    expect(screen.getByLabelText('搜索提供商')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add Custom ACP Provider' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Add Custom Provider' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: '选择 Moonshot' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '选择 CPA' })).toBeInTheDocument()
+    const openAiProviderButton = screen.getByRole('button', { name: '选择 OpenAI' })
 
-    await user.type(screen.getByLabelText('Claude API Key'), 'sk-ant-demo')
-    await user.type(screen.getByLabelText('Claude Model'), 'claude-3-7-sonnet-latest')
-    await user.click(
-      within(screen.getByRole('region', { name: 'Claude provider settings' })).getByRole('button', {
-        name: '保存'
-      })
-    )
+    expect(openAiProviderButton).toHaveAttribute('aria-pressed', 'true')
+    expect(openAiProviderButton.querySelector('svg')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '选择 Anthropic' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '选择 Google Gemini' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '选择 DeepSeek' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '选择 Azure OpenAI' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'OpenAI provider details' })).toBeInTheDocument()
+    expect(screen.getByLabelText('OpenAI Provider Name')).toHaveValue('OpenAI')
+    expect(screen.getByLabelText('OpenAI API Key')).toBeInTheDocument()
+
+    await user.type(screen.getByLabelText('搜索提供商'), 'deep')
+    expect(screen.getByRole('button', { name: '选择 DeepSeek' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '选择 OpenAI' })).not.toBeInTheDocument()
+    await user.clear(screen.getByLabelText('搜索提供商'))
+
+    await user.type(screen.getByLabelText('OpenAI API Key'), 'sk-openai-demo')
+    await user.type(screen.getByLabelText('OpenAI Model'), 'gpt-5.4')
+    await user.click(screen.getByRole('button', { name: '保存' }))
 
     expect(api.settings.saveProvider).toHaveBeenCalledWith({
-      provider: 'claude',
-      apiKey: 'sk-ant-demo',
-      model: 'claude-3-7-sonnet-latest',
+      provider: 'openai',
+      apiKey: 'sk-openai-demo',
+      model: 'gpt-5.4',
       baseUrl: ''
     })
   })
@@ -151,11 +164,9 @@ describe('SettingsPage', () => {
 
     expect(screen.getByLabelText('OpenAI API Key')).toHaveValue('')
     expect(screen.queryByDisplayValue('sk-openai-demo')).not.toBeInTheDocument()
-    expect(screen.getByText('Current key: ****demo')).toBeInTheDocument()
+    expect(screen.getByText('当前密钥：****demo')).toBeInTheDocument()
 
-    await user.click(
-      within(screen.getByRole('region', { name: 'OpenAI provider settings' })).getByRole('button')
-    )
+    await user.click(screen.getByRole('button', { name: '保存' }))
 
     await waitFor(() => {
       expect(api.settings.saveProvider).toHaveBeenCalledWith({
@@ -217,16 +228,10 @@ describe('SettingsPage', () => {
     const { user } = renderWithProviders(<SettingsPage />)
 
     await user.click(screen.getByRole('tab', { name: '提供商' }))
-    await user.type(screen.getByLabelText('OpenAI Compatible API Key'), 'sk-compatible-demo')
-    await user.type(screen.getByLabelText('OpenAI Compatible Model'), 'gpt-compatible')
-    await user.click(
-      within(screen.getByRole('region', { name: 'OpenAI Compatible provider settings' })).getByRole(
-        'button',
-        {
-          name: '保存'
-        }
-      )
-    )
+    await user.click(screen.getByRole('button', { name: '选择 CPA' }))
+    await user.type(screen.getByLabelText('CPA API Key'), 'sk-compatible-demo')
+    await user.type(screen.getByLabelText('CPA Model'), 'gpt-compatible')
+    await user.click(screen.getByRole('button', { name: '保存' }))
 
     expect(screen.getByText('Base URL is required.')).toBeInTheDocument()
     expect(api.settings.saveProvider).not.toHaveBeenCalled()
@@ -238,13 +243,10 @@ describe('SettingsPage', () => {
     await user.click(screen.getByRole('tab', { name: '提供商' }))
     await user.type(screen.getByLabelText('OpenAI API Key'), 'sk-openai-demo')
     await user.type(screen.getByLabelText('OpenAI Model'), 'gpt-5.4')
-    await user.type(screen.getByLabelText('Claude API Key'), 'sk-ant-demo')
-    await user.type(screen.getByLabelText('Claude Model'), 'claude-3-7-sonnet-latest')
-    await user.click(
-      within(screen.getByRole('region', { name: 'Claude provider settings' })).getByRole('button', {
-        name: '保存'
-      })
-    )
+    await user.click(screen.getByRole('button', { name: '选择 Anthropic' }))
+    await user.type(screen.getByLabelText('Anthropic API Key'), 'sk-ant-demo')
+    await user.type(screen.getByLabelText('Anthropic Model'), 'claude-3-7-sonnet-latest')
+    await user.click(screen.getByRole('button', { name: '保存' }))
 
     await waitFor(() => {
       expect(api.settings.saveProvider).toHaveBeenCalledWith({
@@ -254,6 +256,7 @@ describe('SettingsPage', () => {
         baseUrl: ''
       })
     })
+    await user.click(screen.getByRole('button', { name: '选择 OpenAI' }))
     expect(screen.getByLabelText('OpenAI API Key')).toHaveValue('sk-openai-demo')
     expect(screen.getByLabelText('OpenAI Model')).toHaveValue('gpt-5.4')
   })

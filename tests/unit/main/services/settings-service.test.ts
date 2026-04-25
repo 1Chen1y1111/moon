@@ -38,7 +38,7 @@ describe('SettingsService', () => {
     expect(settingsRepository.saveAppearance).not.toHaveBeenCalled()
   })
 
-  it('normalizes first-party provider drafts before writing to the repository', async () => {
+  it('normalizes provider drafts before writing to the repository', async () => {
     const settingsRepository = createSettingsRepositoryMock()
     const service = new SettingsService(settingsRepository as never)
 
@@ -53,11 +53,11 @@ describe('SettingsService', () => {
     expect(settingsRepository.saveProvider).toHaveBeenCalledWith('openai', {
       apiKey: 'sk-openai-demo',
       model: 'gpt-5.4',
-      baseUrl: ''
+      baseUrl: 'https://ignored.example.com'
     })
   })
 
-  it('requires a valid HTTP base url for the OpenAI-compatible provider', async () => {
+  it('requires a valid HTTP base url for providers that require a base url', async () => {
     const settingsRepository = createSettingsRepositoryMock()
     const service = new SettingsService(settingsRepository as never)
 
@@ -74,6 +74,21 @@ describe('SettingsService', () => {
         provider: 'openai-compatible',
         apiKey: 'sk-compatible-demo',
         model: 'gpt-compatible',
+        baseUrl: 'ftp://api.example.com'
+      })
+    ).rejects.toThrow(/Base URL must be a valid HTTP URL/)
+    expect(settingsRepository.saveProvider).not.toHaveBeenCalled()
+  })
+
+  it('rejects invalid optional provider base urls before writing to the repository', async () => {
+    const settingsRepository = createSettingsRepositoryMock()
+    const service = new SettingsService(settingsRepository as never)
+
+    await expect(
+      service.saveProvider({
+        provider: 'openai',
+        apiKey: 'sk-openai-demo',
+        model: 'gpt-5.4',
         baseUrl: 'ftp://api.example.com'
       })
     ).rejects.toThrow(/Base URL must be a valid HTTP URL/)

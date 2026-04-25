@@ -1,4 +1,4 @@
-import type { ProviderId } from './provider'
+import { providerIds, type ProviderId } from './provider'
 
 export const appearanceThemes = ['light', 'dark', 'system'] as const
 
@@ -38,11 +38,8 @@ export function createDefaultAppSettings(): AppSettings {
     appearance: {
       theme: 'system'
     },
-    providers: {
-      claude: createDefaultProviderSettings('claude'),
-      openai: createDefaultProviderSettings('openai'),
-      gemini: createDefaultProviderSettings('gemini'),
-      'openai-compatible': createDefaultProviderSettings('openai-compatible')
-    }
+    providers: Object.fromEntries(
+      providerIds.map((provider) => [provider, createDefaultProviderSettings(provider)])
+    ) as Record<ProviderId, ProviderSettings>
   }
 }

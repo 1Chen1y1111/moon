@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { providerIds } from './provider'
+import { providerIds, providerMetadata } from './provider'
 import { appearanceThemes } from './settings'
 
 export const providerIdSchema = z.enum(providerIds)
@@ -22,12 +22,7 @@ export const providerSettingsSchema = z.object({
 
 export const appSettingsSchema = z.object({
   appearance: appearanceSettingsSchema,
-  providers: z.object({
-    claude: providerSettingsSchema,
-    openai: providerSettingsSchema,
-    gemini: providerSettingsSchema,
-    'openai-compatible': providerSettingsSchema
-  })
+  providers: z.record(providerIdSchema, providerSettingsSchema)
 })
 
 export const saveProviderInputSchema = z
@@ -38,16 +33,18 @@ export const saveProviderInputSchema = z
     baseUrl: z.string().trim().optional().default('')
   })
   .superRefine((input, context) => {
-    if (input.provider !== 'openai-compatible') {
-      return
-    }
+    const metadata = providerMetadata[input.provider]
 
-    if (input.baseUrl.length === 0) {
+    if (metadata.requiresBaseUrl && input.baseUrl.length === 0) {
       context.addIssue({
         code: 'custom',
         message: 'Base URL is required.',
         path: ['baseUrl']
       })
+      return
+    }
+
+    if (input.baseUrl.length === 0) {
       return
     }
 

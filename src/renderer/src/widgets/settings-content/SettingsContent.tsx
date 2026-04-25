@@ -1,15 +1,22 @@
 import { settingsSections, type SettingsSectionId } from '@renderer/entities/settings'
 import { GeneralSettingsSection } from '@renderer/features/general-settings'
-import { ProviderSettingsSection } from '@renderer/features/provider-settings'
+import {
+  ProviderSettingsSection,
+  type ProviderSettingsFooterAction
+} from '@renderer/features/provider-settings'
 import { UserInterfaceSettingsSection } from '@renderer/features/user-interface'
 
 import { PlaceholderSettingsSection } from './PlaceholderSettingsSection'
 
 type SettingsContentProps = {
   activeSection: SettingsSectionId
+  onProviderFooterActionChange?: (action: ProviderSettingsFooterAction) => void
 }
 
-export function SettingsContent({ activeSection }: SettingsContentProps): React.JSX.Element {
+export function SettingsContent({
+  activeSection,
+  onProviderFooterActionChange
+}: SettingsContentProps): React.JSX.Element {
   const activeMeta = settingsSections.find((section) => section.id === activeSection)
 
   if (activeMeta?.kind === 'general') {
@@ -17,7 +24,7 @@ export function SettingsContent({ activeSection }: SettingsContentProps): React.
   }
 
   if (activeMeta?.kind === 'providers') {
-    return <ProviderSettingsSection />
+    return <ProviderSettingsSection onFooterActionChange={onProviderFooterActionChange} />
   }
 
   if (activeMeta?.kind === 'user-interface') {

@@ -94,6 +94,30 @@
     );
   }
 
+  .moon-provider-toolbar {
+    align-items: center;
+    display: grid;
+    gap: var(--spacing-moon-lg);
+    grid-template-columns: minmax(18rem, 0.85fr) auto;
+  }
+
+  .moon-provider-layout {
+    display: grid;
+    gap: var(--spacing-moon-xl);
+    grid-template-columns: minmax(18rem, 0.8fr) minmax(26rem, 1.65fr);
+  }
+
+  .moon-provider-list-scroll {
+    max-height: min(42rem, calc(100vh - 17rem));
+  }
+
+  @media (max-width: 56rem) {
+    .moon-provider-toolbar,
+    .moon-provider-layout {
+      grid-template-columns: 1fr;
+    }
+  }
+
   .moon-quote {
     border-left: 2pt solid var(--moon-quote-border);
     color: var(--moon-quote-fg);

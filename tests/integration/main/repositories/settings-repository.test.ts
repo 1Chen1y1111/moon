@@ -128,6 +128,37 @@ describe('SettingsRepository', () => {
   )
 
   it(
+    'persists newly supported fixed providers',
+    async () => {
+      const directoryPath = mkdtempSync(join(tmpdir(), 'moon-settings-repository-'))
+      const databasePath = join(directoryPath, 'moon-pglite')
+      tempDirectories.push(directoryPath)
+
+      const connection = await createBootstrappedConnection(databasePath)
+      const repository = new SettingsRepository(connection, fakeSecretCodec)
+
+      await repository.saveProvider('deepseek', {
+        apiKey: 'sk-deepseek-demo',
+        model: 'deepseek-chat',
+        baseUrl: 'https://api.deepseek.com/v1'
+      })
+
+      const settings = await repository.getSettings()
+
+      expect(settings.providers.deepseek).toMatchObject({
+        provider: 'deepseek',
+        hasApiKey: true,
+        apiKeyPreview: '****demo',
+        model: 'deepseek-chat',
+        baseUrl: 'https://api.deepseek.com/v1'
+      })
+
+      await connection.close()
+    },
+    pgliteTestTimeout
+  )
+
+  it(
     'persists appearance theme across PGlite connections',
     async () => {
       const directoryPath = mkdtempSync(join(tmpdir(), 'moon-settings-repository-'))

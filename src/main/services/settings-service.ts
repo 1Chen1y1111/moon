@@ -19,7 +19,7 @@ export class SettingsService {
     return this.settingsRepository.saveProvider(parsedInput.provider, {
       apiKey: parsedInput.apiKey,
       model: parsedInput.model,
-      baseUrl: parsedInput.provider === 'openai-compatible' ? parsedInput.baseUrl : ''
+      baseUrl: parsedInput.baseUrl
     })
   }
 
