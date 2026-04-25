@@ -14,7 +14,7 @@ export function SettingsSidebar({
   return (
     <aside
       data-testid="settings-sidebar-shell"
-      className="flex h-full w-moon-settings-sidebar shrink-0 overflow-hidden rounded-moon-panel border-r border-moon-sidebar-border bg-moon-sidebar-bg py-moon-option-gap"
+      className="flex h-full w-moon-settings-sidebar shrink-0 overflow-hidden rounded-moon-panel border-r border-moon-border-subtle bg-moon-surface-1 py-moon-option-gap"
     >
       <div className="flex min-h-0 flex-1 flex-col">
         <div className="moon-window-drag-region px-moon-nav-x pb-moon-lg">{headerSlot}</div>

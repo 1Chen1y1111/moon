@@ -80,9 +80,8 @@ describe('WorkspaceChrome', () => {
         'group-hover:text-moon-text-primary'
       )
       expect(utilityCard).not.toHaveClass(
-        'group-hover:bg-moon-menu-item-bg-hover',
         'group-hover:text-moon-fg-inverse',
-        'group-hover:shadow-moon-menu-hover'
+        'group-hover:shadow-moon-ring'
       )
     }
   })

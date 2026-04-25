@@ -37,7 +37,6 @@
   --moon-ring-warm: #d1cfc5;
   --moon-ring-deep: #c2c0b6;
   --moon-error: #b53333;
-  --moon-focus: var(--moon-brand);
 
   /* Primitive palette */
   --moon-neutral-0: var(--moon-near-black);
@@ -59,58 +58,6 @@
   --moon-red-500: var(--moon-error);
   --moon-yellow-500: var(--moon-dark-warm);
   --moon-green-500: var(--moon-olive);
-  --moon-purple-500: var(--moon-brand);
-  --moon-orange-500: var(--moon-dark-warm);
-  --moon-cyan-500: var(--moon-brand-light);
-
-  /* Legacy palette aliases */
-  --moon-white: var(--moon-ivory);
-  --moon-darker-black: var(--moon-near-black);
-  --moon-black: var(--moon-dark-surface);
-  --moon-black-2: var(--moon-dark-warm);
-  --moon-one-bg: var(--moon-parchment);
-  --moon-one-bg-2: var(--moon-ivory);
-  --moon-one-bg-3: var(--moon-warm-sand);
-  --moon-grey: var(--moon-stone);
-  --moon-grey-fg: var(--moon-olive);
-  --moon-grey-fg-2: var(--moon-stone);
-  --moon-light-grey: var(--moon-warm-silver);
-  --moon-red: var(--moon-red-500);
-  --moon-baby-pink: var(--moon-error);
-  --moon-pink: var(--moon-brand);
-  --moon-line: var(--moon-border-warm);
-  --moon-green: var(--moon-green-500);
-  --moon-vibrant-green: var(--moon-olive);
-  --moon-nord-blue: var(--moon-brand-light);
-  --moon-blue: var(--moon-blue-500);
-  --moon-yellow: var(--moon-yellow-500);
-  --moon-sun: var(--moon-yellow-500);
-  --moon-purple: var(--moon-brand);
-  --moon-dark-purple: var(--moon-brand);
-  --moon-teal: var(--moon-blue-600);
-  --moon-orange: var(--moon-orange-500);
-  --moon-cyan: var(--moon-brand-light);
-  --moon-statusline-bg: var(--moon-warm-sand);
-  --moon-lightbg: var(--moon-ivory);
-  --moon-pmenu-bg: var(--moon-blue-500);
-  --moon-folder-bg: var(--moon-blue-500);
-
-  --moon-base00: var(--moon-parchment);
-  --moon-base01: var(--moon-ivory);
-  --moon-base02: var(--moon-warm-sand);
-  --moon-base03: var(--moon-border-warm);
-  --moon-base04: var(--moon-stone);
-  --moon-base05: var(--moon-olive);
-  --moon-base06: var(--moon-dark-warm);
-  --moon-base07: var(--moon-near-black);
-  --moon-base08: var(--moon-red-500);
-  --moon-base09: var(--moon-orange-500);
-  --moon-base0a: var(--moon-yellow-500);
-  --moon-base0b: var(--moon-green-500);
-  --moon-base0c: var(--moon-cyan-500);
-  --moon-base0d: var(--moon-blue-500);
-  --moon-base0e: var(--moon-purple-500);
-  --moon-base0f: var(--moon-error);
 
   /* Semantic tokens */
   --moon-bg-canvas: var(--moon-parchment);
@@ -124,6 +71,7 @@
   --moon-border-subtle: var(--moon-border-cream);
   --moon-border-default: var(--moon-border-warm);
   --moon-border-strong: var(--moon-ring-warm);
+  --moon-border-overlay: var(--moon-charcoal);
 
   --moon-text-primary: var(--moon-near-black);
   --moon-text-secondary: var(--moon-olive);
@@ -169,23 +117,7 @@
   --moon-page-margin-letter: 25mm;
   --moon-page-margin-portfolio: 12mm 15mm;
 
-  /* Component tokens */
-  --moon-app-bg: var(--moon-bg-canvas);
-
-  --moon-sidebar-bg: var(--moon-surface-1);
-  --moon-sidebar-border: var(--moon-border-subtle);
-
-  --moon-panel-bg: var(--moon-surface-2);
-  --moon-panel-border: var(--moon-border-default);
-
-  --moon-menu-bg: var(--moon-surface-1);
-  --moon-menu-item-bg-hover: var(--moon-button-ghost-bg-hover);
-  --moon-menu-item-border-hover: var(--moon-button-secondary-border);
-
-  --moon-tooltip-bg: var(--moon-bg-overlay);
-  --moon-tooltip-border: var(--moon-charcoal);
-  --moon-tooltip-fg: var(--moon-fg-inverse);
-
+  /* Atomic component tokens */
   --moon-button-primary-bg: var(--moon-accent-primary);
   --moon-button-primary-bg-hover: var(--moon-accent-primary-hover);
   --moon-button-primary-fg: var(--moon-ivory);
@@ -195,10 +127,6 @@
   --moon-button-secondary-bg-hover: var(--moon-border-warm);
   --moon-button-ghost-bg-hover: var(--moon-warm-sand);
 
-  --moon-button-update-bg: var(--moon-button-secondary-bg);
-  --moon-button-update-border: var(--moon-button-secondary-border);
-  --moon-button-update-fg: var(--moon-text-primary);
-
   --moon-ring-subtle: var(--moon-ring-warm);
 
   /* OS chrome exception: keep system traffic-light colors scoped to window controls. */
@@ -206,28 +134,19 @@
   --moon-window-control-minimize: #8a6a2d;
   --moon-window-control-maximize: #5e5d59;
   --moon-window-control-glyph: var(--moon-ivory);
-  --moon-scrollbar-track: var(--moon-warm-sand);
-  --moon-scrollbar-thumb: var(--moon-warm-silver);
-  --moon-scrollbar-thumb-hover: var(--moon-stone);
-  --moon-scrollbar-button-bg: var(--moon-parchment);
-  --moon-scrollbar-button-icon: var(--moon-stone);
 
   --moon-shadow-ring: 0 0 0 1px var(--moon-ring-warm);
   --moon-shadow-ring-deep: 0 0 0 1px var(--moon-ring-deep);
   --moon-shadow-whisper: 0 4px 24px rgb(20 20 19 / 0.05);
-  --moon-shadow-shell: 0 0 0 1px var(--moon-ring-warm);
-  --moon-shadow-menu-hover: 0 0 0 1px var(--moon-ring-warm);
-  --moon-shadow-menu-panel: var(--moon-shadow-whisper);
-  --moon-shadow-tooltip: var(--moon-shadow-whisper);
   --moon-shadow-accent: 0 0 0 1px var(--moon-brand);
 
   --radius: 0.5rem;
   --background: var(--moon-bg-canvas);
   --foreground: var(--moon-text-primary);
-  --card: var(--moon-panel-bg);
+  --card: var(--moon-surface-2);
   --card-foreground: var(--moon-text-primary);
-  --popover: var(--moon-tooltip-bg);
-  --popover-foreground: var(--moon-tooltip-fg);
+  --popover: var(--moon-bg-overlay);
+  --popover-foreground: var(--moon-fg-inverse);
   --primary: var(--moon-button-primary-bg);
   --primary-foreground: var(--moon-button-primary-fg);
   --secondary: var(--moon-button-secondary-bg);
@@ -241,23 +160,4 @@
   --border: var(--moon-border-subtle);
   --input: var(--moon-border-default);
   --ring: var(--moon-accent-primary);
-
-  /* Compatibility aliases */
-  --moon-text-inverse: var(--moon-fg-inverse);
-  --moon-menu-hover-bg: var(--moon-menu-item-bg-hover);
-  --moon-menu-hover-border: var(--moon-menu-item-border-hover);
-  --moon-tooltip-foreground: var(--moon-tooltip-fg);
-  --moon-button-primary-hover-bg: var(--moon-button-primary-bg-hover);
-  --moon-button-primary-text: var(--moon-button-primary-fg);
-  --moon-button-secondary-hover-bg: var(--moon-button-secondary-bg-hover);
-  --moon-button-ghost-hover-bg: var(--moon-button-ghost-bg-hover);
-  --moon-button-update-text: var(--moon-button-update-fg);
-  --moon-focus-ring-subtle: var(--moon-ring-subtle);
-  --moon-window-close: var(--moon-window-control-close);
-  --moon-window-minimize: var(--moon-window-control-minimize);
-  --moon-window-maximize: var(--moon-window-control-maximize);
-  --moon-accent: var(--moon-accent-primary);
-  --moon-accent-text: var(--moon-button-primary-fg);
-  --moon-update-bg: var(--moon-button-update-bg);
-  --moon-update-text: var(--moon-button-update-fg);
 }

@@ -44,15 +44,11 @@ describe('SettingsPage', () => {
       'bg-moon-button-secondary-bg',
       'text-moon-text-primary'
     )
-    expect(activeGeneralTab).not.toHaveClass(
-      'border-moon-menu-item-border-hover',
-      'bg-moon-menu-item-bg-hover',
-      'text-moon-accent'
-    )
+    expect(activeGeneralTab).not.toHaveClass('bg-moon-button-ghost-bg-hover', 'text-moon-accent')
     expect(screen.getByText('工具模型')).toBeInTheDocument()
     expect(sidebarShell).toHaveClass(
-      'border-moon-sidebar-border',
-      'bg-moon-sidebar-bg',
+      'border-moon-border-subtle',
+      'bg-moon-surface-1',
       'py-moon-option-gap'
     )
     expect(
@@ -184,14 +180,12 @@ describe('SettingsPage', () => {
     expect(activeThemeButton).toHaveAttribute('aria-pressed', 'true')
     expect(activeThemeButton).toHaveClass(
       'border-moon-button-secondary-border',
-      'bg-moon-button-secondary-bg',
       'text-moon-text-primary'
     )
     expect(activeThemeButton).not.toHaveClass(
-      'border-moon-menu-item-border-hover',
-      'bg-moon-menu-item-bg-hover',
+      'bg-moon-button-ghost-bg-hover',
       'text-moon-accent',
-      'shadow-moon-menu-hover'
+      'shadow-moon-ring'
     )
 
     const previewColorValues = (preview: HTMLElement): string[] =>

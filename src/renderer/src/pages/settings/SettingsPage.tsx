@@ -62,7 +62,7 @@ export function SettingsPage(): React.JSX.Element {
   return (
     <div
       data-testid="settings-shell-surface"
-      className="flex h-full min-h-0 w-full overflow-hidden text-moon-text-primary shadow-moon-shell"
+      className="flex h-full min-h-0 w-full overflow-hidden text-moon-text-primary shadow-moon-ring"
     >
       <SettingsSidebar
         activeSection={activeSection}
@@ -80,7 +80,7 @@ export function SettingsPage(): React.JSX.Element {
           <SettingsContent activeSection={activeSection} />
         </div>
 
-        <footer className="flex shrink-0 items-center justify-between border-t border-moon-sidebar-border px-moon-panel py-moon-lg">
+        <footer className="flex shrink-0 items-center justify-between border-t border-moon-border-subtle px-moon-panel py-moon-lg">
           <p className="text-moon-body leading-moon-body text-moon-text-secondary">
             所有更改已保存
           </p>

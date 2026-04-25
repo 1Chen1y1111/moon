@@ -71,7 +71,7 @@ export function UserInterfaceSettingsSection(): React.JSX.Element {
                 className={
                   isActive
                     ? 'flex flex-col items-center rounded-moon-control border border-moon-button-secondary-border p-moon-option-gap text-moon-text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent'
-                    : 'flex flex-col items-center rounded-moon-control border border-moon-button-secondary-border p-moon-option-gap text-moon-text-primary transition-colors hover:border-moon-menu-item-border-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent'
+                    : 'flex flex-col items-center rounded-moon-control border border-moon-button-secondary-border p-moon-option-gap text-moon-text-primary transition-colors hover:border-moon-button-secondary-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent'
                 }
                 disabled={isSaving}
                 onClick={() => handleThemeChange(theme)}

@@ -1,7 +1,7 @@
 @layer base {
   * {
     scrollbar-width: thin;
-    scrollbar-color: var(--moon-scrollbar-thumb) var(--moon-scrollbar-track);
+    scrollbar-color: var(--moon-border-strong) var(--moon-surface-3);
   }
 
   *::-webkit-scrollbar {
@@ -10,30 +10,30 @@
   }
 
   *::-webkit-scrollbar-track {
-    background: var(--moon-scrollbar-track);
+    background: var(--moon-surface-3);
   }
 
   *::-webkit-scrollbar-thumb {
-    background: var(--moon-scrollbar-thumb);
+    background: var(--moon-border-strong);
     border: 4px solid transparent;
     border-radius: 999px;
     background-clip: content-box;
   }
 
   *::-webkit-scrollbar-thumb:hover {
-    background: var(--moon-scrollbar-thumb-hover);
+    background: var(--moon-text-muted);
     background-clip: content-box;
   }
 
   *::-webkit-scrollbar-corner {
-    background: var(--moon-scrollbar-track);
+    background: var(--moon-surface-3);
   }
 
   *::-webkit-scrollbar-button {
     display: block;
     width: 14px;
     height: 14px;
-    background-color: var(--moon-scrollbar-button-bg);
+    background-color: var(--moon-bg-canvas);
     background-position: center;
     background-repeat: no-repeat;
     background-size:
@@ -46,15 +46,15 @@
       linear-gradient(
         135deg,
         transparent calc(50% - 0.75px),
-        var(--moon-scrollbar-button-icon) calc(50% - 0.75px),
-        var(--moon-scrollbar-button-icon) calc(50% + 0.75px),
+        var(--moon-text-muted) calc(50% - 0.75px),
+        var(--moon-text-muted) calc(50% + 0.75px),
         transparent calc(50% + 0.75px)
       ),
       linear-gradient(
         45deg,
         transparent calc(50% - 0.75px),
-        var(--moon-scrollbar-button-icon) calc(50% - 0.75px),
-        var(--moon-scrollbar-button-icon) calc(50% + 0.75px),
+        var(--moon-text-muted) calc(50% - 0.75px),
+        var(--moon-text-muted) calc(50% + 0.75px),
         transparent calc(50% + 0.75px)
       );
     background-position:
@@ -67,15 +67,15 @@
       linear-gradient(
         45deg,
         transparent calc(50% - 0.75px),
-        var(--moon-scrollbar-button-icon) calc(50% - 0.75px),
-        var(--moon-scrollbar-button-icon) calc(50% + 0.75px),
+        var(--moon-text-muted) calc(50% - 0.75px),
+        var(--moon-text-muted) calc(50% + 0.75px),
         transparent calc(50% + 0.75px)
       ),
       linear-gradient(
         135deg,
         transparent calc(50% - 0.75px),
-        var(--moon-scrollbar-button-icon) calc(50% - 0.75px),
-        var(--moon-scrollbar-button-icon) calc(50% + 0.75px),
+        var(--moon-text-muted) calc(50% - 0.75px),
+        var(--moon-text-muted) calc(50% + 0.75px),
         transparent calc(50% + 0.75px)
       );
     background-position:
@@ -88,15 +88,15 @@
       linear-gradient(
         45deg,
         transparent calc(50% - 0.75px),
-        var(--moon-scrollbar-button-icon) calc(50% - 0.75px),
-        var(--moon-scrollbar-button-icon) calc(50% + 0.75px),
+        var(--moon-text-muted) calc(50% - 0.75px),
+        var(--moon-text-muted) calc(50% + 0.75px),
         transparent calc(50% + 0.75px)
       ),
       linear-gradient(
         135deg,
         transparent calc(50% - 0.75px),
-        var(--moon-scrollbar-button-icon) calc(50% - 0.75px),
-        var(--moon-scrollbar-button-icon) calc(50% + 0.75px),
+        var(--moon-text-muted) calc(50% - 0.75px),
+        var(--moon-text-muted) calc(50% + 0.75px),
         transparent calc(50% + 0.75px)
       );
     background-position:
@@ -109,15 +109,15 @@
       linear-gradient(
         135deg,
         transparent calc(50% - 0.75px),
-        var(--moon-scrollbar-button-icon) calc(50% - 0.75px),
-        var(--moon-scrollbar-button-icon) calc(50% + 0.75px),
+        var(--moon-text-muted) calc(50% - 0.75px),
+        var(--moon-text-muted) calc(50% + 0.75px),
         transparent calc(50% + 0.75px)
       ),
       linear-gradient(
         45deg,
         transparent calc(50% - 0.75px),
-        var(--moon-scrollbar-button-icon) calc(50% - 0.75px),
-        var(--moon-scrollbar-button-icon) calc(50% + 0.75px),
+        var(--moon-text-muted) calc(50% - 0.75px),
+        var(--moon-text-muted) calc(50% + 0.75px),
         transparent calc(50% + 0.75px)
       );
     background-position:

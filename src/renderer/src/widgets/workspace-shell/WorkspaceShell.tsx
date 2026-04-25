@@ -2,7 +2,7 @@ import { WorkspaceSidebar } from './WorkspaceSidebar'
 
 export function WorkspaceShell({ children }: { children: React.ReactNode }): React.JSX.Element {
   return (
-    <div className="flex min-h-screen bg-moon-app-bg text-moon-text-primary">
+    <div className="flex min-h-screen bg-moon-bg-canvas text-moon-text-primary">
       <WorkspaceSidebar />
       <main className="flex min-h-screen min-w-0 flex-1 flex-col overflow-hidden">
         <div

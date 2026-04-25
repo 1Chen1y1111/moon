@@ -81,7 +81,7 @@ export function GeneralSettingsSection(): React.JSX.Element {
           <p>使用已配置的 ACP provider，例如 Codex CLI 或 Gemini CLI。</p>
         </div>
 
-        <div className="mt-moon-card-stack rounded-moon-card border border-moon-panel-border bg-moon-sidebar-bg px-moon-lg py-moon-card">
+        <div className="mt-moon-card-stack rounded-moon-card border border-moon-border-default bg-moon-surface-1 px-moon-lg py-moon-card">
           <div className="flex items-center justify-between gap-moon-lg">
             <p className="text-moon-body leading-moon-body text-moon-text-secondary">
               还没有配置 ACP provider。

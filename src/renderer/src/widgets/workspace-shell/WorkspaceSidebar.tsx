@@ -52,7 +52,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
       aria-label="Workspace navigation"
       className="flex w-moon-workspace-sidebar shrink-0 p-moon-md"
     >
-      <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-moon-panel border border-moon-sidebar-border bg-moon-sidebar-bg">
+      <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-moon-panel border border-moon-border-subtle bg-moon-surface-1">
         <WorkspaceChrome />
         <div
           role="group"
@@ -76,10 +76,10 @@ export function WorkspaceSidebar(): React.JSX.Element {
         <div className="flex items-center justify-between px-moon-nav-x pb-moon-option-gap">
           <div className="relative" onMouseEnter={openMoreActions} onMouseLeave={closeMoreActions}>
             {isMoreActionsOpen ? (
-              <div className="absolute bottom-full left-0 mb-moon-md w-moon-menu-width rounded-moon-control border border-moon-panel-border bg-moon-menu-bg p-moon-sm shadow-moon-menu-panel">
+              <div className="absolute bottom-full left-0 mb-moon-md w-[12rem] rounded-moon-control border border-moon-border-default bg-moon-surface-1 p-moon-sm shadow-moon-whisper">
                 <button
                   type="button"
-                  className="flex w-full items-center gap-moon-md rounded-moon-control px-moon-nav-x py-moon-md text-left text-moon-caption leading-moon-caption text-moon-text-primary transition-colors hover:bg-moon-menu-item-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
+                  className="flex w-full items-center gap-moon-md rounded-moon-control px-moon-nav-x py-moon-md text-left text-moon-caption leading-moon-caption text-moon-text-primary transition-colors hover:bg-moon-button-ghost-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
                 >
                   <SlidersHorizontal
                     aria-hidden="true"
@@ -88,12 +88,12 @@ export function WorkspaceSidebar(): React.JSX.Element {
                   <span>管理提示词应用</span>
                 </button>
 
-                <div className="my-moon-sm h-moon-hairline bg-moon-sidebar-border" />
+                <div className="my-moon-sm h-moon-hairline bg-moon-border-subtle" />
 
                 <div className="space-y-moon-sm">
                   <button
                     type="button"
-                    className="flex w-full items-center gap-moon-md rounded-moon-control px-moon-nav-x py-moon-md text-left text-moon-caption leading-moon-caption text-moon-text-primary transition-colors hover:bg-moon-menu-item-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
+                    className="flex w-full items-center gap-moon-md rounded-moon-control px-moon-nav-x py-moon-md text-left text-moon-caption leading-moon-caption text-moon-text-primary transition-colors hover:bg-moon-button-ghost-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
                   >
                     <ImageIcon
                       aria-hidden="true"
@@ -103,7 +103,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
                   </button>
                   <button
                     type="button"
-                    className="flex w-full items-center gap-moon-md rounded-moon-control px-moon-nav-x py-moon-md text-left text-moon-caption leading-moon-caption text-moon-text-primary transition-colors hover:bg-moon-menu-item-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
+                    className="flex w-full items-center gap-moon-md rounded-moon-control px-moon-nav-x py-moon-md text-left text-moon-caption leading-moon-caption text-moon-text-primary transition-colors hover:bg-moon-button-ghost-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
                   >
                     <Music4
                       aria-hidden="true"
@@ -113,7 +113,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
                   </button>
                   <button
                     type="button"
-                    className="flex w-full items-center gap-moon-md rounded-moon-control px-moon-nav-x py-moon-md text-left text-moon-caption leading-moon-caption text-moon-text-primary transition-colors hover:bg-moon-menu-item-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
+                    className="flex w-full items-center gap-moon-md rounded-moon-control px-moon-nav-x py-moon-md text-left text-moon-caption leading-moon-caption text-moon-text-primary transition-colors hover:bg-moon-button-ghost-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
                     onClick={handleOpenSettings}
                   >
                     <Settings
@@ -124,11 +124,11 @@ export function WorkspaceSidebar(): React.JSX.Element {
                   </button>
                 </div>
 
-                <div className="my-moon-sm h-moon-hairline bg-moon-sidebar-border" />
+                <div className="my-moon-sm h-moon-hairline bg-moon-border-subtle" />
 
                 <button
                   type="button"
-                  className="flex w-full items-center gap-moon-md rounded-moon-control px-moon-nav-x py-moon-md text-left text-moon-caption leading-moon-caption text-moon-text-primary transition-colors hover:bg-moon-menu-item-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
+                  className="flex w-full items-center gap-moon-md rounded-moon-control px-moon-nav-x py-moon-md text-left text-moon-caption leading-moon-caption text-moon-text-primary transition-colors hover:bg-moon-button-ghost-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
                 >
                   <MessageSquareMore
                     aria-hidden="true"
@@ -142,7 +142,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
             <button
               type="button"
               aria-label="更多操作"
-              className="flex size-moon-window-button-y items-center justify-center rounded-moon-control bg-transparent text-moon-text-primary transition-[background-color,color,box-shadow] hover:bg-moon-menu-item-bg-hover hover:shadow-moon-menu-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
+              className="flex size-moon-window-button-y items-center justify-center rounded-moon-control bg-transparent text-moon-text-primary transition-[background-color,color,box-shadow] hover:bg-moon-button-ghost-bg-hover hover:shadow-moon-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
             >
               <Ellipsis aria-hidden="true" className="size-moon-icon" />
             </button>
@@ -150,7 +150,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
 
           <button
             type="button"
-            className="inline-flex h-moon-compact-control items-center gap-moon-md rounded-moon-compact border border-moon-button-update-border bg-moon-button-update-bg px-moon-md text-moon-label leading-moon-label text-moon-button-update-fg transition-[background-color,border-color] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
+            className="inline-flex h-moon-compact-control items-center gap-moon-md rounded-moon-compact border border-moon-button-secondary-border bg-moon-button-secondary-bg px-moon-md text-moon-label leading-moon-label text-moon-text-primary transition-[background-color,border-color,color] dark:border-moon-accent-soft-border dark:bg-moon-accent-soft dark:text-moon-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
           >
             <CircleFadingArrowUp aria-hidden="true" className="size-moon-icon-xs" />
             更新

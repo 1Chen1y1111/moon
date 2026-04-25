@@ -16,7 +16,7 @@ export function PlaceholderSettingsSection({
       <p className="mt-moon-xl text-moon-body leading-moon-body text-moon-text-secondary">
         {section?.description ?? '该设置分类尚未配置描述。'}
       </p>
-      <div className="mt-moon-card-stack rounded-moon-card border border-dashed border-moon-panel-border bg-moon-sidebar-bg px-moon-lg py-moon-panel text-moon-body leading-moon-body text-moon-text-secondary">
+      <div className="mt-moon-card-stack rounded-moon-card border border-dashed border-moon-border-default bg-moon-surface-1 px-moon-lg py-moon-panel text-moon-body leading-moon-body text-moon-text-secondary">
         页面内容待补齐
       </div>
     </section>

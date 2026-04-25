@@ -37,12 +37,12 @@ describe('WorkspaceSidebar', () => {
     const sidebarShell = screen.getByRole('complementary', { name: 'Workspace navigation' })
 
     expect(sidebarShell).toBeInTheDocument()
-    expect(sidebarShell.firstElementChild).toHaveClass('border-moon-sidebar-border')
-    expect(sidebarShell.firstElementChild).not.toHaveClass('shadow-moon-shell')
+    expect(sidebarShell.firstElementChild).toHaveClass('border-moon-border-subtle')
+    expect(sidebarShell.firstElementChild).not.toHaveClass('shadow-moon-ring')
     expect(screen.getByTestId('window-chrome-collapse-trigger')).toBeInTheDocument()
     expect(screen.getByTestId('window-chrome-search-trigger')).toBeInTheDocument()
     expect(screen.getByTestId('window-chrome-compose-trigger')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '更新' })).not.toHaveClass('shadow-moon-menu-hover')
+    expect(screen.getByRole('button', { name: '更新' })).not.toHaveClass('shadow-moon-ring')
 
     const newChatButtons = screen.getAllByRole('button', { name: '新建聊天' })
 

@@ -39,7 +39,7 @@ export function ProviderSettingsCard({
     <div
       role="region"
       aria-label={`${providerLabels[provider]} provider settings`}
-      className="rounded-moon-card border border-moon-panel-border bg-moon-sidebar-bg p-moon-card"
+      className="rounded-moon-card border border-moon-border-default bg-moon-surface-1 p-moon-card"
     >
       <div className="flex items-start justify-between gap-moon-lg">
         <div>

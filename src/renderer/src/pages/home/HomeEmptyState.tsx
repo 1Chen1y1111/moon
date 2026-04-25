@@ -16,7 +16,7 @@ export function HomeEmptyState(): React.JSX.Element {
       className="flex min-h-full w-full flex-1 items-center justify-center px-moon-panel py-moon-section-gap text-moon-text-primary"
     >
       <div className="flex w-full max-w-moon-hero flex-col items-center gap-moon-card-stack text-center">
-        <div className="flex size-moon-brand-mark items-center justify-center overflow-hidden rounded-moon-card shadow-moon-menu-hover">
+        <div className="flex size-moon-brand-mark items-center justify-center overflow-hidden rounded-moon-card shadow-moon-ring">
           <img src={LogoIcon} alt="" aria-hidden="true" className="h-full w-full object-contain" />
         </div>
 
