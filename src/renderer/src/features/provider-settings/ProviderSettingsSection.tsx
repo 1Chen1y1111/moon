@@ -409,7 +409,7 @@ export function ProviderSettingsSection({
                     <span
                       aria-label={isConfigured ? '已配置' : '未配置'}
                       className={cn(
-                        'size-moon-icon-xs shrink-0 rounded-full',
+                        'size-moon-icon-xs shrink-0 rounded-moon-pill',
                         isConfigured ? 'bg-moon-accent' : 'bg-moon-text-muted'
                       )}
                     />

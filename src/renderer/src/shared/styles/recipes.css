@@ -24,7 +24,8 @@
   }
 
   .moon-button-primary,
-  .moon-button-secondary {
+  .moon-button-secondary,
+  .moon-button-ghost {
     align-items: center;
     border: 0;
     border-radius: var(--radius-moon-control);
@@ -63,6 +64,15 @@
     box-shadow: var(--moon-shadow-ring-deep);
   }
 
+  .moon-button-ghost {
+    background: transparent;
+    color: var(--moon-text-primary);
+  }
+
+  .moon-button-ghost:hover {
+    background: var(--moon-button-ghost-bg-hover);
+  }
+
   .moon-tag {
     background: var(--moon-tag-bg-subtle);
     border-radius: var(--radius-moon-tag);
@@ -98,13 +108,13 @@
     align-items: center;
     display: grid;
     gap: var(--spacing-moon-lg);
-    grid-template-columns: minmax(18rem, 0.85fr) auto;
+    grid-template-columns: minmax(15rem, 0.85fr) auto;
   }
 
   .moon-provider-layout {
     display: grid;
     gap: var(--spacing-moon-xl);
-    grid-template-columns: minmax(18rem, 0.8fr) minmax(26rem, 1.65fr);
+    grid-template-columns: 15rem minmax(26rem, 1fr);
   }
 
   .moon-provider-list-scroll {
@@ -137,15 +147,12 @@
   }
 
   .moon-section-title {
-    border-left: 2.5pt solid var(--moon-section-title-border);
-    border-radius: var(--radius-moon-section-title);
     color: var(--moon-text-primary);
     font-family: var(--moon-serif);
     font-size: var(--text-moon-section-title);
     font-weight: var(--font-weight-moon-title);
     line-height: var(--leading-moon-h2);
     margin: var(--spacing-moon-xl) 0 var(--spacing-moon-md);
-    padding-left: var(--spacing-moon-md);
   }
 
   .moon-metrics {
@@ -219,8 +226,8 @@
 
   .moon-code-card {
     background: var(--moon-code-bg);
-    border: 1px solid var(--moon-code-border);
-    border-radius: var(--radius-moon-card);
+    border: 0.5pt solid var(--moon-code-border);
+    border-radius: var(--radius-moon-compact);
     overflow: hidden;
     padding: var(--spacing-moon-lg) var(--spacing-moon-xl);
   }
@@ -249,7 +256,7 @@
   }
 
   .moon-code-card .line-nums {
-    border-right: 1px solid var(--moon-border-subtle);
+    border-right: 0.5pt solid var(--moon-border-subtle);
     color: var(--moon-text-muted);
     font-family: var(--moon-mono);
     font-size: var(--text-moon-body);

@@ -7,7 +7,7 @@ type MacWindowControlsProps = {
 }
 
 const trafficLightButtonClassName =
-  'group relative flex size-moon-traffic-light items-center justify-center rounded-full transition-transform hover:scale-110 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-ring-subtle'
+  'group relative flex size-moon-traffic-light items-center justify-center rounded-moon-pill transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-ring-subtle'
 
 const trafficLightGlyphClassName =
   'pointer-events-none absolute inset-0 size-full p-moon-traffic-light-icon opacity-0 transition-opacity group-hover:opacity-70'

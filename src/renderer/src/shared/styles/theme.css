@@ -68,9 +68,9 @@
   --text-moon-body: 0.8125rem;
   --text-moon-body-dense: 0.75rem;
   --text-moon-caption: 0.75rem;
-  --text-moon-label: 0.6875rem;
+  --text-moon-label: 0.666875rem;
   --text-moon-tiny: 0.625rem;
-  --text-moon-section-title: 1.166875rem;
+  --text-moon-section-title: 1.25rem;
   --text-moon-button-sm: var(--text-moon-body-dense);
 
   --leading-moon-display: 1.1;
@@ -96,17 +96,17 @@
   --tracking-moon-label: 0.01875rem;
   --tracking-moon-overline: 0.03125rem;
 
-  --spacing-moon-xs: 0.1875rem;
+  --spacing-moon-xs: 0.25rem;
   --spacing-moon-hairline: 1px;
-  --spacing-moon-sm: 0.25rem;
-  --spacing-moon-tight: 0.375rem;
-  --spacing-moon-md: 0.5rem;
-  --spacing-moon-control-x: 0.625rem;
-  --spacing-moon-lg: 1rem;
-  --spacing-moon-xl: 1.5rem;
-  --spacing-moon-card-stack: 2rem;
-  --spacing-moon-2xl: 2.5rem;
-  --spacing-moon-3xl: 5rem;
+  --spacing-moon-sm: 0.375rem;
+  --spacing-moon-tight: 0.5rem;
+  --spacing-moon-md: 0.75rem;
+  --spacing-moon-control-x: 0.75rem;
+  --spacing-moon-lg: 1.5rem;
+  --spacing-moon-xl: 2.5rem;
+  --spacing-moon-card-stack: 4rem;
+  --spacing-moon-2xl: 4rem;
+  --spacing-moon-3xl: 8rem;
 
   --container-moon-hero: 42rem;
   --container-moon-actions: 22.5rem;
@@ -119,16 +119,16 @@
   --spacing-moon-control: 2.5rem;
   --spacing-moon-field: 2.75rem;
   --spacing-moon-chrome: 3.75rem;
-  --spacing-moon-card: 1.25rem;
+  --spacing-moon-card: 1.5rem;
   --spacing-moon-panel: 1.5rem;
-  --spacing-moon-section-gap: 2.5rem;
-  --spacing-moon-section-header-gap: 2.25rem;
-  --spacing-moon-eyebrow-rule-gap: 0.875rem;
+  --spacing-moon-section-gap: 4rem;
+  --spacing-moon-section-header-gap: 2.5rem;
+  --spacing-moon-eyebrow-rule-gap: 0.75rem;
   --spacing-moon-eyebrow-dot: 0.375rem;
-  --spacing-moon-option-stack: 1rem;
+  --spacing-moon-option-stack: 1.5rem;
   --spacing-moon-option-gap: 0.75rem;
   --spacing-moon-nav-x: 0.75rem;
-  --spacing-moon-nav-y: 0.625rem;
+  --spacing-moon-nav-y: 0.75rem;
   --spacing-moon-icon: 1rem;
   --spacing-moon-icon-sm: 0.875rem;
   --spacing-moon-icon-xs: 0.75rem;
@@ -153,15 +153,16 @@
   --shadow-moon-whisper: var(--moon-shadow-whisper);
   --shadow-moon-accent: var(--moon-shadow-accent);
 
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: 0.333rem;
+  --radius-md: 0.5rem;
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-xl: 1rem;
   --radius-moon-control: var(--radius);
   --radius-moon-card: var(--radius);
-  --radius-moon-compact: min(var(--radius-md), 0.625rem);
-  --radius-moon-tag: 0.25rem;
-  --radius-moon-section-title: 1.5pt;
-  --radius-moon-featured: 1rem;
-  --radius-moon-panel: calc(var(--radius) + 0.25rem);
+  --radius-moon-compact: 0.5rem;
+  --radius-moon-tag: 0.333rem;
+  --radius-moon-section-title: 0;
+  --radius-moon-featured: 1.333rem;
+  --radius-moon-panel: 1rem;
+  --radius-moon-pill: 999px;
 }

@@ -140,7 +140,7 @@
   --moon-shadow-whisper: 0 4px 24px rgb(20 20 19 / 0.05);
   --moon-shadow-accent: 0 0 0 1px var(--moon-brand);
 
-  --radius: 0.5rem;
+  --radius: 0.666875rem;
   --background: var(--moon-bg-canvas);
   --foreground: var(--moon-text-primary);
   --card: var(--moon-surface-2);
