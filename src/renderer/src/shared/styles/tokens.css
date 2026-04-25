@@ -1,12 +1,20 @@
 :root {
-  --font-geist-sans:
-    'Inter', 'TsangerJinKai02', -apple-system, BlinkMacSystemFont, 'Source Han Sans SC',
-    'Noto Sans CJK SC', 'PingFang SC', 'Microsoft YaHei', Arial, sans-serif;
-  --font-geist-mono:
-    'JetBrains Mono', 'Fira Code', 'SF Mono', Consolas, Monaco, 'Source Han Mono', monospace;
-  --moon-serif:
+  --moon-font-ui:
+    'Inter', -apple-system, BlinkMacSystemFont, 'Source Han Sans SC', 'Noto Sans CJK SC',
+    'PingFang SC', 'Microsoft YaHei', Arial, sans-serif;
+  --moon-serif-en: Charter, Georgia, Palatino, 'Times New Roman', serif;
+  --moon-serif-cjk:
     'TsangerJinKai02', 'Source Han Serif SC', 'Noto Serif CJK SC', 'Songti SC', 'STSong', Georgia,
     serif;
+  --moon-serif-ja:
+    'YuMincho', 'Yu Mincho', 'Hiragino Mincho ProN', 'Noto Serif CJK JP', 'Source Han Serif JP',
+    'TsangerJinKai02', Georgia, serif;
+  --moon-serif: var(--moon-serif-cjk);
+  --moon-mono:
+    'JetBrains Mono', 'SF Mono', 'Fira Code', Consolas, Monaco, 'TsangerJinKai02',
+    'Source Han Serif SC', 'Noto Serif CJK SC', monospace;
+  --font-geist-sans: var(--moon-font-ui);
+  --font-geist-mono: var(--moon-mono);
 
   /* Moon palette */
   --moon-brand: #1b365d;
@@ -19,17 +27,17 @@
   --moon-near-black: #141413;
   --moon-dark-warm: #3d3d3a;
   --moon-charcoal: #4d4c48;
-  --moon-olive: #5e5d59;
-  --moon-stone: #87867f;
+  --moon-olive: #504e49;
+  --moon-stone: #6b6a64;
   --moon-warm-silver: #b0aea5;
-  --moon-border-cream: #e8e5da;
-  --moon-border-warm: #e0ddd2;
+  --moon-border-cream: #e8e6dc;
+  --moon-border-warm: #e8e6dc;
   --moon-border-soft: #e5e3d8;
   --moon-border-dark: #30302e;
   --moon-ring-warm: #d1cfc5;
   --moon-ring-deep: #c2c0b6;
   --moon-error: #b53333;
-  --moon-focus: #3898ec;
+  --moon-focus: var(--moon-brand);
 
   /* Primitive palette */
   --moon-neutral-0: var(--moon-near-black);
@@ -49,10 +57,10 @@
   --moon-blue-800: #e4ecf5;
 
   --moon-red-500: var(--moon-error);
-  --moon-yellow-500: #8a6a2d;
+  --moon-yellow-500: var(--moon-dark-warm);
   --moon-green-500: var(--moon-olive);
   --moon-purple-500: var(--moon-brand);
-  --moon-orange-500: #9a613d;
+  --moon-orange-500: var(--moon-dark-warm);
   --moon-cyan-500: var(--moon-brand-light);
 
   /* Legacy palette aliases */
@@ -155,7 +163,7 @@
   --moon-slide-height: 67.5rem;
   --moon-slide-pad: 5rem;
   --moon-page-bg: var(--moon-parchment);
-  --moon-page-margin-resume: 9mm 13mm;
+  --moon-page-margin-resume: 11mm 13mm 11mm 13mm;
   --moon-page-margin-one-pager: 15mm 18mm;
   --moon-page-margin-long-doc: 20mm 22mm 22mm;
   --moon-page-margin-letter: 25mm;
@@ -193,10 +201,11 @@
 
   --moon-ring-subtle: var(--moon-ring-warm);
 
+  /* OS chrome exception: keep system traffic-light colors scoped to window controls. */
   --moon-window-control-close: #b53333;
   --moon-window-control-minimize: #8a6a2d;
   --moon-window-control-maximize: #5e5d59;
-  --moon-window-control-glyph: #ffffff;
+  --moon-window-control-glyph: var(--moon-ivory);
   --moon-scrollbar-track: var(--moon-warm-sand);
   --moon-scrollbar-thumb: var(--moon-warm-silver);
   --moon-scrollbar-thumb-hover: var(--moon-stone);

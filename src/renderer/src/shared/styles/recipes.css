@@ -23,16 +23,58 @@
     padding: var(--moon-card-padding-block) var(--moon-card-padding-inline);
   }
 
+  .moon-button-primary,
+  .moon-button-secondary {
+    align-items: center;
+    border: 0;
+    border-radius: var(--radius-moon-control);
+    cursor: pointer;
+    display: inline-flex;
+    font-family: var(--moon-font-ui);
+    font-size: var(--text-moon-body);
+    font-weight: var(--font-weight-moon-title);
+    justify-content: center;
+    line-height: var(--leading-moon-body);
+    padding: var(--spacing-moon-md) var(--spacing-moon-lg);
+    transition:
+      background-color 0.2s,
+      box-shadow 0.2s,
+      color 0.2s;
+  }
+
+  .moon-button-primary {
+    background: var(--moon-button-primary-bg);
+    box-shadow: var(--moon-shadow-accent);
+    color: var(--moon-button-primary-fg);
+  }
+
+  .moon-button-primary:hover {
+    background: var(--moon-button-primary-bg-hover);
+  }
+
+  .moon-button-secondary {
+    background: var(--moon-button-secondary-bg);
+    box-shadow: var(--moon-shadow-ring);
+    color: var(--moon-text-primary);
+  }
+
+  .moon-button-secondary:hover {
+    background: var(--moon-button-secondary-bg-hover);
+    box-shadow: var(--moon-shadow-ring-deep);
+  }
+
   .moon-tag {
     background: var(--moon-tag-bg-subtle);
     border-radius: var(--radius-moon-tag);
     color: var(--moon-tag-fg);
     display: inline-flex;
+    font-family: var(--moon-font-ui);
     font-size: var(--text-moon-label);
-    font-weight: var(--font-weight-moon-title);
+    font-weight: var(--font-weight-moon-label);
     letter-spacing: var(--tracking-moon-label);
     line-height: var(--leading-moon-label);
     padding: var(--spacing-moon-xs) var(--spacing-moon-md);
+    text-transform: uppercase;
   }
 
   .moon-tag-standard {
@@ -64,7 +106,7 @@
     border: 0.5pt solid var(--moon-code-border);
     border-radius: var(--radius-moon-compact);
     color: var(--moon-text-primary);
-    font-family: var(--font-geist-mono);
+    font-family: var(--moon-mono);
     font-size: var(--text-moon-caption);
     line-height: var(--leading-moon-body);
     padding: var(--spacing-moon-md) var(--spacing-moon-lg);
@@ -75,7 +117,7 @@
     border-radius: var(--radius-moon-section-title);
     color: var(--moon-text-primary);
     font-family: var(--moon-serif);
-    font-size: var(--text-moon-h2);
+    font-size: var(--text-moon-section-title);
     font-weight: var(--font-weight-moon-title);
     line-height: var(--leading-moon-h2);
     margin: var(--spacing-moon-xl) 0 var(--spacing-moon-md);
@@ -117,7 +159,7 @@
     align-items: center;
     color: var(--moon-text-muted);
     display: flex;
-    font-family: var(--font-geist-sans);
+    font-family: var(--moon-font-ui);
     font-size: var(--text-moon-caption);
     font-weight: var(--font-weight-moon-title);
     gap: var(--spacing-moon-md);
@@ -161,7 +203,7 @@
 
   .moon-code-card pre {
     color: var(--moon-text-primary);
-    font-family: var(--font-geist-mono);
+    font-family: var(--moon-mono);
     font-size: var(--text-moon-body);
     line-height: var(--leading-moon-body);
     margin: 0;
@@ -185,7 +227,7 @@
   .moon-code-card .line-nums {
     border-right: 1px solid var(--moon-border-subtle);
     color: var(--moon-text-muted);
-    font-family: var(--font-geist-mono);
+    font-family: var(--moon-mono);
     font-size: var(--text-moon-body);
     line-height: var(--leading-moon-body);
     padding-right: var(--spacing-moon-md);
@@ -193,9 +235,73 @@
     user-select: none;
   }
 
+  .moon-table {
+    border-collapse: collapse;
+    font-size: var(--text-moon-body-dense);
+    line-height: var(--leading-moon-body-dense);
+    margin: var(--spacing-moon-lg) 0;
+    width: 100%;
+  }
+
+  .moon-table th {
+    border-bottom: 1pt solid var(--moon-border-default);
+    color: var(--moon-text-secondary);
+    font-weight: var(--font-weight-moon-title);
+    padding: var(--spacing-moon-md) var(--spacing-moon-lg);
+    text-align: left;
+  }
+
+  .moon-table td {
+    border-bottom: 0.3pt solid var(--moon-border-soft);
+    padding: var(--spacing-moon-md) var(--spacing-moon-lg);
+    vertical-align: top;
+  }
+
+  .moon-table.compact {
+    font-size: var(--text-moon-caption);
+  }
+
+  .moon-table.compact th,
+  .moon-table.compact td {
+    padding: var(--spacing-moon-sm) var(--spacing-moon-md);
+  }
+
+  .moon-table.financial th:not(:first-child),
+  .moon-table.financial td:not(:first-child) {
+    font-variant-numeric: tabular-nums;
+    text-align: right;
+  }
+
+  .moon-table.striped tbody tr:nth-child(even) {
+    background: var(--moon-bg-elevated);
+  }
+
+  .moon-table tbody tr.total td {
+    border-top: 1pt solid var(--moon-accent-primary);
+    font-weight: var(--font-weight-moon-title);
+  }
+
+  .moon-list-dash {
+    list-style: none;
+    padding-left: 0;
+  }
+
+  .moon-list-dash li {
+    padding-left: var(--spacing-moon-xl);
+    position: relative;
+  }
+
+  .moon-list-dash li::before {
+    color: var(--moon-accent-primary);
+    content: '\2013';
+    left: 0;
+    position: absolute;
+  }
+
   .moon-slide {
     height: var(--moon-slide-height);
     padding: var(--moon-slide-pad);
+    position: relative;
     width: var(--moon-slide-width);
   }
 
@@ -208,5 +314,4 @@
     position: absolute;
     right: var(--moon-slide-pad);
   }
-
 }

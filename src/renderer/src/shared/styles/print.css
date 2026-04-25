@@ -7,10 +7,15 @@
 @layer components {
   .moon-print-avoid,
   .moon-card,
+  .moon-metrics,
   .moon-metric,
   .moon-quote,
   .moon-code-block,
   .moon-code-card,
+  .moon-callout,
+  .moon-project-item,
+  .moon-table,
+  table,
   figure {
     break-inside: avoid;
   }

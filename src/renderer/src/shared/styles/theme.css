@@ -1,9 +1,13 @@
 @custom-variant dark (&:is(.dark *));
 
 @theme {
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--moon-font-ui);
+  --font-mono: var(--moon-mono);
+  --font-moon-ui: var(--moon-font-ui);
   --font-moon-serif: var(--moon-serif);
+  --font-moon-serif-en: var(--moon-serif-en);
+  --font-moon-serif-cjk: var(--moon-serif-cjk);
+  --font-moon-serif-ja: var(--moon-serif-ja);
 
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -75,7 +79,7 @@
   --text-moon-caption: 0.75rem;
   --text-moon-label: 0.6875rem;
   --text-moon-tiny: 0.625rem;
-  --text-moon-section-title: var(--text-moon-h1-section);
+  --text-moon-section-title: 1.166875rem;
   --text-moon-button-sm: var(--text-moon-body-dense);
 
   --leading-moon-display: 1.1;
@@ -95,6 +99,7 @@
   --font-weight-moon-label: 600;
 
   --tracking-moon-body: 0;
+  --tracking-moon-body-cjk: 0.015625rem;
   --tracking-moon-body-subtle: 0.00625rem;
   --tracking-moon-title: 0.03125rem;
   --tracking-moon-label: 0.01875rem;
