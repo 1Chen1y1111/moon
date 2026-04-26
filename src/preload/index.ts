@@ -17,7 +17,15 @@ function invokeIpcChannel<TChannel extends keyof AppIpcContractMap>(
 const api: MoonApi = {
   settings: {
     get: () => invokeIpcChannel(ipcChannels.settings.get),
+    createCustomProvider: (input) =>
+      invokeIpcChannel(ipcChannels.settings.createCustomProvider, input),
+    createCustomAcpProvider: (input) =>
+      invokeIpcChannel(ipcChannels.settings.createCustomAcpProvider, input),
     saveProvider: (input) => invokeIpcChannel(ipcChannels.settings.saveProvider, input),
+    deleteProvider: (input) => invokeIpcChannel(ipcChannels.settings.deleteProvider, input),
+    fetchProviderModels: (input) =>
+      invokeIpcChannel(ipcChannels.settings.fetchProviderModels, input),
+    testProvider: (input) => invokeIpcChannel(ipcChannels.settings.testProvider, input),
     saveAppearance: (input) => invokeIpcChannel(ipcChannels.settings.saveAppearance, input),
     onChange: (listener) => {
       const channel = ipcChannels.settings.onChange

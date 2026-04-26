@@ -1,8 +1,9 @@
-import { app, BrowserWindow } from 'electron'
+import { app } from 'electron'
 import { join } from 'node:path'
 
 import { electronApp, optimizer } from '@electron-toolkit/utils'
 
+import { registerAppLifecycle } from './bootstrap/app-lifecycle'
 import { setApplicationIcon } from './bootstrap/app-icon'
 import { openSettingsWindow } from './bootstrap/create-settings-window'
 import { createMainWindow } from './bootstrap/create-window'
@@ -11,10 +12,11 @@ import { bootstrapDatabase } from './db/bootstrap'
 import { createDatabaseConnection, type AppDatabaseConnection } from './db/connection'
 import { SettingsRepository } from './repositories/settings-repository'
 import { createSafeStorageSecretCodec } from './security/safe-storage-secret-codec'
+import { ProviderProxyServer } from './services/provider-proxy-server'
 import { SettingsService } from './services/settings-service'
 
 let databaseConnection: AppDatabaseConnection | null = null
-let isClosingDatabase = false
+let providerProxyServer: ProviderProxyServer | null = null
 
 function getMigrationsFolder(): string {
   return app.isPackaged ? join(process.resourcesPath, 'drizzle') : join(app.getAppPath(), 'drizzle')
@@ -31,6 +33,29 @@ async function closeDatabaseConnection(): Promise<void> {
   await connection.close()
 }
 
+async function closeApplicationResources(): Promise<void> {
+  const proxyServer = providerProxyServer
+
+  providerProxyServer = null
+
+  try {
+    await proxyServer?.stop()
+  } catch (error) {
+    console.error('Failed to stop provider proxy server', error)
+  }
+
+  try {
+    await closeDatabaseConnection()
+  } catch (error) {
+    console.error('Failed to close database connection', error)
+  }
+}
+
+registerAppLifecycle({
+  createMainWindow,
+  closeApplicationResources
+})
+
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
@@ -45,45 +70,17 @@ app.whenReady().then(async () => {
   databaseConnection = await createDatabaseConnection(join(app.getPath('userData'), 'moon-pglite'))
   await bootstrapDatabase(databaseConnection, getMigrationsFolder())
 
+  const settingsRepository = new SettingsRepository(
+    databaseConnection,
+    createSafeStorageSecretCodec()
+  )
+  providerProxyServer = new ProviderProxyServer(settingsRepository)
+  providerProxyServer.start()
+
   registerIpcHandlers({
     openSettingsWindow,
-    settingsService: new SettingsService(
-      new SettingsRepository(databaseConnection, createSafeStorageSecretCodec())
-    )
+    settingsService: new SettingsService(settingsRepository)
   })
 
   createMainWindow()
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createMainWindow()
-  })
-})
-
-app.on('window-all-closed', () => {
-  if (process.platform !== 'darwin') {
-    app.quit()
-  }
-})
-
-app.on('will-quit', (event) => {
-  if (isClosingDatabase) {
-    event.preventDefault()
-    return
-  }
-
-  if (databaseConnection === null) {
-    return
-  }
-
-  event.preventDefault()
-
-  isClosingDatabase = true
-  void closeDatabaseConnection()
-    .catch((error) => {
-      console.error('Failed to close database connection', error)
-    })
-    .finally(() => {
-      isClosingDatabase = false
-      app.quit()
-    })
 })

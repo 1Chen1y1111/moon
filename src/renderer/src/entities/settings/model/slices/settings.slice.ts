@@ -1,7 +1,14 @@
 import { createAsyncThunk, createSlice, type PayloadAction } from '@reduxjs/toolkit'
 
 import { createDefaultAppSettings, type AppSettings } from '@shared/domain/settings'
-import type { SaveAppearanceInput, SaveProviderInput } from '@shared/domain/settings-validation'
+import type {
+  CreateCustomAcpProviderInput,
+  CreateCustomProviderInput,
+  DeleteProviderInput,
+  ProviderConnectionInput,
+  SaveAppearanceInput,
+  SaveProviderInput
+} from '@shared/domain/settings-validation'
 
 import type { SettingsSectionId, SettingsState } from '../settings.types'
 
@@ -25,9 +32,33 @@ export const loadAppSettings = createAsyncThunk<AppSettings>('settings/loadAppSe
   window.api.settings.get()
 )
 
+export const createCustomProviderSettings = createAsyncThunk<
+  AppSettings,
+  CreateCustomProviderInput
+>('settings/createCustomProviderSettings', (input) =>
+  window.api.settings.createCustomProvider(input)
+)
+
+export const createCustomAcpProviderSettings = createAsyncThunk<
+  AppSettings,
+  CreateCustomAcpProviderInput
+>('settings/createCustomAcpProviderSettings', (input) =>
+  window.api.settings.createCustomAcpProvider(input)
+)
+
 export const saveProviderSettings = createAsyncThunk<AppSettings, SaveProviderInput>(
   'settings/saveProviderSettings',
   (input) => window.api.settings.saveProvider(input)
+)
+
+export const deleteProviderSettings = createAsyncThunk<AppSettings, DeleteProviderInput>(
+  'settings/deleteProviderSettings',
+  (input) => window.api.settings.deleteProvider(input)
+)
+
+export const fetchProviderModelsSettings = createAsyncThunk<AppSettings, ProviderConnectionInput>(
+  'settings/fetchProviderModelsSettings',
+  (input) => window.api.settings.fetchProviderModels(input)
 )
 
 export const saveAppearanceSettings = createAsyncThunk<AppSettings, SaveAppearanceInput>(
@@ -60,6 +91,30 @@ const settingsSlice = createSlice({
         state.loadStatus = 'failed'
         state.error = getErrorMessage(action.error)
       })
+      .addCase(createCustomProviderSettings.pending, (state) => {
+        state.saveStatus = 'saving'
+        state.error = null
+      })
+      .addCase(createCustomProviderSettings.fulfilled, (state, action) => {
+        state.saveStatus = 'succeeded'
+        state.appSettings = action.payload
+      })
+      .addCase(createCustomProviderSettings.rejected, (state, action) => {
+        state.saveStatus = 'failed'
+        state.error = getErrorMessage(action.error)
+      })
+      .addCase(createCustomAcpProviderSettings.pending, (state) => {
+        state.saveStatus = 'saving'
+        state.error = null
+      })
+      .addCase(createCustomAcpProviderSettings.fulfilled, (state, action) => {
+        state.saveStatus = 'succeeded'
+        state.appSettings = action.payload
+      })
+      .addCase(createCustomAcpProviderSettings.rejected, (state, action) => {
+        state.saveStatus = 'failed'
+        state.error = getErrorMessage(action.error)
+      })
       .addCase(saveProviderSettings.pending, (state) => {
         state.saveStatus = 'saving'
         state.error = null
@@ -69,6 +124,30 @@ const settingsSlice = createSlice({
         state.appSettings = action.payload
       })
       .addCase(saveProviderSettings.rejected, (state, action) => {
+        state.saveStatus = 'failed'
+        state.error = getErrorMessage(action.error)
+      })
+      .addCase(deleteProviderSettings.pending, (state) => {
+        state.saveStatus = 'saving'
+        state.error = null
+      })
+      .addCase(deleteProviderSettings.fulfilled, (state, action) => {
+        state.saveStatus = 'succeeded'
+        state.appSettings = action.payload
+      })
+      .addCase(deleteProviderSettings.rejected, (state, action) => {
+        state.saveStatus = 'failed'
+        state.error = getErrorMessage(action.error)
+      })
+      .addCase(fetchProviderModelsSettings.pending, (state) => {
+        state.saveStatus = 'saving'
+        state.error = null
+      })
+      .addCase(fetchProviderModelsSettings.fulfilled, (state, action) => {
+        state.saveStatus = 'succeeded'
+        state.appSettings = action.payload
+      })
+      .addCase(fetchProviderModelsSettings.rejected, (state, action) => {
         state.saveStatus = 'failed'
         state.error = getErrorMessage(action.error)
       })

@@ -50,11 +50,17 @@ describe('SettingsService', () => {
     })
 
     expect(settings).toEqual(createDefaultAppSettings())
-    expect(settingsRepository.saveProvider).toHaveBeenCalledWith('openai', {
-      apiKey: 'sk-openai-demo',
-      model: 'gpt-5.4',
-      baseUrl: 'https://ignored.example.com'
-    })
+    expect(settingsRepository.saveProvider).toHaveBeenCalledWith(
+      'openai',
+      expect.objectContaining({
+        provider: 'openai',
+        apiKey: 'sk-openai-demo',
+        model: 'gpt-5.4',
+        baseUrl: 'https://ignored.example.com',
+        apiFormat: 'openai-chat',
+        useMaxCompletionTokens: true
+      })
+    )
   })
 
   it('requires a valid HTTP base url for providers that require a base url', async () => {
@@ -66,7 +72,8 @@ describe('SettingsService', () => {
         provider: 'openai-compatible',
         apiKey: 'sk-compatible-demo',
         model: 'gpt-compatible',
-        baseUrl: ''
+        baseUrl: '',
+        enabled: true
       })
     ).rejects.toThrow(/Base URL is required/)
     await expect(
@@ -106,10 +113,14 @@ describe('SettingsService', () => {
       baseUrl: ' https://api.example.com/v1 '
     })
 
-    expect(settingsRepository.saveProvider).toHaveBeenCalledWith('openai-compatible', {
-      apiKey: 'sk-compatible-demo',
-      model: 'gpt-compatible',
-      baseUrl: 'https://api.example.com/v1'
-    })
+    expect(settingsRepository.saveProvider).toHaveBeenCalledWith(
+      'openai-compatible',
+      expect.objectContaining({
+        provider: 'openai-compatible',
+        apiKey: 'sk-compatible-demo',
+        model: 'gpt-compatible',
+        baseUrl: 'https://api.example.com/v1'
+      })
+    )
   })
 })

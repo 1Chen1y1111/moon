@@ -46,7 +46,7 @@ describe('SettingsRepository', () => {
       const firstConnection = await createBootstrappedConnection(databasePath)
       const firstRepository = new SettingsRepository(firstConnection, fakeSecretCodec)
 
-      expect((await firstRepository.getSettings()).providers.claude).toEqual({
+      expect((await firstRepository.getSettings()).providers.claude).toMatchObject({
         provider: 'claude',
         hasApiKey: false,
         apiKeyPreview: '',

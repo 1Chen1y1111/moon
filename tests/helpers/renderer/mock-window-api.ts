@@ -2,16 +2,32 @@ import { vi } from 'vitest'
 
 import type { MoonApi } from '@ipc/contracts'
 import type { OpenSettingsInput, WindowState } from '@ipc/window-contracts'
-import { createDefaultAppSettings, type AppSettings } from '@shared/domain/settings'
-import type { SaveAppearanceInput, SaveProviderInput } from '@shared/domain/settings-validation'
+import {
+  createDefaultAppSettings,
+  type AppSettings,
+  type ProviderTestResult
+} from '@shared/domain/settings'
+import type {
+  CreateCustomAcpProviderInput,
+  CreateCustomProviderInput,
+  DeleteProviderInput,
+  ProviderConnectionInput,
+  SaveAppearanceInput,
+  SaveProviderInput
+} from '@shared/domain/settings-validation'
 
 type MockFn<T extends (...args: never[]) => unknown> = ReturnType<typeof vi.fn<T>>
 
 export type MockMoonApi = {
   settings: {
     get: MockFn<() => Promise<AppSettings>>
+    createCustomProvider: MockFn<(input: CreateCustomProviderInput) => Promise<AppSettings>>
+    createCustomAcpProvider: MockFn<(input: CreateCustomAcpProviderInput) => Promise<AppSettings>>
     saveAppearance: MockFn<(input: SaveAppearanceInput) => Promise<AppSettings>>
     saveProvider: MockFn<(input: SaveProviderInput) => Promise<AppSettings>>
+    deleteProvider: MockFn<(input: DeleteProviderInput) => Promise<AppSettings>>
+    fetchProviderModels: MockFn<(input: ProviderConnectionInput) => Promise<AppSettings>>
+    testProvider: MockFn<(input: ProviderConnectionInput) => Promise<ProviderTestResult>>
     onChange: MockFn<(listener: (settings: AppSettings) => void) => () => void>
   }
   windowControls: {
@@ -38,12 +54,27 @@ function createMockWindowApi(options: MockWindowApiOptions = {}): MockMoonApi {
   return {
     settings: {
       get: vi.fn<() => Promise<AppSettings>>().mockResolvedValue(appSettings),
+      createCustomProvider: vi
+        .fn<(input: CreateCustomProviderInput) => Promise<AppSettings>>()
+        .mockResolvedValue(savedSettings),
+      createCustomAcpProvider: vi
+        .fn<(input: CreateCustomAcpProviderInput) => Promise<AppSettings>>()
+        .mockResolvedValue(savedSettings),
       saveAppearance: vi
         .fn<(input: SaveAppearanceInput) => Promise<AppSettings>>()
         .mockResolvedValue(savedSettings),
       saveProvider: vi
         .fn<(input: SaveProviderInput) => Promise<AppSettings>>()
         .mockResolvedValue(savedSettings),
+      deleteProvider: vi
+        .fn<(input: DeleteProviderInput) => Promise<AppSettings>>()
+        .mockResolvedValue(savedSettings),
+      fetchProviderModels: vi
+        .fn<(input: ProviderConnectionInput) => Promise<AppSettings>>()
+        .mockResolvedValue(savedSettings),
+      testProvider: vi
+        .fn<(input: ProviderConnectionInput) => Promise<ProviderTestResult>>()
+        .mockResolvedValue({ success: true, message: 'Connection succeeded.' }),
       onChange: vi
         .fn<(listener: (settings: AppSettings) => void) => () => void>()
         .mockReturnValue(() => undefined)

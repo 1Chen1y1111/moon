@@ -1,5 +1,12 @@
-import type { AppSettings } from '../shared/domain/settings'
-import type { SaveAppearanceInput, SaveProviderInput } from '../shared/domain/settings-validation'
+import type { AppSettings, ProviderTestResult } from '../shared/domain/settings'
+import type {
+  CreateCustomAcpProviderInput,
+  CreateCustomProviderInput,
+  DeleteProviderInput,
+  ProviderConnectionInput,
+  SaveAppearanceInput,
+  SaveProviderInput
+} from '../shared/domain/settings-validation'
 import { ipcChannels } from './channels'
 import type { OpenSettingsInput, WindowState } from './window-contracts'
 
@@ -8,9 +15,29 @@ export type AppIpcContractMap = {
     request: undefined
     response: AppSettings
   }
+  [ipcChannels.settings.createCustomProvider]: {
+    request: CreateCustomProviderInput
+    response: AppSettings
+  }
+  [ipcChannels.settings.createCustomAcpProvider]: {
+    request: CreateCustomAcpProviderInput
+    response: AppSettings
+  }
   [ipcChannels.settings.saveProvider]: {
     request: SaveProviderInput
     response: AppSettings
+  }
+  [ipcChannels.settings.deleteProvider]: {
+    request: DeleteProviderInput
+    response: AppSettings
+  }
+  [ipcChannels.settings.fetchProviderModels]: {
+    request: ProviderConnectionInput
+    response: AppSettings
+  }
+  [ipcChannels.settings.testProvider]: {
+    request: ProviderConnectionInput
+    response: ProviderTestResult
   }
   [ipcChannels.settings.saveAppearance]: {
     request: SaveAppearanceInput
@@ -41,7 +68,12 @@ export type AppIpcContractMap = {
 export type MoonApi = {
   settings: {
     get: () => Promise<AppSettings>
+    createCustomProvider: (input: CreateCustomProviderInput) => Promise<AppSettings>
+    createCustomAcpProvider: (input: CreateCustomAcpProviderInput) => Promise<AppSettings>
     saveProvider: (input: SaveProviderInput) => Promise<AppSettings>
+    deleteProvider: (input: DeleteProviderInput) => Promise<AppSettings>
+    fetchProviderModels: (input: ProviderConnectionInput) => Promise<AppSettings>
+    testProvider: (input: ProviderConnectionInput) => Promise<ProviderTestResult>
     saveAppearance: (input: SaveAppearanceInput) => Promise<AppSettings>
     onChange: (listener: (settings: AppSettings) => void) => () => void
   }

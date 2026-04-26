@@ -129,6 +129,9 @@ Moon typography, spacing, weight, radius, color, and shadow tokens instead, such
 `text-moon-body`, `text-moon-h2`, `leading-moon-body`, `gap-moon-md`,
 `px-moon-panel`, `font-moon-title`, and `rounded-moon-control`.
 
+Do not hand-edit `src/shadcn/ui/*` for app styling. Use call-site `className`
+via `cn(...)`, or wrap outside `src/shadcn/ui/*`. Regenerate only with shadcn CLI.
+
 Typography rules:
 
 - Serif headings use weight 500 through `font-moon-title`; do not use bold serif.

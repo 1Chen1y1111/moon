@@ -8,6 +8,10 @@ export {
 } from './model/settings.selectors'
 export {
   applyAppSettings,
+  createCustomAcpProviderSettings,
+  createCustomProviderSettings,
+  deleteProviderSettings,
+  fetchProviderModelsSettings,
   loadAppSettings,
   saveAppearanceSettings,
   saveProviderSettings,

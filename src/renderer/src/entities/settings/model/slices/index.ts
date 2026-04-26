@@ -1,5 +1,9 @@
 export {
   applyAppSettings,
+  createCustomAcpProviderSettings,
+  createCustomProviderSettings,
+  deleteProviderSettings,
+  fetchProviderModelsSettings,
   loadAppSettings,
   saveAppearanceSettings,
   saveProviderSettings,

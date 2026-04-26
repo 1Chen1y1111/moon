@@ -110,6 +110,7 @@
 
   --container-moon-hero: 42rem;
   --container-moon-actions: 22.5rem;
+  --container-moon-provider-dialog: 34rem;
 
   --spacing-moon-brand-mark: 4rem;
   --spacing-moon-cta: 3rem;
@@ -138,6 +139,8 @@
   --spacing-moon-traffic-light-icon: 0.125rem;
   --spacing-moon-settings-sidebar: 14.25rem;
   --spacing-moon-workspace-sidebar: 14.5rem;
+  --spacing-moon-provider-textarea: 5rem;
+  --spacing-moon-provider-model-list: 18rem;
 
   --color-moon-tag-bg-subtle: var(--moon-tag-bg-subtle);
   --color-moon-tag-bg-standard: var(--moon-tag-bg-standard);

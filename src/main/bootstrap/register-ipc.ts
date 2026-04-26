@@ -21,7 +21,12 @@ export function registerIpcHandlers({
   settingsService
 }: RegisterIpcDependencies): void {
   ipcMain.removeHandler(ipcChannels.settings.get)
+  ipcMain.removeHandler(ipcChannels.settings.createCustomProvider)
+  ipcMain.removeHandler(ipcChannels.settings.createCustomAcpProvider)
   ipcMain.removeHandler(ipcChannels.settings.saveProvider)
+  ipcMain.removeHandler(ipcChannels.settings.deleteProvider)
+  ipcMain.removeHandler(ipcChannels.settings.fetchProviderModels)
+  ipcMain.removeHandler(ipcChannels.settings.testProvider)
   ipcMain.removeHandler(ipcChannels.settings.saveAppearance)
   ipcMain.removeHandler(ipcChannels.window.close)
   ipcMain.removeHandler(ipcChannels.window.minimize)
@@ -30,6 +35,20 @@ export function registerIpcHandlers({
   ipcMain.removeHandler(ipcChannels.window.getState)
 
   ipcMain.handle(ipcChannels.settings.get, () => settingsService.getSettings())
+  ipcMain.handle(ipcChannels.settings.createCustomProvider, async (_event, input) => {
+    const settings = await settingsService.createCustomProvider(input)
+
+    broadcastSettingsChange(settings)
+
+    return settings
+  })
+  ipcMain.handle(ipcChannels.settings.createCustomAcpProvider, async (_event, input) => {
+    const settings = await settingsService.createCustomAcpProvider(input)
+
+    broadcastSettingsChange(settings)
+
+    return settings
+  })
   ipcMain.handle(ipcChannels.settings.saveProvider, async (_event, input) => {
     const settings = await settingsService.saveProvider(input)
 
@@ -37,6 +56,23 @@ export function registerIpcHandlers({
 
     return settings
   })
+  ipcMain.handle(ipcChannels.settings.deleteProvider, async (_event, input) => {
+    const settings = await settingsService.deleteProvider(input)
+
+    broadcastSettingsChange(settings)
+
+    return settings
+  })
+  ipcMain.handle(ipcChannels.settings.fetchProviderModels, async (_event, input) => {
+    const settings = await settingsService.fetchProviderModels(input)
+
+    broadcastSettingsChange(settings)
+
+    return settings
+  })
+  ipcMain.handle(ipcChannels.settings.testProvider, (_event, input) =>
+    settingsService.testProvider(input)
+  )
   ipcMain.handle(ipcChannels.settings.saveAppearance, async (_event, input) => {
     const settings = await settingsService.saveAppearance(input)
 

@@ -28,5 +28,13 @@ export default defineConfig(
       ...eslintPluginReactRefresh.configs.vite.rules
     }
   },
-  eslintConfigPrettier
+  eslintConfigPrettier,
+  {
+    files: ['src/shadcn/ui/*.tsx'],
+    rules: {
+      '@typescript-eslint/explicit-function-return-type': 'off',
+      'prettier/prettier': 'off',
+      'react-refresh/only-export-components': 'off'
+    }
+  }
 )

@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 
@@ -72,6 +72,38 @@ describe('bootstrapDatabase', () => {
       )
 
       expect(settings.rows).toEqual([{ value: 'dark' }])
+
+      await connection.close()
+    },
+    pgliteTestTimeout
+  )
+
+  it(
+    'backs up and recreates a PGlite data directory that cannot be opened',
+    async () => {
+      const directoryPath = mkdtempSync(join(tmpdir(), 'moon-bootstrap-'))
+      tempDirectories.push(directoryPath)
+      const databasePath = join(directoryPath, 'moon-pglite')
+
+      mkdirSync(databasePath, { recursive: true })
+      writeFileSync(join(databasePath, 'PG_VERSION'), '17\n')
+
+      const connection = await createDatabaseConnection(databasePath)
+      await bootstrapDatabase(connection)
+
+      const providerTables = await connection.client.query<{ table_name: string }>(
+        `
+        SELECT table_name
+        FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'provider_settings'
+      `
+      )
+      const backups = readdirSync(directoryPath).filter((entry) =>
+        entry.startsWith('moon-pglite.corrupt-')
+      )
+
+      expect(providerTables.rows).toEqual([{ table_name: 'provider_settings' }])
+      expect(backups).toHaveLength(1)
 
       await connection.close()
     },

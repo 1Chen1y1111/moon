@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { providerIds } from './provider'
+import { providerIdSchema } from './settings-validation'
 import { messageRoles, sessionStatuses } from './chat'
 
 export const sessionStatusSchema = z.enum(sessionStatuses)
@@ -10,7 +10,7 @@ export const messageRoleSchema = z.enum(messageRoles)
 export const sessionRecordSchema = z.object({
   id: z.string().min(1),
   projectId: z.string().min(1).nullable(),
-  provider: z.enum(providerIds),
+  provider: providerIdSchema,
   title: z.string(),
   status: sessionStatusSchema,
   createdAt: z.string(),

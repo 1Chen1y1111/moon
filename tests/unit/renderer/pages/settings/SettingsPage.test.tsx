@@ -2,17 +2,20 @@ import { screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { SettingsPage } from '@renderer/pages/settings/SettingsPage'
+import { createProviderProxyEndpoints } from '@shared/domain/provider-proxy'
 import { createDefaultAppSettings, type AppSettings } from '@shared/domain/settings'
 import { installMockWindowApi, type MockMoonApi } from '@tests/helpers/renderer/mock-window-api'
 import { renderWithProviders } from '@tests/helpers/renderer/render-with-providers'
 
 describe('SettingsPage', () => {
   let api: MockMoonApi
+  const defaultSettings = createDefaultAppSettings()
   const savedSettings: AppSettings = {
-    ...createDefaultAppSettings(),
+    ...defaultSettings,
     providers: {
-      ...createDefaultAppSettings().providers,
+      ...defaultSettings.providers,
       claude: {
+        ...defaultSettings.providers.claude,
         provider: 'claude',
         hasApiKey: true,
         apiKeyPreview: '****demo',
@@ -100,8 +103,8 @@ describe('SettingsPage', () => {
 
     expect(screen.getAllByRole('heading', { name: '提供商' }).length).toBeGreaterThan(0)
     expect(screen.getByLabelText('搜索提供商')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Add Custom ACP Provider' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Add Custom Provider' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Add Custom ACP Provider' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Add Custom Provider' })).toBeEnabled()
     expect(screen.getByRole('button', { name: '选择 Moonshot' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '选择 CPA' })).toBeInTheDocument()
     const openAiProviderButton = screen.getByRole('button', { name: '选择 OpenAI' })
@@ -116,29 +119,42 @@ describe('SettingsPage', () => {
     expect(screen.getByLabelText('OpenAI Provider Name')).toHaveValue('OpenAI')
     expect(screen.getByLabelText('OpenAI API Key')).toBeInTheDocument()
 
+    const openAiProxyEndpoints = createProviderProxyEndpoints('openai')
+
+    await user.click(screen.getByRole('button', { name: /API 代理端点/ }))
+    expect(screen.getByText('OpenAI Responses API 代理')).toBeInTheDocument()
+    expect(screen.getByText(openAiProxyEndpoints.responsesUrl)).toBeInTheDocument()
+    expect(screen.getByText(openAiProxyEndpoints.anthropicMessagesUrl)).toBeInTheDocument()
+    expect(screen.getByText(/export ANTHROPIC_BASE_URL=/)).toHaveTextContent(
+      openAiProxyEndpoints.anthropicBaseUrl
+    )
+
     await user.type(screen.getByLabelText('搜索提供商'), 'deep')
     expect(screen.getByRole('button', { name: '选择 DeepSeek' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '选择 OpenAI' })).not.toBeInTheDocument()
     await user.clear(screen.getByLabelText('搜索提供商'))
 
     await user.type(screen.getByLabelText('OpenAI API Key'), 'sk-openai-demo')
-    await user.type(screen.getByLabelText('OpenAI Model'), 'gpt-5.4')
     await user.click(screen.getByRole('button', { name: '保存' }))
 
-    expect(api.settings.saveProvider).toHaveBeenCalledWith({
-      provider: 'openai',
-      apiKey: 'sk-openai-demo',
-      model: 'gpt-5.4',
-      baseUrl: ''
-    })
+    expect(api.settings.saveProvider).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'openai',
+        apiKey: 'sk-openai-demo',
+        model: 'gpt-5.4',
+        baseUrl: ''
+      })
+    )
   })
 
   it('keeps saved API keys out of renderer form values', async () => {
+    const defaultSettings = createDefaultAppSettings()
     const existingSettings: AppSettings = {
-      ...createDefaultAppSettings(),
+      ...defaultSettings,
       providers: {
-        ...createDefaultAppSettings().providers,
+        ...defaultSettings.providers,
         openai: {
+          ...defaultSettings.providers.openai,
           provider: 'openai',
           hasApiKey: true,
           apiKeyPreview: '****demo',
@@ -166,15 +182,18 @@ describe('SettingsPage', () => {
     expect(screen.queryByDisplayValue('sk-openai-demo')).not.toBeInTheDocument()
     expect(screen.getByText('当前密钥：****demo')).toBeInTheDocument()
 
+    await user.type(screen.getByLabelText('OpenAI Base URL'), 'https://api.openai.com/v1')
     await user.click(screen.getByRole('button', { name: '保存' }))
 
     await waitFor(() => {
-      expect(api.settings.saveProvider).toHaveBeenCalledWith({
-        provider: 'openai',
-        apiKey: '',
-        model: 'gpt-5.4',
-        baseUrl: ''
-      })
+      expect(api.settings.saveProvider).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: 'openai',
+          apiKey: '',
+          model: 'gpt-5.4',
+          baseUrl: 'https://api.openai.com/v1'
+        })
+      )
     })
   })
 
@@ -230,11 +249,41 @@ describe('SettingsPage', () => {
     await user.click(screen.getByRole('tab', { name: '提供商' }))
     await user.click(screen.getByRole('button', { name: '选择 CPA' }))
     await user.type(screen.getByLabelText('CPA API Key'), 'sk-compatible-demo')
-    await user.type(screen.getByLabelText('CPA Model'), 'gpt-compatible')
+    await user.click(
+      within(screen.getByRole('region', { name: 'CPA provider details' })).getByRole('switch', {
+        name: '启用提供商'
+      })
+    )
     await user.click(screen.getByRole('button', { name: '保存' }))
 
     expect(screen.getByText('Base URL is required.')).toBeInTheDocument()
     expect(api.settings.saveProvider).not.toHaveBeenCalled()
+  })
+
+  it('renders OAuth and built-in ACP providers as enable cards', async () => {
+    const { user } = renderWithProviders(<SettingsPage />)
+
+    await user.click(screen.getByRole('tab', { name: '提供商' }))
+    await user.click(screen.getByRole('button', { name: '选择 GitHub Copilot' }))
+
+    const copilotRegion = screen.getByRole('region', {
+      name: 'GitHub Copilot provider details'
+    })
+
+    expect(
+      within(copilotRegion).getByRole('button', { name: 'Enable Provider' })
+    ).toBeInTheDocument()
+    expect(screen.queryByLabelText('GitHub Copilot API Key')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('GitHub Copilot Model ID')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '选择 Claude Code (ACP)' }))
+
+    const acpRegion = screen.getByRole('region', {
+      name: 'Claude Code (ACP) provider details'
+    })
+
+    expect(within(acpRegion).getByRole('button', { name: 'Enable Provider' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Claude Code (ACP) ACP Command')).not.toBeInTheDocument()
   })
 
   it('keeps unsaved provider drafts when another provider is saved', async () => {
@@ -242,22 +291,25 @@ describe('SettingsPage', () => {
 
     await user.click(screen.getByRole('tab', { name: '提供商' }))
     await user.type(screen.getByLabelText('OpenAI API Key'), 'sk-openai-demo')
-    await user.type(screen.getByLabelText('OpenAI Model'), 'gpt-5.4')
+    await user.type(screen.getByLabelText('OpenAI Model ID'), 'gpt-5.4-preview')
     await user.click(screen.getByRole('button', { name: '选择 Anthropic' }))
     await user.type(screen.getByLabelText('Anthropic API Key'), 'sk-ant-demo')
-    await user.type(screen.getByLabelText('Anthropic Model'), 'claude-3-7-sonnet-latest')
+    await user.type(screen.getByLabelText('Anthropic Model ID'), 'claude-3-7-sonnet-latest')
+    await user.click(screen.getByRole('button', { name: 'Add' }))
     await user.click(screen.getByRole('button', { name: '保存' }))
 
     await waitFor(() => {
-      expect(api.settings.saveProvider).toHaveBeenCalledWith({
-        provider: 'claude',
-        apiKey: 'sk-ant-demo',
-        model: 'claude-3-7-sonnet-latest',
-        baseUrl: ''
-      })
+      expect(api.settings.saveProvider).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: 'claude',
+          apiKey: 'sk-ant-demo',
+          model: 'claude-3-7-sonnet-latest',
+          baseUrl: ''
+        })
+      )
     })
     await user.click(screen.getByRole('button', { name: '选择 OpenAI' }))
     expect(screen.getByLabelText('OpenAI API Key')).toHaveValue('sk-openai-demo')
-    expect(screen.getByLabelText('OpenAI Model')).toHaveValue('gpt-5.4')
+    expect(screen.getByLabelText('OpenAI Model ID')).toHaveValue('gpt-5.4-preview')
   })
 })

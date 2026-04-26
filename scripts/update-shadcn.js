@@ -8,7 +8,17 @@ const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 const projectRoot = join(__dirname, '..')
 
-const components = ['button', 'tooltip']
+const components = [
+  'button',
+  'tooltip',
+  'checkbox',
+  'dialog',
+  'input',
+  'label',
+  'select',
+  'switch',
+  'textarea'
+]
 
 /**
  * @returns {void}
@@ -23,7 +33,7 @@ function updateComponents() {
   console.log(`正在更新 ${components.length} 个组件: ${components.join(', ')}`)
 
   try {
-    const command = `cd "${projectRoot}" && pnpm dlx shadcn@latest add ${components.join(' ')} -o`
+    const command = `cd "${projectRoot}" && pnpm dlx shadcn@latest add --overwrite ${components.join(' ')}`
     execSync(command, { stdio: 'inherit' })
     console.log('组件更新完成 ✓')
   } catch (error) {

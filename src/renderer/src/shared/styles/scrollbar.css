@@ -1,16 +1,17 @@
 @layer base {
   * {
     scrollbar-width: thin;
-    scrollbar-color: var(--moon-border-strong) var(--moon-surface-3);
+    scrollbar-color: var(--moon-border-strong) transparent;
   }
 
   *::-webkit-scrollbar {
     width: 14px;
     height: 14px;
+    background: transparent;
   }
 
   *::-webkit-scrollbar-track {
-    background: var(--moon-surface-3);
+    background: transparent;
   }
 
   *::-webkit-scrollbar-thumb {
@@ -26,14 +27,14 @@
   }
 
   *::-webkit-scrollbar-corner {
-    background: var(--moon-surface-3);
+    background: transparent;
   }
 
   *::-webkit-scrollbar-button {
     display: block;
     width: 14px;
     height: 14px;
-    background-color: var(--moon-bg-canvas);
+    background-color: transparent;
     background-position: center;
     background-repeat: no-repeat;
     background-size:
