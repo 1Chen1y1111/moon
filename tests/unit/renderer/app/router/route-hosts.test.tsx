@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { AppProviders } from '@renderer/app/providers'
-import { SettingsLayout, WorkspaceLayout } from '@renderer/app/router/route-hosts'
+import { SettingsRoute, WorkspaceLayout } from '@renderer/app/router/route-hosts'
 import { installMockWindowApi } from '@tests/helpers/renderer/mock-window-api'
 
 describe('route layouts', () => {
@@ -39,21 +39,17 @@ describe('route layouts', () => {
     expect(workspaceChrome.getByRole('button', { name: '关闭窗口' })).toBeInTheDocument()
   })
 
-  it('renders the settings layout without the workspace rail', () => {
+  it('renders the settings route without the workspace rail', () => {
     render(
       <AppProviders>
-        <SettingsLayout>
-          <section aria-label="Settings child">settings child</section>
-        </SettingsLayout>
+        <SettingsRoute />
       </AppProviders>
     )
 
-    expect(screen.getByRole('region', { name: 'Settings child' })).toBeInTheDocument()
     expect(
       screen.queryByRole('complementary', { name: 'Workspace navigation' })
     ).not.toBeInTheDocument()
-    expect(screen.getByTestId('settings-window-shell')).toHaveClass('h-screen', 'bg-background')
-    expect(screen.getByTestId('settings-window-shell')).not.toHaveClass('min-h-screen')
-    expect(screen.queryByTestId('settings-window-drag-strip')).not.toBeInTheDocument()
+    expect(screen.getByTestId('settings-shell')).toHaveClass('h-screen', 'bg-background')
+    expect(screen.getByTestId('settings-shell')).not.toHaveClass('min-h-screen')
   })
 })
