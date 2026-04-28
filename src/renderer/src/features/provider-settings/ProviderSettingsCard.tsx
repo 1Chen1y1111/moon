@@ -191,8 +191,8 @@ export function ProviderSettingsCard({
     >
       <div className="flex items-start justify-between gap-6 border-b border-border p-4">
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-3">
-            <h2 className="font-sans text-xl font-medium leading-7 text-foreground">
+          <div className="flex items-center gap-3">
+            <h2 className="font-sans text-xl font-medium leading-9 text-foreground">
               {provider.name}
             </h2>
             {provider.badge ? (
@@ -200,7 +200,7 @@ export function ProviderSettingsCard({
                 {provider.badge}
               </span>
             ) : null}
-            <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-1 text-xs  uppercase tracking-wide text-primary">
+            <span className="inline-flex flex-none  items-center rounded-md bg-primary/10 px-2 py-1 text-xs  uppercase tracking-wide text-primary">
               {statusLabel}
             </span>
             {hasDraftOverride ? (
@@ -250,7 +250,7 @@ export function ProviderSettingsCard({
         ) : null}
       </div>
 
-      <ScrollArea className="h-[calc(100%-115px)]">
+      <ScrollArea className="h-[calc(100%-132px)]">
         <div className="px-6 py-6">
           {testResult ? (
             <div

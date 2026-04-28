@@ -2,6 +2,7 @@ import type { SettingsSectionId } from '@renderer/entities/settings'
 import { MacWindowControls } from '@renderer/shared/ui/window-controls'
 
 import { Button } from '@shadcn/ui/button'
+import { ScrollArea } from '@shadcn/ui/scroll-area'
 
 import { SettingsChrome } from './SettingsChrome'
 import { SettingsSidebar } from './SettingsSidebar'
@@ -67,12 +68,12 @@ export function SettingsShell({
       <main className="w-full h-screen flex flex-1 flex-col">
         <SettingsChrome title={title} />
 
-        <div
+        <ScrollArea
           data-testid="settings-content-scroll"
           className="h-[calc(100%-120px)] flex-1 px-6 py-6"
         >
           {children}
-        </div>
+        </ScrollArea>
 
         <footer className="flex shrink-0 items-center justify-between border-t border-border px-6 h-16">
           <p className="text-sm leading-6 text-muted-foreground">{footerStatusText}</p>
