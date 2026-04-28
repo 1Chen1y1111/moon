@@ -84,8 +84,23 @@ function joinVersionedEndpoint(baseUrl: string, path: string): string {
   return joinEndpoint(normalizedBaseUrl, path)
 }
 
+function parseCustomHeaders(value: string): Record<string, string> {
+  const trimmedValue = value.trim()
+
+  if (trimmedValue.length === 0) {
+    return {}
+  }
+
+  const parsed = JSON.parse(trimmedValue) as Record<string, unknown>
+
+  return Object.fromEntries(
+    Object.entries(parsed).map(([key, headerValue]) => [key, String(headerValue)])
+  )
+}
+
 function createHeaders(provider: ResolvedProvider, target: 'openai' | 'anthropic'): HeadersInit {
   const headers: Record<string, string> = {
+    ...parseCustomHeaders(provider.customHeaders),
     'content-type': 'application/json'
   }
 
@@ -383,7 +398,7 @@ async function createProviderCompletion(
     return { model, text: extractProviderText(payload) }
   }
 
-  if (provider.type === 'anthropic') {
+  if (provider.apiFormat === 'anthropic' || provider.type === 'anthropic') {
     const system = request.messages
       .filter((message) => message.role === 'system')
       .map((message) => message.content)
@@ -409,12 +424,30 @@ async function createProviderCompletion(
     return { model, text: extractProviderText(payload) }
   }
 
+  if (provider.apiFormat === 'openai-responses') {
+    const payload = await fetchJson(joinEndpoint(provider.resolvedBaseUrl, 'responses'), {
+      body: JSON.stringify({
+        model,
+        input: request.messages.map((message) => ({
+          role: message.role,
+          content: message.content
+        })),
+        max_output_tokens: maxTokens,
+        ...(request.temperature === undefined ? {} : { temperature: request.temperature })
+      }),
+      headers: createHeaders(provider, 'openai'),
+      method: 'POST'
+    })
+
+    return { model, text: extractProviderText(payload) }
+  }
+
   const payload = await fetchJson(joinEndpoint(provider.resolvedBaseUrl, 'chat/completions'), {
     body: JSON.stringify({
       model,
       messages: request.messages,
       stream: false,
-      max_tokens: maxTokens,
+      [provider.useMaxCompletionTokens ? 'max_completion_tokens' : 'max_tokens']: maxTokens,
       ...(request.temperature === undefined ? {} : { temperature: request.temperature })
     }),
     headers: createHeaders(provider, 'openai'),

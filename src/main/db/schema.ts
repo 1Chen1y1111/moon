@@ -4,6 +4,7 @@ import { boolean, index, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-
 import type { MessageRole, SessionStatus } from '../../shared/domain/chat'
 import type {
   ProviderId,
+  ProviderApiFormat,
   ProviderModel,
   ProviderType
 } from '../../shared/domain/provider'
@@ -37,6 +38,9 @@ export const providerSettings = pgTable('provider_settings', {
     .$type<ProviderModel[]>(),
   baseUrl: text('base_url').notNull(),
   encryptedApiKey: text('encrypted_api_key').notNull(),
+  apiFormat: text('api_format').notNull().default('openai-chat').$type<ProviderApiFormat>(),
+  useMaxCompletionTokens: boolean('use_max_completion_tokens').notNull().default(false),
+  customHeaders: text('custom_headers').notNull().default(''),
   enabled: boolean('enabled').notNull().default(false),
   isCustom: boolean('is_custom').notNull().default(false),
   isAcp: boolean('is_acp').notNull().default(false),

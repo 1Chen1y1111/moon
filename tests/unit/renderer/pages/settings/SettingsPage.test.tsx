@@ -31,6 +31,21 @@ describe('SettingsPage', () => {
     api = installMockWindowApi({ savedSettings })
   })
 
+  function getProviderCatalogItem(name: string): HTMLElement {
+    const providerList = screen.getByRole('list', { name: '提供商列表' })
+    const item = within(providerList)
+      .getAllByText(name)
+      .map((element) => element.closest('[aria-pressed]'))
+      .find(
+        (element): element is HTMLElement =>
+          element instanceof HTMLElement && element.getAttribute('aria-label') === `选择 ${name}`
+      )
+
+    expect(item).not.toBeNull()
+
+    return item
+  }
+
   it('renders mac controls in the sidebar and windows controls in the right header', () => {
     renderWithProviders(<SettingsPage />)
 
@@ -91,23 +106,25 @@ describe('SettingsPage', () => {
     expect(screen.getByLabelText('搜索提供商')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add Custom ACP Provider' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Add Custom Provider' })).toBeEnabled()
-    expect(screen.getByRole('button', { name: '选择 Moonshot' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '选择 CPA' })).toBeInTheDocument()
-    const openAiProviderButton = screen.getByRole('button', { name: '选择 OpenAI' })
+    expect(getProviderCatalogItem('Moonshot')).toBeInTheDocument()
+    expect(getProviderCatalogItem('CPA')).toBeInTheDocument()
+    const openAiProviderButton = getProviderCatalogItem('OpenAI')
 
     expect(openAiProviderButton).toHaveAttribute('aria-pressed', 'true')
     expect(openAiProviderButton.querySelector('svg')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '选择 Anthropic' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '选择 Google Gemini' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '选择 DeepSeek' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '选择 Azure OpenAI' })).toBeInTheDocument()
+    expect(getProviderCatalogItem('Anthropic')).toBeInTheDocument()
+    expect(getProviderCatalogItem('Google Gemini')).toBeInTheDocument()
+    expect(getProviderCatalogItem('DeepSeek')).toBeInTheDocument()
+    expect(getProviderCatalogItem('Azure OpenAI')).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'OpenAI provider details' })).toBeInTheDocument()
     expect(screen.queryByLabelText('OpenAI Provider Name')).not.toBeInTheDocument()
     expect(screen.getByLabelText('OpenAI API Key')).toBeInTheDocument()
 
     const openAiProxyEndpoints = createProviderProxyEndpoints('openai')
+    const proxyToggle = screen.getByText('API 代理端点').closest('[aria-expanded]')
 
-    await user.click(screen.getByRole('button', { name: /API 代理端点/ }))
+    expect(proxyToggle).not.toBeNull()
+    await user.click(proxyToggle as HTMLElement)
     expect(screen.getByText('OpenAI Responses API 代理')).toBeInTheDocument()
     expect(screen.getByText(openAiProxyEndpoints.responsesUrl)).toBeInTheDocument()
     expect(screen.getByText(openAiProxyEndpoints.anthropicMessagesUrl)).toBeInTheDocument()
@@ -116,14 +133,14 @@ describe('SettingsPage', () => {
     )
 
     fireEvent.change(screen.getByLabelText('搜索提供商'), { target: { value: 'deep' } })
-    expect(screen.getByRole('button', { name: '选择 DeepSeek' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: '选择 OpenAI' })).not.toBeInTheDocument()
+    expect(getProviderCatalogItem('DeepSeek')).toBeInTheDocument()
+    expect(within(screen.getByRole('list', { name: '提供商列表' })).queryByText('OpenAI')).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('搜索提供商'), { target: { value: '' } })
 
     await user.click(screen.getByRole('button', { name: 'Add Custom Provider' }))
     expect(screen.getByLabelText('Custom Provider Name')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Custom Provider API Format')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Custom Provider Headers')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Custom Provider API Format')).toBeInTheDocument()
+    expect(screen.getByLabelText('Custom Provider Headers')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Custom Provider Name'), { target: { value: 'My API' } })
     fireEvent.change(screen.getByLabelText('Custom Provider Base URL'), {
       target: { value: 'https://api.example.com/v1' }
@@ -141,7 +158,10 @@ describe('SettingsPage', () => {
       expect(api.settings.createCustomProvider).toHaveBeenCalledWith({
         name: 'My API',
         baseUrl: 'https://api.example.com/v1',
-        apiKey: 'sk-custom-demo'
+        apiKey: 'sk-custom-demo',
+        apiFormat: 'openai-chat',
+        useMaxCompletionTokens: false,
+        customHeaders: ''
       })
     })
     await waitFor(() => {
@@ -266,7 +286,7 @@ describe('SettingsPage', () => {
     const { user } = renderWithProviders(<SettingsPage />)
 
     await user.click(screen.getByRole('tab', { name: '提供商' }))
-    await user.click(screen.getByRole('button', { name: '选择 CPA' }))
+    await user.click(getProviderCatalogItem('CPA'))
     fireEvent.change(screen.getByLabelText('CPA API Key'), {
       target: { value: 'sk-compatible-demo' }
     })
@@ -283,13 +303,13 @@ describe('SettingsPage', () => {
 
     expect(screen.getByText('Base URL is required.')).toBeInTheDocument()
     expect(api.settings.saveProvider).not.toHaveBeenCalled()
-  }, 10000)
+  })
 
   it('renders OAuth and built-in ACP providers as enable cards', async () => {
     const { user } = renderWithProviders(<SettingsPage />)
 
     await user.click(screen.getByRole('tab', { name: '提供商' }))
-    await user.click(screen.getByRole('button', { name: '选择 GitHub Copilot' }))
+    await user.click(getProviderCatalogItem('GitHub Copilot'))
 
     const copilotRegion = screen.getByRole('region', {
       name: 'GitHub Copilot provider details'
@@ -301,7 +321,7 @@ describe('SettingsPage', () => {
     expect(screen.queryByLabelText('GitHub Copilot API Key')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('GitHub Copilot Model ID')).not.toBeInTheDocument()
 
-    await user.click(screen.getByRole('button', { name: '选择 Claude Code (ACP)' }))
+    await user.click(getProviderCatalogItem('Claude Code (ACP)'))
 
     const acpRegion = screen.getByRole('region', {
       name: 'Claude Code (ACP) provider details'
@@ -321,7 +341,7 @@ describe('SettingsPage', () => {
     fireEvent.change(screen.getByLabelText('OpenAI Base URL'), {
       target: { value: 'https://api.openai.com/v1' }
     })
-    await user.click(screen.getByRole('button', { name: '选择 Anthropic' }))
+    await user.click(getProviderCatalogItem('Anthropic'))
     fireEvent.change(screen.getByLabelText('Anthropic API Key'), {
       target: { value: 'sk-ant-demo' }
     })
@@ -341,7 +361,7 @@ describe('SettingsPage', () => {
         })
       )
     })
-    await user.click(screen.getByRole('button', { name: '选择 OpenAI' }))
+    await user.click(getProviderCatalogItem('OpenAI'))
     expect(screen.getByLabelText('OpenAI API Key')).toHaveValue('sk-openai-demo')
     expect(screen.getByLabelText('OpenAI Base URL')).toHaveValue('https://api.openai.com/v1')
   }, 10000)

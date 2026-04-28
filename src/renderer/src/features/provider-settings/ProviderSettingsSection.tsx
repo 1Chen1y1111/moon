@@ -34,9 +34,12 @@ import {
 } from '@shadcn/ui/dialog'
 import { Input } from '@shadcn/ui/input'
 import { Label } from '@shadcn/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@shadcn/ui/select'
 import { ScrollArea } from '@shadcn/ui/scroll-area'
+import { Switch } from '@shadcn/ui/switch'
+import { Textarea } from '@shadcn/ui/textarea'
 import { cn } from '@shadcn/lib/utils'
-import type { ProviderId, ProviderModel } from '@shared/domain/provider'
+import type { ProviderApiFormat, ProviderId, ProviderModel } from '@shared/domain/provider'
 import type { ProviderSettings, ProviderTestResult } from '@shared/domain/settings'
 import { saveProviderInputSchema } from '@shared/domain/settings-validation'
 
@@ -50,6 +53,7 @@ type ProviderDraftOverrides = Record<ProviderId, ProviderDraft | undefined>
 type ProviderErrorMap = Record<ProviderId, ProviderFormErrors | undefined>
 type ProviderBooleanMap = Record<ProviderId, boolean | undefined>
 type ProviderTestResultMap = Record<ProviderId, ProviderTestResult | null | undefined>
+type ManualModelDraftMap = Record<ProviderId, { id: string; name: string } | undefined>
 
 export type ProviderSettingsFooterAction = {
   selectedProvider: ProviderId
@@ -170,6 +174,9 @@ function createDraftFromProvider(provider: ProviderSettings): ProviderDraft {
     models: provider.models,
     availableModels: provider.availableModels,
     baseUrl: provider.baseUrl,
+    apiFormat: provider.apiFormat,
+    useMaxCompletionTokens: provider.useMaxCompletionTokens,
+    customHeaders: provider.customHeaders,
     enabled: provider.enabled,
     requiresBaseUrl: provider.requiresBaseUrl,
     noApiKey: provider.noApiKey,
@@ -198,6 +205,28 @@ function getProviderStatus(provider: ProviderSettings): 'active' | 'inactive' | 
   return 'missing'
 }
 
+function mergeModels(models: ProviderModel[], nextModel: ProviderModel): ProviderModel[] {
+  const existingIndex = models.findIndex((model) => model.id === nextModel.id)
+
+  if (existingIndex === -1) {
+    return [...models, nextModel]
+  }
+
+  return models.map((model, index) => (index === existingIndex ? nextModel : model))
+}
+
+function upsertModel(draft: ProviderDraft, model: ProviderModel): ProviderDraft {
+  const nextModels = mergeModels(draft.models, model)
+  const nextAvailableModels = mergeModels(draft.availableModels, model)
+
+  return {
+    ...draft,
+    model: nextModels.find((entry) => entry.enabled)?.id ?? draft.model,
+    models: nextModels,
+    availableModels: nextAvailableModels
+  }
+}
+
 function updateModelEnabled(draft: ProviderDraft, modelId: string): ProviderDraft {
   function toggle(models: ProviderModel[]): ProviderModel[] {
     return models.map((model) =>
@@ -212,6 +241,18 @@ function updateModelEnabled(draft: ProviderDraft, modelId: string): ProviderDraf
 
   const nextModels = toggle(draft.models)
   const nextAvailableModels = toggle(draft.availableModels)
+
+  return {
+    ...draft,
+    model: nextModels.find((model) => model.enabled)?.id ?? '',
+    models: nextModels,
+    availableModels: nextAvailableModels
+  }
+}
+
+function removeModel(draft: ProviderDraft, modelId: string): ProviderDraft {
+  const nextModels = draft.models.filter((model) => model.id !== modelId)
+  const nextAvailableModels = draft.availableModels.filter((model) => model.id !== modelId)
 
   return {
     ...draft,
@@ -250,20 +291,21 @@ function CustomProviderDialog({
     name: string
     baseUrl: string
     apiKey: string
+    apiFormat: ProviderApiFormat
+    useMaxCompletionTokens: boolean
+    customHeaders: string
   }) => void
 }): React.JSX.Element {
   const [name, setName] = useState('')
   const [baseUrl, setBaseUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
+  const [apiFormat, setApiFormat] = useState<ProviderApiFormat>('openai-chat')
+  const [useMaxCompletionTokens, setUseMaxCompletionTokens] = useState(false)
+  const [customHeaders, setCustomHeaders] = useState('')
 
   return (
     <Dialog open onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <DialogContent
-        className="px-0"
-        showCloseButton={false}
-        aria-label="Add Custom Provider"
-        aria-describedby={undefined}
-      >
+      <DialogContent className="px-0" showCloseButton={false} aria-label="Add Custom Provider">
         <DialogHeader className="px-4">
           <DialogTitle className="text-xl font-medium leading-7 text-foreground">
             Add Custom Provider
@@ -304,6 +346,52 @@ function CustomProviderDialog({
                 placeholder="your-api-key"
               />
             </div>
+            <div>
+              <DialogFieldLabel>API Format</DialogFieldLabel>
+              <Select
+                value={apiFormat}
+                onValueChange={(value) => setApiFormat(value as ProviderApiFormat)}
+              >
+                <SelectTrigger aria-label="Custom Provider API Format">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="openai-chat">Chat Completions (/chat/completions)</SelectItem>
+                  <SelectItem value="openai-responses">Responses (/responses)</SelectItem>
+                  <SelectItem value="anthropic">Anthropic Messages (/v1/messages)</SelectItem>
+                </SelectContent>
+              </Select>
+              <DialogFieldHint>Choose the API endpoint format your provider uses</DialogFieldHint>
+            </div>
+            <div className="flex items-center justify-between gap-6">
+              <div>
+                <p className="text-sm font-semibold leading-6 text-foreground">
+                  Use max_completion_tokens
+                </p>
+                <p className="text-xs leading-5 text-muted-foreground">
+                  Enable for newer OpenAI models (o1, o3, etc.) that require max_completion_tokens
+                  instead of max_tokens
+                </p>
+              </div>
+              <Switch
+                checked={useMaxCompletionTokens}
+                aria-label="Custom Provider Use max_completion_tokens"
+                onCheckedChange={setUseMaxCompletionTokens}
+              />
+            </div>
+            <div>
+              <DialogFieldLabel>Custom Headers (JSON)</DialogFieldLabel>
+              <Textarea
+                aria-label="Custom Provider Headers"
+                value={customHeaders}
+                onChange={(event) => setCustomHeaders(event.target.value)}
+                className={cn('mt-3')}
+                placeholder={'{\n "User-Agent": "claude-code/0.1.0"\n}'}
+              />
+              <DialogFieldHint>
+                Optional HTTP headers to send with each request (must be valid JSON format).
+              </DialogFieldHint>
+            </div>
           </div>
         </ScrollArea>
 
@@ -320,7 +408,10 @@ function CustomProviderDialog({
               onCreate({
                 name,
                 baseUrl,
-                apiKey
+                apiKey,
+                apiFormat,
+                useMaxCompletionTokens,
+                customHeaders
               })
             }
           >
@@ -347,11 +438,7 @@ function CustomAcpProviderDialog({
 
   return (
     <Dialog open onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <DialogContent
-        showCloseButton={false}
-        aria-label="Add Custom ACP Provider"
-        aria-describedby={undefined}
-      >
+      <DialogContent showCloseButton={false} aria-label="Add Custom ACP Provider">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-md text-foreground">
             <Terminal aria-hidden="true" />
@@ -436,6 +523,7 @@ export function ProviderSettingsSection({
   const [testingProviders, setTestingProviders] = useState<ProviderBooleanMap>({})
   const [fetchingProviders, setFetchingProviders] = useState<ProviderBooleanMap>({})
   const [modelSearchQueries, setModelSearchQueries] = useState<Record<ProviderId, string>>({})
+  const [manualModelDrafts, setManualModelDrafts] = useState<ManualModelDraftMap>({})
   const [showCustomDialog, setShowCustomDialog] = useState(false)
   const [showCustomAcpDialog, setShowCustomAcpDialog] = useState(false)
 
@@ -464,6 +552,7 @@ export function ProviderSettingsSection({
     )
   }, [providers, searchQuery])
   const hasSelectedDraftOverride = draftOverrides[selectedProvider] !== undefined
+  const manualModelDraft = manualModelDrafts[selectedProvider] ?? { id: '', name: '' }
   const selectedStatusText = useMemo(() => {
     if (saveStatus === 'saving') {
       return `正在保存 ${selectedSettings?.name ?? 'Provider'}`
@@ -624,8 +713,49 @@ export function ProviderSettingsSection({
     }
   }, [dispatch, providers, selectedSettings])
 
+  const handleAddManualModel = useCallback(() => {
+    if (selectedSettings === undefined || selectedDraft === null) {
+      return
+    }
+
+    const id = manualModelDraft.id.trim()
+
+    if (id.length === 0) {
+      return
+    }
+
+    const nextDraft = upsertModel(selectedDraft, {
+      id,
+      name: manualModelDraft.name.trim() || id,
+      enabled: true,
+      isManual: true
+    })
+
+    setDraftOverrides((current) => ({
+      ...current,
+      [selectedProvider]: nextDraft
+    }))
+    setManualModelDrafts((current) => ({
+      ...current,
+      [selectedProvider]: { id: '', name: '' }
+    }))
+  }, [
+    manualModelDraft.id,
+    manualModelDraft.name,
+    selectedDraft,
+    selectedProvider,
+    selectedSettings
+  ])
+
   const handleCreateCustomProvider = useCallback(
-    async (input: { name: string; baseUrl: string; apiKey: string }) => {
+    async (input: {
+      name: string
+      baseUrl: string
+      apiKey: string
+      apiFormat: ProviderApiFormat
+      useMaxCompletionTokens: boolean
+      customHeaders: string
+    }) => {
       const previousIds = new Set(Object.keys(appSettings.providers))
       const settings = await dispatch(createCustomProviderSettings(input)).unwrap()
       const createdProvider = Object.values(settings.providers).find(
@@ -724,8 +854,7 @@ export function ProviderSettingsSection({
 
                 return (
                   <div key={provider.provider} role="listitem">
-                    <button
-                      type="button"
+                    <div
                       aria-label={`选择 ${provider.name}`}
                       aria-pressed={isSelected}
                       className={cn(
@@ -767,7 +896,7 @@ export function ProviderSettingsSection({
                               : 'bg-muted-foreground/60'
                         )}
                       />
-                    </button>
+                    </div>
                   </div>
                 )
               })}
@@ -791,6 +920,8 @@ export function ProviderSettingsSection({
           testResult={testResults[selectedProvider] ?? null}
           revealsApiKey={Boolean(revealedApiKeys[selectedProvider])}
           modelSearchQuery={modelSearchQueries[selectedProvider] ?? ''}
+          manualModelId={manualModelDraft.id}
+          manualModelName={manualModelDraft.name}
           onDraftChange={(field, value) => updateDraft(selectedSettings, field, value)}
           onRevealApiKeyToggle={() =>
             setRevealedApiKeys((current) => ({
@@ -810,10 +941,29 @@ export function ProviderSettingsSection({
           onModelSearchChange={(value) =>
             setModelSearchQueries((current) => ({ ...current, [selectedProvider]: value }))
           }
+          onManualModelIdChange={(value) =>
+            setManualModelDrafts((current) => ({
+              ...current,
+              [selectedProvider]: { ...manualModelDraft, id: value }
+            }))
+          }
+          onManualModelNameChange={(value) =>
+            setManualModelDrafts((current) => ({
+              ...current,
+              [selectedProvider]: { ...manualModelDraft, name: value }
+            }))
+          }
+          onAddManualModel={handleAddManualModel}
           onToggleModel={(modelId) => {
             setDraftOverrides((current) => ({
               ...current,
               [selectedProvider]: updateModelEnabled(selectedDraft, modelId)
+            }))
+          }}
+          onRemoveModel={(modelId) => {
+            setDraftOverrides((current) => ({
+              ...current,
+              [selectedProvider]: removeModel(selectedDraft, modelId)
             }))
           }}
         />

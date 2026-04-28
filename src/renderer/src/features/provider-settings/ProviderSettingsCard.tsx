@@ -10,7 +10,8 @@ import {
   Search,
   Server,
   Terminal,
-  Trash2
+  Trash2,
+  X
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -41,13 +42,19 @@ type ProviderSettingsCardProps = {
   testResult: ProviderTestResult | null
   revealsApiKey: boolean
   modelSearchQuery: string
+  manualModelId: string
+  manualModelName: string
   onDraftChange: (field: keyof ProviderDraft, value: ProviderDraft[keyof ProviderDraft]) => void
   onRevealApiKeyToggle: () => void
   onFetchModels: () => void
   onTestProvider: (modelId?: string) => void
   onDeleteProvider: () => void
   onModelSearchChange: (value: string) => void
+  onManualModelIdChange: (value: string) => void
+  onManualModelNameChange: (value: string) => void
+  onAddManualModel: () => void
   onToggleModel: (modelId: string) => void
+  onRemoveModel: (modelId: string) => void
 }
 
 const switchClassName = 'data-checked:bg-primary data-unchecked:bg-secondary'
@@ -139,7 +146,8 @@ export function ProviderSettingsCard({
   onTestProvider,
   onDeleteProvider,
   onModelSearchChange,
-  onToggleModel
+  onToggleModel,
+  onRemoveModel
 }: ProviderSettingsCardProps): React.JSX.Element {
   const statusLabel = provider.enabled
     ? 'Active'
@@ -317,8 +325,7 @@ export function ProviderSettingsCard({
           ) : (
             <div className="space-y-4">
               <div className="space-y-3">
-                <button
-                  type="button"
+                <div
                   aria-expanded={showsProxyEndpoints}
                   className="flex w-full items-center gap-3 rounded-md border border-input bg-secondary px-3 py-3 text-left text-sm  leading-6 text-foreground"
                   onClick={() => setShowsProxyEndpoints((current) => !current)}
@@ -335,7 +342,7 @@ export function ProviderSettingsCard({
                       showsProxyEndpoints ? 'rotate-180' : ''
                     )}
                   />
-                </button>
+                </div>
 
                 {showsProxyEndpoints ? (
                   <div className="space-y-4 rounded-lg border border-border bg-secondary p-4">
@@ -512,6 +519,18 @@ export function ProviderSettingsCard({
                               {contextWindow}
                             </span>
                           ) : null}
+                          {model.isManual ? (
+                            <button
+                              type="button"
+                              aria-label={`删除模型 ${model.id}`}
+                              className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                              onClick={() => onRemoveModel(model.id)}
+                            >
+                              <X aria-hidden="true" className="size-3.5" />
+                            </button>
+                          ) : (
+                            <span />
+                          )}
                           <Switch
                             checked={model.enabled}
                             aria-label={`启用模型 ${model.id}`}

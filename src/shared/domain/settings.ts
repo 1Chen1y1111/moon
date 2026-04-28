@@ -1,5 +1,6 @@
 import {
   providerCatalog,
+  type ProviderApiFormat,
   type ProviderId,
   type ProviderKind,
   type ProviderModel,
@@ -28,6 +29,9 @@ export type ProviderSettings = {
   availableModels: ProviderModel[]
   baseUrl: string
   defaultBaseUrl: string
+  apiFormat: ProviderApiFormat
+  useMaxCompletionTokens: boolean
+  customHeaders: string
   enabled: boolean
   requiresBaseUrl: boolean
   noApiKey: boolean
@@ -72,6 +76,9 @@ export function createDefaultProviderSettings(provider: ProviderId): ProviderSet
     availableModels: metadata?.defaultModels ?? [],
     baseUrl: '',
     defaultBaseUrl: metadata?.defaultBaseUrl ?? '',
+    apiFormat: metadata?.defaultApiFormat ?? 'openai-chat',
+    useMaxCompletionTokens: metadata?.defaultUseMaxCompletionTokens ?? false,
+    customHeaders: '',
     enabled: false,
     requiresBaseUrl: metadata?.requiresBaseUrl ?? true,
     noApiKey: metadata?.noApiKey ?? false,

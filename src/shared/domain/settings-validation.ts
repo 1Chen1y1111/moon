@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { providerApiFormats } from './provider'
 import { appearanceThemes } from './settings'
 
 export const providerIdSchema = z.string().trim().min(1, 'Provider is required.')
@@ -14,8 +15,11 @@ export const providerModelSchema = z.object({
   id: z.string().trim().min(1, 'Model ID is required.'),
   name: z.string().trim().min(1, 'Display name is required.'),
   enabled: z.boolean(),
+  isManual: z.boolean(),
   contextWindow: z.number().int().positive().optional()
 })
+
+export const providerApiFormatSchema = z.enum(providerApiFormats)
 
 export const providerSettingsSchema = z.object({
   provider: providerIdSchema,
@@ -31,6 +35,9 @@ export const providerSettingsSchema = z.object({
   availableModels: z.array(providerModelSchema),
   baseUrl: z.string(),
   defaultBaseUrl: z.string(),
+  apiFormat: providerApiFormatSchema,
+  useMaxCompletionTokens: z.boolean(),
+  customHeaders: z.string(),
   enabled: z.boolean(),
   requiresBaseUrl: z.boolean(),
   noApiKey: z.boolean(),
@@ -71,6 +78,28 @@ function validateHttpUrl(value: string, context: z.RefinementCtx, path: string[]
   }
 }
 
+function validateHeadersJson(value: string, context: z.RefinementCtx): void {
+  const trimmedValue = value.trim()
+
+  if (trimmedValue.length === 0) {
+    return
+  }
+
+  try {
+    const parsed = JSON.parse(trimmedValue) as unknown
+
+    if (parsed === null || Array.isArray(parsed) || typeof parsed !== 'object') {
+      throw new Error('Headers must be an object')
+    }
+  } catch {
+    context.addIssue({
+      code: 'custom',
+      message: 'Custom headers must be valid JSON object.',
+      path: ['customHeaders']
+    })
+  }
+}
+
 export const saveProviderInputSchema = z
   .object({
     provider: providerIdSchema,
@@ -81,6 +110,9 @@ export const saveProviderInputSchema = z
     models: z.array(providerModelSchema).optional().default([]),
     availableModels: z.array(providerModelSchema).optional().default([]),
     baseUrl: z.string().trim().optional().default(''),
+    apiFormat: providerApiFormatSchema.optional().default('openai-chat'),
+    useMaxCompletionTokens: z.boolean().optional().default(false),
+    customHeaders: z.string().trim().optional().default(''),
     enabled: z.boolean().optional().default(false),
     requiresBaseUrl: z.boolean().optional().default(false),
     noApiKey: z.boolean().optional().default(false),
@@ -93,6 +125,7 @@ export const saveProviderInputSchema = z
   })
   .superRefine((input, context) => {
     validateHttpUrl(input.baseUrl, context, ['baseUrl'])
+    validateHeadersJson(input.customHeaders, context)
 
     if (input.enabled && input.requiresBaseUrl && input.baseUrl.length === 0) {
       context.addIssue({
@@ -117,10 +150,14 @@ export const createCustomProviderInputSchema = z
   .object({
     name: z.string().trim().min(1, 'Provider name is required.'),
     baseUrl: z.string().trim().optional().default(''),
-    apiKey: z.string().trim().optional().default('')
+    apiKey: z.string().trim().optional().default(''),
+    apiFormat: providerApiFormatSchema.optional().default('openai-chat'),
+    useMaxCompletionTokens: z.boolean().optional().default(false),
+    customHeaders: z.string().trim().optional().default('')
   })
   .superRefine((input, context) => {
     validateHttpUrl(input.baseUrl, context, ['baseUrl'])
+    validateHeadersJson(input.customHeaders, context)
   })
 
 export type CreateCustomProviderInput = z.infer<typeof createCustomProviderInputSchema>

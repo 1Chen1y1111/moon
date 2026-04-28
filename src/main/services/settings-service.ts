@@ -52,10 +52,26 @@ function joinVersionedEndpoint(baseUrl: string, path: string): string {
   return joinEndpoint(normalizedBaseUrl, path)
 }
 
-function createHeaders(config: ProviderConnectionConfig): Record<string, string> {
-  const headers: Record<string, string> = {}
+function parseCustomHeaders(value: string): Record<string, string> {
+  const trimmedValue = value.trim()
 
-  if (config.type === 'anthropic') {
+  if (trimmedValue.length === 0) {
+    return {}
+  }
+
+  const parsed = JSON.parse(trimmedValue) as Record<string, unknown>
+
+  return Object.fromEntries(
+    Object.entries(parsed).map(([key, headerValue]) => [key, String(headerValue)])
+  )
+}
+
+function createHeaders(config: ProviderConnectionConfig): Record<string, string> {
+  const headers = {
+    ...parseCustomHeaders(config.customHeaders)
+  }
+
+  if (config.apiFormat === 'anthropic' || config.type === 'anthropic') {
     headers['x-api-key'] = config.apiKey
     headers['anthropic-version'] = anthropicVersion
     headers['content-type'] = 'application/json'
@@ -137,6 +153,7 @@ function normalizeFetchedModel(rawModel: unknown): ProviderModel | null {
     id,
     name: displayName,
     enabled: false,
+    isManual: false,
     ...(contextWindow === undefined ? {} : { contextWindow })
   }
 }
@@ -252,7 +269,7 @@ export class SettingsService {
               method: 'GET'
             }
           )
-        : config.type === 'anthropic'
+        : config.apiFormat === 'anthropic' || config.type === 'anthropic'
           ? await fetchJson(joinVersionedEndpoint(config.baseUrl, 'v1/models'), {
               headers: createHeaders(config),
               method: 'GET'
@@ -309,11 +326,21 @@ export class SettingsService {
             method: 'POST'
           }
         )
-      } else if (config.type === 'anthropic') {
+      } else if (config.apiFormat === 'anthropic' || config.type === 'anthropic') {
         await fetchJson(joinVersionedEndpoint(config.baseUrl, 'v1/messages'), {
           body: JSON.stringify({
             max_tokens: 1,
             messages: [{ role: 'user', content: 'ping' }],
+            model
+          }),
+          headers: createHeaders(config),
+          method: 'POST'
+        })
+      } else if (config.apiFormat === 'openai-responses') {
+        await fetchJson(joinEndpoint(config.baseUrl, 'responses'), {
+          body: JSON.stringify({
+            input: 'ping',
+            max_output_tokens: 1,
             model
           }),
           headers: createHeaders(config),
@@ -325,7 +352,7 @@ export class SettingsService {
             messages: [{ role: 'user', content: 'ping' }],
             model,
             stream: false,
-            max_tokens: 1
+            [config.useMaxCompletionTokens ? 'max_completion_tokens' : 'max_tokens']: 1
           }),
           headers: createHeaders(config),
           method: 'POST'
@@ -358,6 +385,8 @@ export class SettingsService {
       ...input,
       name: input.name ?? defaults.name,
       type: input.type ?? defaults.type,
+      apiFormat: input.apiFormat ?? defaults.apiFormat,
+      useMaxCompletionTokens: input.useMaxCompletionTokens ?? defaults.useMaxCompletionTokens,
       enabled: input.enabled ?? defaults.enabled,
       requiresBaseUrl: input.requiresBaseUrl ?? defaults.requiresBaseUrl,
       noApiKey: input.noApiKey ?? defaults.noApiKey,
@@ -384,6 +413,10 @@ export class SettingsService {
         name: input.name ?? savedProvider.name,
         type: input.type ?? savedProvider.type,
         baseUrl: input.baseUrl || savedProvider.baseUrl || savedProvider.defaultBaseUrl,
+        apiFormat: input.apiFormat ?? savedProvider.apiFormat,
+        useMaxCompletionTokens:
+          input.useMaxCompletionTokens ?? savedProvider.useMaxCompletionTokens,
+        customHeaders: input.customHeaders || savedProvider.customHeaders,
         enabled: input.enabled ?? savedProvider.enabled,
         requiresBaseUrl: input.requiresBaseUrl ?? savedProvider.requiresBaseUrl,
         noApiKey: input.noApiKey ?? savedProvider.noApiKey,
