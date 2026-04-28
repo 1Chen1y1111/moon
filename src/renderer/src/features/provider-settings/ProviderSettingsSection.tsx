@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Blocks, Bot, Cloud, Github, Plus, Search, Terminal, Workflow } from 'lucide-react'
+import { Blocks, Bot, Cloud, Github, Plus, Search, Terminal, Workflow, Info } from 'lucide-react'
 
 import {
   createCustomAcpProviderSettings,
@@ -35,6 +35,7 @@ import {
 import { Input } from '@shadcn/ui/input'
 import { Label } from '@shadcn/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@shadcn/ui/select'
+import { ScrollArea } from '@shadcn/ui/scroll-area'
 import { Switch } from '@shadcn/ui/switch'
 import { Textarea } from '@shadcn/ui/textarea'
 import { cn } from '@shadcn/lib/utils'
@@ -76,26 +77,6 @@ type ProviderIconAsset =
       mode: 'component'
       Icon: React.ComponentType<React.ComponentProps<'svg'>>
     }
-
-const fieldClassName =
-  'h-moon-control-lg rounded-moon-control border-moon-button-secondary-border bg-moon-button-secondary-bg px-moon-control-x text-moon-body leading-moon-body text-moon-text-primary placeholder:text-moon-text-muted focus-visible:border-moon-accent focus-visible:ring-3 focus-visible:ring-moon-accent/20 dark:focus-visible:ring-moon-accent/50 disabled:opacity-60'
-
-const textareaClassName =
-  'min-h-moon-provider-textarea rounded-moon-control border-moon-button-secondary-border bg-moon-button-secondary-bg px-moon-lg py-moon-md font-mono text-moon-caption leading-moon-caption text-moon-text-primary placeholder:text-moon-text-muted focus-visible:border-moon-accent focus-visible:ring-3 focus-visible:ring-moon-accent/20 dark:focus-visible:ring-moon-accent/50'
-
-const dialogContentClassName =
-  'max-w-moon-provider-dialog rounded-moon-card border border-moon-border-default bg-moon-surface-1 p-moon-panel text-moon-text-primary shadow-moon-ring'
-
-const selectTriggerClassName =
-  'mt-moon-md h-moon-control-lg w-full rounded-moon-control border-moon-button-secondary-border bg-moon-button-secondary-bg px-moon-control-x text-moon-body leading-moon-body text-moon-text-primary focus-visible:border-moon-accent focus-visible:ring-3 focus-visible:ring-moon-accent/20 dark:focus-visible:ring-moon-accent/50'
-
-const selectContentClassName =
-  'border border-moon-border-default bg-moon-surface-1 text-moon-text-primary shadow-moon-ring'
-
-const selectItemClassName =
-  'text-moon-body leading-moon-body focus:bg-moon-button-secondary-bg-hover focus:text-moon-text-primary'
-
-const switchClassName = 'data-checked:bg-moon-accent data-unchecked:bg-moon-button-secondary-bg'
 
 const providerIconAssets = {
   moonshot: {
@@ -154,17 +135,13 @@ const providerFallbackIcons = {
 
 function ProviderCatalogIcon({
   icon,
-  isSelected,
   provider
 }: {
   icon?: ProviderIconAsset
   isSelected: boolean
   provider: ProviderId
 }): React.JSX.Element {
-  const iconClassName = cn(
-    'size-5 shrink-0',
-    isSelected ? 'text-moon-accent' : 'text-moon-text-muted'
-  )
+  const iconClassName = cn('size-5 shrink-0 text-muted-foreground')
 
   if (icon?.mode === 'component') {
     const Icon = icon.Icon
@@ -294,21 +271,14 @@ function DialogFieldLabel({
   htmlFor?: string
 }): React.JSX.Element {
   return (
-    <Label
-      htmlFor={htmlFor}
-      className="block text-moon-body-lead font-moon-label leading-moon-body-lead text-moon-text-primary"
-    >
+    <Label htmlFor={htmlFor} className="block text-sm font-semibold leading-6 text-foreground">
       {children}
     </Label>
   )
 }
 
 function DialogFieldHint({ children }: { children: React.ReactNode }): React.JSX.Element {
-  return (
-    <span className="mt-moon-sm block text-moon-caption leading-moon-caption text-moon-text-muted">
-      {children}
-    </span>
-  )
+  return <span className="mt-1.5 block text-xs leading-5 text-muted-foreground">{children}</span>
 }
 
 function CustomProviderDialog({
@@ -336,107 +306,100 @@ function CustomProviderDialog({
 
   return (
     <Dialog open onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <DialogContent aria-label="Add Custom Provider" className={dialogContentClassName}>
-        <DialogHeader>
-          <DialogTitle className="text-moon-h2 font-moon-title leading-moon-h2 text-moon-text-primary">
+      <DialogContent className="px-0" showCloseButton={false} aria-label="Add Custom Provider">
+        <DialogHeader className="px-4">
+          <DialogTitle className="text-xl font-medium leading-7 text-foreground">
             Add Custom Provider
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-moon-card">
-          <div className="block">
-            <DialogFieldLabel>Provider Name</DialogFieldLabel>
-            <Input
-              aria-label="Custom Provider Name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              className={cn('mt-moon-md', fieldClassName)}
-              placeholder="Provider name"
-            />
-          </div>
-          <div className="block">
-            <DialogFieldLabel>Base URL</DialogFieldLabel>
-            <Input
-              aria-label="Custom Provider Base URL"
-              value={baseUrl}
-              onChange={(event) => setBaseUrl(event.target.value)}
-              className={cn('mt-moon-md', fieldClassName)}
-              placeholder="https://api.example.com/v1"
-            />
-          </div>
-          <div className="block">
-            <DialogFieldLabel>
-              API Key <span className="text-moon-caption text-moon-text-muted">(可选)</span>
-            </DialogFieldLabel>
-            <Input
-              aria-label="Custom Provider API Key"
-              value={apiKey}
-              onChange={(event) => setApiKey(event.target.value)}
-              className={cn('mt-moon-md', fieldClassName)}
-              placeholder="Enter your API key"
-            />
-          </div>
-          <div className="block">
-            <DialogFieldLabel>API Format</DialogFieldLabel>
-            <Select
-              value={apiFormat}
-              onValueChange={(value) => setApiFormat(value as ProviderApiFormat)}
-            >
-              <SelectTrigger
-                aria-label="Custom Provider API Format"
-                className={selectTriggerClassName}
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className={selectContentClassName}>
-                <SelectItem value="openai-chat" className={selectItemClassName}>
-                  Chat Completions (/chat/completions)
-                </SelectItem>
-                <SelectItem value="openai-responses" className={selectItemClassName}>
-                  Responses (/responses)
-                </SelectItem>
-                <SelectItem value="anthropic" className={selectItemClassName}>
-                  Anthropic Messages (/v1/messages)
-                </SelectItem>
-              </SelectContent>
-            </Select>
-            <DialogFieldHint>Choose the API endpoint format your provider uses</DialogFieldHint>
-          </div>
-          <div className="flex items-center justify-between gap-moon-lg">
+        <ScrollArea className="max-h-[70vh]">
+          <div className="space-y-2 px-4">
             <div>
-              <p className="text-moon-body-lead font-moon-label leading-moon-body-lead text-moon-text-primary">
-                Use max_completion_tokens
-              </p>
-              <p className="text-moon-caption leading-moon-caption text-moon-text-muted">
-                Enable for newer OpenAI models that require max_completion_tokens.
-              </p>
+              <DialogFieldLabel>Provider Name</DialogFieldLabel>
+              <Input
+                aria-label="Custom Provider Name"
+                value={name}
+                onChange={(event) => setName(event.target.value)}
+                className={cn('mt-3')}
+                placeholder="My Custom Provider"
+              />
             </div>
-            <Switch
-              checked={useMaxCompletionTokens}
-              aria-label="Custom Provider Use max_completion_tokens"
-              className={switchClassName}
-              onCheckedChange={setUseMaxCompletionTokens}
-            />
+            <div>
+              <DialogFieldLabel>Base URL</DialogFieldLabel>
+              <Input
+                aria-label="Custom Provider Base URL"
+                value={baseUrl}
+                onChange={(event) => setBaseUrl(event.target.value)}
+                className={cn('mt-3')}
+                placeholder="https://api.example.com/v1"
+              />
+            </div>
+            <div>
+              <DialogFieldLabel>
+                API Key <span className="text-xs text-muted-foreground">(可选)</span>
+              </DialogFieldLabel>
+              <Input
+                aria-label="Custom Provider API Key"
+                value={apiKey}
+                onChange={(event) => setApiKey(event.target.value)}
+                className={cn('mt-3')}
+                placeholder="your-api-key"
+              />
+            </div>
+            <div>
+              <DialogFieldLabel>API Format</DialogFieldLabel>
+              <Select
+                value={apiFormat}
+                onValueChange={(value) => setApiFormat(value as ProviderApiFormat)}
+              >
+                <SelectTrigger aria-label="Custom Provider API Format">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="openai-chat">Chat Completions (/chat/completions)</SelectItem>
+                  <SelectItem value="openai-responses">Responses (/responses)</SelectItem>
+                  <SelectItem value="anthropic">Anthropic Messages (/v1/messages)</SelectItem>
+                </SelectContent>
+              </Select>
+              <DialogFieldHint>Choose the API endpoint format your provider uses</DialogFieldHint>
+            </div>
+            <div className="flex items-center justify-between gap-6">
+              <div>
+                <p className="text-sm font-semibold leading-6 text-foreground">
+                  Use max_completion_tokens
+                </p>
+                <p className="text-xs leading-5 text-muted-foreground">
+                  Enable for newer OpenAI models (o1, o3, etc.) that require max_completion_tokens
+                  instead of max_tokens
+                </p>
+              </div>
+              <Switch
+                checked={useMaxCompletionTokens}
+                aria-label="Custom Provider Use max_completion_tokens"
+                onCheckedChange={setUseMaxCompletionTokens}
+              />
+            </div>
+            <div>
+              <DialogFieldLabel>Custom Headers (JSON)</DialogFieldLabel>
+              <Textarea
+                aria-label="Custom Provider Headers"
+                value={customHeaders}
+                onChange={(event) => setCustomHeaders(event.target.value)}
+                className={cn('mt-3')}
+                placeholder={'{\n "User-Agent": "claude-code/0.1.0"\n}'}
+              />
+              <DialogFieldHint>
+                Optional HTTP headers to send with each request (must be valid JSON format).
+              </DialogFieldHint>
+            </div>
           </div>
-          <div className="block">
-            <DialogFieldLabel>Custom Headers (JSON)</DialogFieldLabel>
-            <Textarea
-              aria-label="Custom Provider Headers"
-              value={customHeaders}
-              onChange={(event) => setCustomHeaders(event.target.value)}
-              className={cn('mt-moon-md', textareaClassName)}
-              placeholder={'{\n  "User-Agent": "claude-code/0.1.0"\n}'}
-            />
-            <DialogFieldHint>
-              Optional HTTP headers to send with each request. Must be valid JSON object.
-            </DialogFieldHint>
-          </div>
-        </div>
+        </ScrollArea>
 
-        <DialogFooter className="mt-moon-card border-moon-border-subtle bg-transparent p-0">
+        <DialogFooter className="border-none bg-transparent px-8">
           <DialogClose asChild>
             <Button type="button" variant="secondary">
-              取消
+              Cancel
             </Button>
           </DialogClose>
           <Button
@@ -476,52 +439,59 @@ function CustomAcpProviderDialog({
 
   return (
     <Dialog open onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <DialogContent aria-label="Add Custom ACP Provider" className={dialogContentClassName}>
+      <DialogContent showCloseButton={false} aria-label="Add Custom ACP Provider">
         <DialogHeader>
-          <DialogTitle className="text-moon-h2 font-moon-title leading-moon-h2 text-moon-text-primary">
+          <DialogTitle className="flex items-center gap-2 text-md text-foreground">
+            <Terminal aria-hidden="true" />
             Add Custom ACP Provider
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-moon-card">
-          <div className="block">
+        <div className="space-y-2">
+          <div>
             <DialogFieldLabel>Provider Name</DialogFieldLabel>
             <Input
               aria-label="Custom ACP Provider Name"
               value={name}
               onChange={(event) => setName(event.target.value)}
-              className={cn('mt-moon-md', fieldClassName)}
+              className={cn('mt-3')}
               placeholder="Provider name"
             />
           </div>
-          <div className="block">
+          <div>
             <DialogFieldLabel>Command</DialogFieldLabel>
             <Input
               aria-label="Custom ACP Command"
               value={acpCommand}
               onChange={(event) => setAcpCommand(event.target.value)}
-              className={cn('mt-moon-md', fieldClassName)}
+              className={cn('mt-3')}
               placeholder="e.g., claude-code-acp, gemini, codex"
             />
             <DialogFieldHint>The CLI command to spawn the ACP agent</DialogFieldHint>
           </div>
-          <div className="block">
-            <DialogFieldLabel>Arguments</DialogFieldLabel>
+          <div>
+            <DialogFieldLabel>Arguments (optional)</DialogFieldLabel>
             <Input
               aria-label="Custom ACP Arguments"
               value={acpArgs}
               onChange={(event) => setAcpArgs(event.target.value)}
-              className={cn('mt-moon-md', fieldClassName)}
-              placeholder="e.g., --experimental-acp"
+              className={cn('mt-3')}
+              placeholder="e.g.,--acp --experimental-acp"
             />
-            <DialogFieldHint>Command line arguments, separated by spaces</DialogFieldHint>
+            <DialogFieldHint>Command line arguments (space-separated)</DialogFieldHint>
+          </div>
+
+          <div className="bg-card p-2 text-xs">
+            <div>Note:</div>
+            ACP providers spawn local CLI processes. Make sure the command is installed and
+            accessible in your PATH. You can configure MCP servers after creating the provider.
           </div>
         </div>
 
-        <DialogFooter className="mt-moon-card border-moon-border-subtle bg-transparent p-0">
+        <DialogFooter className="border-none bg-transparent">
           <DialogClose asChild>
             <Button type="button" variant="secondary">
-              取消
+              Cancel
             </Button>
           </DialogClose>
           <Button
@@ -529,7 +499,7 @@ function CustomAcpProviderDialog({
             disabled={isSaving || name.trim().length === 0 || acpCommand.trim().length === 0}
             onClick={() => onCreate({ name, acpCommand, acpArgs })}
           >
-            Add ACP Provider
+            Add Custom ACP Provider
           </Button>
         </DialogFooter>
       </DialogContent>
@@ -847,107 +817,97 @@ export function ProviderSettingsSection({
   }
 
   return (
-    <section className="flex min-h-full flex-col">
-      <div className="moon-provider-toolbar">
-        <div className="relative w-full">
+    <section className="flex h-full flex-col gap-4">
+      <div className="flex items-center justify-between gap-4">
+        <div className="relative w-60">
           <Search
             aria-hidden="true"
-            className="pointer-events-none absolute left-moon-control-x top-1/2 size-moon-icon -translate-y-1/2 text-moon-text-muted"
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
           />
           <Input
             aria-label="搜索提供商"
             value={searchQuery}
             onChange={(event) => setSearchQuery(event.target.value)}
-            className="h-moon-control-lg w-full rounded-moon-control border-moon-button-secondary-border bg-moon-button-secondary-bg pl-moon-xl pr-moon-control-x text-moon-body leading-moon-body text-moon-text-primary placeholder:text-moon-text-muted focus-visible:border-moon-accent focus-visible:ring-3 focus-visible:ring-moon-accent/20 dark:focus-visible:ring-moon-accent/50"
+            className="h-9 w-full rounded-md border-input bg-secondary pl-10 pr-3 text-sm leading-6 text-foreground placeholder:text-muted-foreground focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/20 dark:focus-visible:ring-ring/50"
             placeholder="搜索提供商..."
           />
         </div>
 
-        <div className="flex flex-col justify-end gap-moon-option-gap sm:flex-row">
-          <Button
-            type="button"
-            variant="secondary"
-            size="lg"
-            className="h-moon-control rounded-moon-control border border-moon-button-secondary-border bg-moon-button-secondary-bg px-moon-card text-moon-body leading-moon-body text-moon-text-primary transition-colors hover:bg-moon-button-secondary-bg-hover"
-            onClick={() => setShowCustomAcpDialog(true)}
-          >
+        <div className="flex flex-col justify-end gap-3 sm:flex-row">
+          <Button size="lg" variant="secondary" onClick={() => setShowCustomAcpDialog(true)}>
             <Terminal aria-hidden="true" />
             Add Custom ACP Provider
           </Button>
-          <Button
-            type="button"
-            size="lg"
-            className="h-moon-control rounded-moon-control bg-moon-button-primary-bg px-moon-card text-moon-body font-moon-title leading-moon-body text-moon-button-primary-fg transition-colors hover:bg-moon-button-primary-bg-hover"
-            onClick={() => setShowCustomDialog(true)}
-          >
+          <Button size="lg" onClick={() => setShowCustomDialog(true)}>
             <Plus aria-hidden="true" />
             Add Custom Provider
           </Button>
         </div>
       </div>
 
-      <div className="moon-provider-layout mt-moon-card min-h-0 flex-1">
-        <div className="min-h-0 rounded-moon-card border border-moon-border-default bg-moon-surface-1">
-          <div
-            role="list"
-            aria-label="提供商列表"
-            className="moon-provider-list-scroll flex min-h-0 flex-col gap-moon-option-gap overflow-y-auto p-moon-md"
-          >
-            {filteredProviders.map((provider) => {
-              const isSelected = provider.provider === selectedProvider
-              const status = getProviderStatus(provider)
+      <div className="h-[calc(100%-52px)] flex justify-between gap-4">
+        <div className="h-full w-60 flex-none rounded-lg border border-border bg-card">
+          <ScrollArea role="list" aria-label="提供商列表" className="h-full  p-3">
+            <div className="w-full flex flex-col gap-2 select-none">
+              {filteredProviders.map((provider) => {
+                const isSelected = provider.provider === selectedProvider
+                const status = getProviderStatus(provider)
 
-              return (
-                <div key={provider.provider} role="listitem">
-                  <button
-                    type="button"
-                    aria-label={`选择 ${provider.name}`}
-                    aria-pressed={isSelected}
-                    className={cn(
-                      'flex w-full items-center gap-moon-option-gap rounded-moon-control border px-moon-lg py-moon-nav-y text-left transition-colors',
-                      isSelected
-                        ? 'border-moon-accent bg-moon-accent-soft text-moon-text-primary'
-                        : 'border-moon-border-default bg-moon-surface-2 text-moon-text-muted hover:bg-moon-button-secondary-bg-hover'
-                    )}
-                    onClick={() => setSelectedProvider(provider.provider)}
-                  >
-                    <ProviderCatalogIcon
-                      icon={providerIconAssets[provider.provider]}
-                      isSelected={isSelected}
-                      provider={provider.provider}
-                    />
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-moon-body-lead font-moon-label leading-moon-body-lead">
-                        {provider.name}
-                      </span>
-                    </span>
-                    {provider.badge ? <span className="moon-tag">{provider.badge}</span> : null}
-                    <span
-                      aria-label={
-                        status === 'active' ? '已启用' : status === 'inactive' ? '未启用' : '未配置'
-                      }
+                return (
+                  <div key={provider.provider} role="listitem">
+                    <div
+                      aria-label={`选择 ${provider.name}`}
+                      aria-pressed={isSelected}
                       className={cn(
-                        'size-moon-icon-xs shrink-0 rounded-moon-pill',
-                        status === 'active'
-                          ? 'bg-moon-accent'
-                          : status === 'inactive'
-                            ? 'bg-moon-text-muted'
-                            : 'bg-moon-border-strong'
+                        'flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2.5 text-left transition-colors',
+                        isSelected
+                          ? 'border-primary text-foreground'
+                          : 'border-border text-muted-foreground hover:bg-muted'
                       )}
-                    />
-                  </button>
-                </div>
-              )
-            })}
-            {filteredProviders.length === 0 ? (
-              <p className="px-moon-lg py-moon-card text-center text-moon-body leading-moon-body text-moon-text-muted">
-                没有匹配的提供商
-              </p>
-            ) : null}
-            <p className="px-moon-sm py-moon-md text-moon-caption leading-moon-caption text-moon-text-muted">
-              找不到想要的提供商？可以添加 Custom Provider 或 Custom ACP Provider。
+                      onClick={() => setSelectedProvider(provider.provider)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <ProviderCatalogIcon
+                          icon={providerIconAssets[provider.provider]}
+                          provider={provider.provider}
+                        />
+                        <span className="line-clamp-1 text-sm font-semibold">{provider.name}</span>
+                      </div>
+
+                      {provider.badge ? (
+                        <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-1 text-xs font-semibold uppercase tracking-wide text-primary">
+                          {provider.badge}
+                        </span>
+                      ) : null}
+
+                      <span
+                        aria-label={
+                          status === 'active'
+                            ? '已启用'
+                            : status === 'inactive'
+                              ? '未启用'
+                              : '未配置'
+                        }
+                        className={cn(
+                          'size-2 shrink-0 rounded-full',
+                          status === 'active'
+                            ? 'bg-primary'
+                            : status === 'inactive'
+                              ? 'bg-muted-foreground'
+                              : 'bg-muted-foreground/60'
+                        )}
+                      />
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+
+            <p className="flex px-1.5 py-3 text-xs leading-5 text-muted-foreground">
+              <Info size={14} className="flex-none mt-0.75 mr-1" />
+              找不到想要的提供商？请先去插件页面安装对应的插件，然后再回到此页面。
             </p>
-          </div>
+          </ScrollArea>
         </div>
 
         <ProviderSettingsCard

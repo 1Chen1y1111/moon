@@ -10,13 +10,11 @@ export function PlaceholderSettingsSection({
 }: PlaceholderSettingsSectionProps): React.JSX.Element {
   return (
     <section className={settingsPanelClassName}>
-      <p className="font-moon-serif text-moon-h2 font-moon-title leading-moon-h2 text-moon-text-primary">
-        {section?.title}
-      </p>
-      <p className="mt-moon-xl text-moon-body leading-moon-body text-moon-text-secondary">
+      <p className="font-serif text-xl font-medium leading-7 text-foreground">{section?.title}</p>
+      <p className="mt-10 text-sm leading-6 text-muted-foreground">
         {section?.description ?? '该设置分类尚未配置描述。'}
       </p>
-      <div className="mt-moon-card-stack rounded-moon-card border border-dashed border-moon-border-default bg-moon-surface-1 px-moon-lg py-moon-panel text-moon-body leading-moon-body text-moon-text-secondary">
+      <div className="mt-16 rounded-lg border border-dashed border-border bg-card px-6 py-6 text-sm leading-6 text-muted-foreground">
         页面内容待补齐
       </div>
     </section>

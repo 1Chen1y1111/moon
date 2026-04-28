@@ -16,7 +16,7 @@ export function WorkspaceChrome(): React.JSX.Element {
   }
 
   return (
-    <header className="moon-window-drag-region flex items-center justify-between border-b border-moon-border-subtle p-moon-md">
+    <header className="[-webkit-app-region:drag] select-none flex items-center justify-between border-b border-border p-3">
       <MacWindowControls
         onClose={handleClose}
         onMinimize={handleMinimize}

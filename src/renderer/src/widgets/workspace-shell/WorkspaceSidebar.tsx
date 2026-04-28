@@ -9,6 +9,9 @@ import {
   SlidersHorizontal
 } from 'lucide-react'
 
+import { Button } from '@shadcn/ui/button'
+import { ScrollArea } from '@shadcn/ui/scroll-area'
+
 import { WorkspaceChrome } from './WorkspaceChrome'
 
 export function WorkspaceSidebar(): React.JSX.Element {
@@ -48,91 +51,78 @@ export function WorkspaceSidebar(): React.JSX.Element {
   }
 
   return (
-    <aside
-      aria-label="Workspace navigation"
-      className="flex w-moon-workspace-sidebar shrink-0 p-moon-md"
-    >
-      <div className="flex min-h-0 w-full flex-1 flex-col overflow-hidden rounded-moon-panel border border-moon-border-subtle bg-moon-surface-1">
+    <aside aria-label="Workspace navigation" className="relative z-30 flex w-56 shrink-0 p-3">
+      <div className="flex min-h-0 w-full flex-1 flex-col overflow-visible rounded-xl border border-border bg-card">
         <WorkspaceChrome />
-        <div
-          role="group"
-          aria-label="Primary actions"
-          className="flex flex-1 flex-col gap-moon-md px-moon-nav-x py-moon-lg"
-        >
-          <button
-            type="button"
-            className="flex h-moon-field items-center rounded-moon-control px-moon-lg text-left text-moon-caption font-moon-title leading-moon-caption text-moon-text-secondary transition-colors hover:bg-moon-button-ghost-bg-hover hover:text-moon-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
-          >
-            清除历史
-          </button>
-          <button
-            type="button"
-            className="flex h-moon-field items-center rounded-moon-control border border-moon-button-secondary-border bg-moon-button-secondary-bg px-moon-lg text-left text-moon-caption font-moon-title leading-moon-caption text-moon-text-primary transition-colors hover:bg-moon-button-secondary-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
-          >
-            新建聊天
-          </button>
-        </div>
 
-        <div className="flex items-center justify-between px-moon-nav-x pb-moon-option-gap">
+        <ScrollArea role="group" aria-label="Primary actions" className="h-[calc(100%-93px)]">
+          <div className="flex flex-col gap-3 px-3 py-6">
+            <Button variant="ghost" size="lg">
+              清除历史
+            </Button>
+            <Button variant="secondary" size="lg">
+              新建聊天
+            </Button>
+          </div>
+        </ScrollArea>
+
+        <div className="flex items-center justify-between px-3 pb-3">
           <div className="relative" onMouseEnter={openMoreActions} onMouseLeave={closeMoreActions}>
             {isMoreActionsOpen ? (
-              <div className="absolute bottom-full left-0 mb-moon-md w-[12rem] rounded-moon-control border border-moon-border-default bg-moon-surface-1 p-moon-sm shadow-moon-whisper">
+              <div className="[-webkit-app-region:no-drag] absolute bottom-full left-0 z-50 mb-3 w-44 rounded-md border border-border bg-card p-1.5 shadow-md">
                 <button
                   type="button"
-                  className="flex w-full items-center gap-moon-md rounded-moon-control px-moon-nav-x py-moon-md text-left text-moon-caption leading-moon-caption text-moon-text-primary transition-colors hover:bg-moon-button-ghost-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
+                  className="flex w-full items-center gap-3 rounded-md px-3 py-3 text-left text-xs leading-5 text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <SlidersHorizontal
                     aria-hidden="true"
-                    className="size-moon-icon shrink-0 text-moon-text-secondary"
+                    className="size-4 shrink-0 text-muted-foreground"
                   />
                   <span>管理提示词应用</span>
                 </button>
 
-                <div className="my-moon-sm h-moon-hairline bg-moon-border-subtle" />
+                <div className="my-1.5 h-px bg-border" />
 
-                <div className="space-y-moon-sm">
+                <div className="space-y-1.5">
                   <button
                     type="button"
-                    className="flex w-full items-center gap-moon-md rounded-moon-control px-moon-nav-x py-moon-md text-left text-moon-caption leading-moon-caption text-moon-text-primary transition-colors hover:bg-moon-button-ghost-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
+                    className="flex w-full items-center gap-3 rounded-md px-3 py-3 text-left text-xs leading-5 text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
                     <ImageIcon
                       aria-hidden="true"
-                      className="size-moon-icon shrink-0 text-moon-text-secondary"
+                      className="size-4 shrink-0 text-muted-foreground"
                     />
                     <span>图库</span>
                   </button>
                   <button
                     type="button"
-                    className="flex w-full items-center gap-moon-md rounded-moon-control px-moon-nav-x py-moon-md text-left text-moon-caption leading-moon-caption text-moon-text-primary transition-colors hover:bg-moon-button-ghost-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
+                    className="flex w-full items-center gap-3 rounded-md px-3 py-3 text-left text-xs leading-5 text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                   >
-                    <Music4
-                      aria-hidden="true"
-                      className="size-moon-icon shrink-0 text-moon-text-secondary"
-                    />
+                    <Music4 aria-hidden="true" className="size-4 shrink-0 text-muted-foreground" />
                     <span>现场编程</span>
                   </button>
                   <button
                     type="button"
-                    className="flex w-full items-center gap-moon-md rounded-moon-control px-moon-nav-x py-moon-md text-left text-moon-caption leading-moon-caption text-moon-text-primary transition-colors hover:bg-moon-button-ghost-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
+                    className="flex w-full items-center gap-3 rounded-md px-3 py-3 text-left text-xs leading-5 text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                     onClick={handleOpenSettings}
                   >
                     <Settings
                       aria-hidden="true"
-                      className="size-moon-icon shrink-0 text-moon-text-secondary"
+                      className="size-4 shrink-0 text-muted-foreground"
                     />
                     <span>设置</span>
                   </button>
                 </div>
 
-                <div className="my-moon-sm h-moon-hairline bg-moon-border-subtle" />
+                <div className="my-1.5 h-px bg-border" />
 
                 <button
                   type="button"
-                  className="flex w-full items-center gap-moon-md rounded-moon-control px-moon-nav-x py-moon-md text-left text-moon-caption leading-moon-caption text-moon-text-primary transition-colors hover:bg-moon-button-ghost-bg-hover focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
+                  className="flex w-full items-center gap-3 rounded-md px-3 py-3 text-left text-xs leading-5 text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                 >
                   <MessageSquareMore
                     aria-hidden="true"
-                    className="size-moon-icon shrink-0 text-moon-text-secondary"
+                    className="size-4 shrink-0 text-muted-foreground"
                   />
                   <span>Show External Chats</span>
                 </button>
@@ -142,17 +132,17 @@ export function WorkspaceSidebar(): React.JSX.Element {
             <button
               type="button"
               aria-label="更多操作"
-              className="flex size-moon-window-button-y items-center justify-center rounded-moon-control bg-transparent text-moon-text-primary transition-[background-color,color,box-shadow] hover:bg-moon-button-ghost-bg-hover hover:shadow-moon-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
+              className="flex size-8 items-center justify-center rounded-md bg-transparent text-foreground transition-[background-color,color,box-shadow] hover:bg-accent hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <Ellipsis aria-hidden="true" className="size-moon-icon" />
+              <Ellipsis aria-hidden="true" className="size-4" />
             </button>
           </div>
 
           <button
             type="button"
-            className="inline-flex h-moon-compact-control items-center gap-moon-md rounded-moon-compact border border-moon-button-secondary-border bg-moon-button-secondary-bg px-moon-md text-moon-label leading-moon-label text-moon-text-primary transition-[background-color,border-color,color] dark:border-moon-accent-soft-border dark:bg-moon-accent-soft dark:text-moon-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent"
+            className="inline-flex h-6 items-center gap-3 rounded-md border border-input bg-secondary px-3 text-xs leading-4 text-foreground transition-[background-color,border-color,color] dark:border-primary/20 dark:bg-primary/10 dark:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <CircleFadingArrowUp aria-hidden="true" className="size-moon-icon-xs" />
+            <CircleFadingArrowUp aria-hidden="true" className="size-3" />
             更新
           </button>
         </div>

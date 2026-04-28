@@ -16,12 +16,13 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }): Rea
   }
 
   return (
-    <div className="flex min-h-screen bg-moon-bg-canvas text-moon-text-primary">
+    <div className="flex w-full h-screen bg-background text-foreground">
       <WorkspaceSidebar />
+
       <main className="flex min-h-screen min-w-0 flex-1 flex-col overflow-hidden">
         <div
           data-testid="workspace-content-drag-region"
-          className="moon-window-drag-region flex h-moon-chrome shrink-0 items-center justify-end px-moon-panel"
+          className="[-webkit-app-region:drag] select-none flex h-14 shrink-0 items-center justify-end px-6"
         >
           <WindowsWindowControls
             onClose={handleClose}
@@ -29,10 +30,11 @@ export function WorkspaceShell({ children }: { children: React.ReactNode }): Rea
             onToggleMaximize={handleToggleMaximize}
           />
         </div>
-        <div className="moon-window-no-drag flex min-h-0 min-w-0 flex-1 flex-col overflow-auto">
+        <div className="[-webkit-app-region:no-drag] flex min-h-0 min-w-0 flex-1 flex-col overflow-auto">
           {children}
         </div>
       </main>
+
       <div id="modal-root" />
       <div id="popover-root" />
     </div>

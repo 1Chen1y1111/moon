@@ -1,2 +1,1 @@
-export const settingsPanelClassName =
-  'rounded-moon-panel border border-moon-border-default bg-moon-surface-2 px-moon-panel py-moon-panel'
+export const settingsPanelClassName = 'rounded-xl border border-border bg-secondary px-6 py-6'

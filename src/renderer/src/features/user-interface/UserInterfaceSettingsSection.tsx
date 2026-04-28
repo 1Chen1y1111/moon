@@ -51,15 +51,11 @@ export function UserInterfaceSettingsSection(): React.JSX.Element {
 
   return (
     <section className={settingsPanelClassName}>
-      <h2 className="font-moon-serif text-moon-h2 font-moon-title leading-moon-h2 text-moon-text-primary">
-        用户界面
-      </h2>
+      <h2 className="font-serif text-xl font-medium leading-7 text-foreground">用户界面</h2>
 
-      <div className="mt-moon-section-gap">
-        <p className="text-moon-body-lead font-moon-label leading-moon-body-lead text-moon-text-primary">
-          主题
-        </p>
-        <div className="mt-moon-option-stack grid gap-moon-option-gap md:grid-cols-3">
+      <div className="mt-16">
+        <p className="text-sm font-semibold leading-6 text-foreground">主题</p>
+        <div className="mt-6 grid gap-3 md:grid-cols-3">
           {themeOptions.map(({ theme, label, Preview }) => {
             const isActive = theme === activeTheme
 
@@ -70,14 +66,14 @@ export function UserInterfaceSettingsSection(): React.JSX.Element {
                 aria-pressed={isActive}
                 className={
                   isActive
-                    ? 'flex flex-col items-center rounded-moon-control border border-moon-button-secondary-border p-moon-option-gap text-moon-text-primary transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent'
-                    : 'flex flex-col items-center rounded-moon-control border border-moon-button-secondary-border p-moon-option-gap text-moon-text-primary transition-colors hover:border-moon-button-secondary-border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-accent'
+                    ? 'flex flex-col items-center rounded-md border border-input p-3 text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                    : 'flex flex-col items-center rounded-md border border-input p-3 text-foreground transition-colors hover:border-input focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
                 }
                 disabled={isSaving}
                 onClick={() => handleThemeChange(theme)}
               >
                 <Preview />
-                <span className="text-center text-moon-caption leading-moon-caption">{label}</span>
+                <span className="text-center text-xs leading-5">{label}</span>
               </button>
             )
           })}

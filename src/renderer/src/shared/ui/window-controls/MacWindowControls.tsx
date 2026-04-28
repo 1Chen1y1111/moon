@@ -7,10 +7,10 @@ type MacWindowControlsProps = {
 }
 
 const trafficLightButtonClassName =
-  'group relative flex size-moon-traffic-light items-center justify-center rounded-moon-pill transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-ring-subtle'
+  'group relative flex size-3 items-center justify-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
 
 const trafficLightGlyphClassName =
-  'pointer-events-none absolute inset-0 size-full p-moon-traffic-light-icon opacity-0 transition-opacity group-hover:opacity-70'
+  'pointer-events-none absolute inset-0 size-full p-0.5 opacity-0 transition-opacity group-hover:opacity-70'
 
 export function MacWindowControls({
   onClose,
@@ -18,46 +18,46 @@ export function MacWindowControls({
   onToggleMaximize
 }: MacWindowControlsProps): React.JSX.Element {
   return (
-    <div className="moon-window-no-drag relative z-20 flex items-center gap-moon-md">
+    <div className="[-webkit-app-region:no-drag] relative z-20 flex items-center gap-3">
       <button
         type="button"
         aria-label="关闭窗口"
-        className={`${trafficLightButtonClassName} bg-moon-window-control-close`}
+        className={`${trafficLightButtonClassName} bg-[#ff5f57]`}
         onClick={onClose}
       >
         <X
           aria-hidden="true"
           className={trafficLightGlyphClassName}
           data-testid="mac-window-control-close-icon"
-          stroke="var(--moon-window-control-glyph)"
+          stroke="#171717"
           strokeWidth={3}
         />
       </button>
       <button
         type="button"
         aria-label="最小化窗口"
-        className={`${trafficLightButtonClassName} bg-moon-window-control-minimize`}
+        className={`${trafficLightButtonClassName} bg-[#ffbd2e]`}
         onClick={onMinimize}
       >
         <Minus
           aria-hidden="true"
           className={trafficLightGlyphClassName}
           data-testid="mac-window-control-minimize-icon"
-          stroke="var(--moon-window-control-glyph)"
+          stroke="#171717"
           strokeWidth={3}
         />
       </button>
       <button
         type="button"
         aria-label="切换缩放窗口"
-        className={`${trafficLightButtonClassName} bg-moon-window-control-maximize`}
+        className={`${trafficLightButtonClassName} bg-[#28c840]`}
         onClick={onToggleMaximize}
       >
         <Plus
           aria-hidden="true"
           className={trafficLightGlyphClassName}
           data-testid="mac-window-control-maximize-icon"
-          stroke="var(--moon-window-control-glyph)"
+          stroke="#171717"
           strokeWidth={3}
         />
       </button>

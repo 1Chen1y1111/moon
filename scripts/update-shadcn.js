@@ -17,7 +17,9 @@ const components = [
   'label',
   'select',
   'switch',
-  'textarea'
+  'textarea',
+  'scroll-area',
+  'input-group'
 ]
 
 /**

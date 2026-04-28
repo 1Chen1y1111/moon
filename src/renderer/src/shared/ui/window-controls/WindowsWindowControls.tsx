@@ -8,7 +8,7 @@ type WindowsWindowControlsProps = {
 }
 
 const windowsButtonClassName =
-  'flex h-moon-window-button-y w-moon-window-button-x items-center justify-center rounded-moon-control text-moon-text-secondary transition-colors hover:bg-moon-button-ghost-bg-hover hover:text-moon-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-moon-ring-subtle'
+  'flex h-8 w-10 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
 
 export function WindowsWindowControls({
   isRestored = false,
@@ -17,14 +17,14 @@ export function WindowsWindowControls({
   onToggleMaximize
 }: WindowsWindowControlsProps): React.JSX.Element {
   return (
-    <div className="moon-window-no-drag relative z-20 flex items-center">
+    <div className="[-webkit-app-region:no-drag] relative z-20 flex items-center">
       <button
         type="button"
         aria-label="最小化窗口"
         className={windowsButtonClassName}
         onClick={onMinimize}
       >
-        <Minus aria-hidden="true" className="size-moon-icon-sm" strokeWidth={1.75} />
+        <Minus aria-hidden="true" className="size-3.5" strokeWidth={1.75} />
       </button>
       <button
         type="button"
@@ -33,9 +33,9 @@ export function WindowsWindowControls({
         onClick={onToggleMaximize}
       >
         {isRestored ? (
-          <Copy aria-hidden="true" className="size-moon-icon-sm" strokeWidth={1.75} />
+          <Copy aria-hidden="true" className="size-3.5" strokeWidth={1.75} />
         ) : (
-          <Square aria-hidden="true" className="size-moon-icon-sm" strokeWidth={1.75} />
+          <Square aria-hidden="true" className="size-3.5" strokeWidth={1.75} />
         )}
       </button>
       <button
@@ -44,7 +44,7 @@ export function WindowsWindowControls({
         className={windowsButtonClassName}
         onClick={onClose}
       >
-        <X aria-hidden="true" className="size-moon-icon" strokeWidth={1.75} />
+        <X aria-hidden="true" className="size-4" strokeWidth={1.75} />
       </button>
     </div>
   )

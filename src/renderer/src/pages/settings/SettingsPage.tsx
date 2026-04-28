@@ -14,6 +14,9 @@ import { MacWindowControls } from '@renderer/shared/ui/window-controls'
 import { SettingsChrome } from '@renderer/widgets/settings-window-shell'
 import { SettingsContent } from '@renderer/widgets/settings-content'
 
+import { Button } from '@shadcn/ui/button'
+import { ScrollArea } from '@shadcn/ui/scroll-area'
+
 type ProviderFooterState = Omit<ProviderSettingsFooterAction, 'onSave'>
 
 function readInitialSectionFromHash(): SettingsSectionId | null {
@@ -105,7 +108,7 @@ export function SettingsPage(): React.JSX.Element {
   return (
     <div
       data-testid="settings-shell-surface"
-      className="flex h-full min-h-0 w-full overflow-hidden text-moon-text-primary shadow-moon-ring"
+      className="flex w-full h-screen bg-background text-foreground"
     >
       <SettingsSidebar
         activeSection={activeSection}
@@ -113,12 +116,12 @@ export function SettingsPage(): React.JSX.Element {
         onSectionChange={(sectionId) => dispatch(setActiveSettingsSection(sectionId))}
       />
 
-      <section className="ml-moon-md flex min-h-0 min-w-0 flex-1 flex-col">
+      <main className="w-full h-screen flex flex-1 flex-col">
         <SettingsChrome title={activeMeta?.title ?? '设置'} />
 
         <div
           data-testid="settings-content-scroll"
-          className="min-h-0 flex-1 overflow-y-auto px-moon-panel py-moon-panel"
+          className="h-[calc(100%-120px)] flex-1 px-6 py-6"
         >
           <SettingsContent
             activeSection={activeSection}
@@ -126,29 +129,18 @@ export function SettingsPage(): React.JSX.Element {
           />
         </div>
 
-        <footer className="flex shrink-0 items-center justify-between border-t border-moon-border-subtle px-moon-panel py-moon-lg">
-          <p className="text-moon-body leading-moon-body text-moon-text-secondary">
-            {footerStatusText}
-          </p>
-          <div className="flex items-center gap-moon-option-gap">
-            <button
-              type="button"
-              className="h-moon-control rounded-moon-control border border-moon-button-secondary-border bg-moon-button-secondary-bg px-moon-card text-moon-body leading-moon-body text-moon-text-primary transition-colors hover:bg-moon-button-secondary-bg-hover"
-              onClick={handleFooterClose}
-            >
+        <footer className="flex shrink-0 items-center justify-between border-t border-border px-6 h-16">
+          <p className="text-sm leading-6 text-muted-foreground">{footerStatusText}</p>
+          <div className="flex items-center gap-3">
+            <Button variant="outline" onClick={handleFooterClose}>
               关闭
-            </button>
-            <button
-              type="button"
-              className="h-moon-control rounded-moon-control bg-moon-button-primary-bg px-moon-card text-moon-body font-moon-title leading-moon-body text-moon-button-primary-fg transition-colors hover:bg-moon-button-primary-bg-hover disabled:opacity-50"
-              disabled={footerSaveDisabled}
-              onClick={handleFooterSave}
-            >
+            </Button>
+            <Button variant="secondary" disabled={footerSaveDisabled} onClick={handleFooterSave}>
               {providerFooterState?.isSaving ? '保存中' : '保存'}
-            </button>
+            </Button>
           </div>
         </footer>
-      </section>
+      </main>
     </div>
   )
 }
