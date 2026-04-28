@@ -25,10 +25,6 @@ export const providerIds = builtInProviderIds
 export type BuiltInProviderId = (typeof builtInProviderIds)[number]
 export type ProviderId = string
 
-export const providerApiFormats = ['openai-chat', 'openai-responses', 'anthropic'] as const
-
-export type ProviderApiFormat = (typeof providerApiFormats)[number]
-
 export type ProviderKind = 'official' | 'custom' | 'coding-plan' | 'acp' | 'oauth' | 'local'
 
 export type ProviderType =
@@ -54,7 +50,6 @@ export type ProviderModel = {
   id: string
   name: string
   enabled: boolean
-  isManual: boolean
   contextWindow?: number
 }
 
@@ -70,8 +65,6 @@ export type ProviderMetadata = {
   noApiKey: boolean
   isACP: boolean
   isOAuth: boolean
-  defaultApiFormat: ProviderApiFormat
-  defaultUseMaxCompletionTokens: boolean
   modelPlaceholder: string
   defaultModels: ProviderModel[]
   badge?: string
@@ -84,7 +77,6 @@ function model(id: string, name = id, enabled = false, contextWindow?: number): 
     id,
     name,
     enabled,
-    isManual: false,
     ...(contextWindow === undefined ? {} : { contextWindow })
   }
 }
@@ -124,8 +116,6 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     noApiKey: false,
     isACP: false,
     isOAuth: false,
-    defaultApiFormat: 'openai-chat',
-    defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'moonshot-v1-8k',
     defaultModels: [model('moonshot-v1-8k'), model('moonshot-v1-32k'), model('moonshot-v1-128k')]
   },
@@ -141,8 +131,6 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     noApiKey: false,
     isACP: false,
     isOAuth: false,
-    defaultApiFormat: 'openai-chat',
-    defaultUseMaxCompletionTokens: true,
     modelPlaceholder: 'gpt-5.4',
     defaultModels: [model('gpt-5.4', 'gpt-5.4', true, 400_000), model('gpt-5.2', 'gpt-5.2')]
   },
@@ -158,8 +146,6 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     noApiKey: false,
     isACP: false,
     isOAuth: false,
-    defaultApiFormat: 'anthropic',
-    defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'claude-sonnet-4-5',
     defaultModels: [
       model('claude-sonnet-4-5'),
@@ -179,8 +165,6 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     noApiKey: false,
     isACP: false,
     isOAuth: false,
-    defaultApiFormat: 'openai-chat',
-    defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'gemini-2.5-pro',
     defaultModels: [model('gemini-2.5-pro'), model('gemini-2.5-flash')]
   },
@@ -196,8 +180,6 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     noApiKey: false,
     isACP: false,
     isOAuth: false,
-    defaultApiFormat: 'openai-chat',
-    defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'gpt-4o',
     defaultModels: []
   },
@@ -213,8 +195,6 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     noApiKey: false,
     isACP: false,
     isOAuth: false,
-    defaultApiFormat: 'openai-chat',
-    defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'deepseek-chat',
     defaultModels: [model('deepseek-chat'), model('deepseek-reasoner')]
   },
@@ -230,8 +210,6 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     noApiKey: false,
     isACP: false,
     isOAuth: false,
-    defaultApiFormat: 'openai-chat',
-    defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'glm-4.6',
     defaultModels: [model('glm-4.6')]
   },
@@ -247,8 +225,6 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     noApiKey: false,
     isACP: false,
     isOAuth: false,
-    defaultApiFormat: 'openai-chat',
-    defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'kimi-k2',
     defaultModels: [model('kimi-k2')]
   },
@@ -264,8 +240,6 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     noApiKey: false,
     isACP: false,
     isOAuth: false,
-    defaultApiFormat: 'openai-chat',
-    defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'openai/gpt-5.4',
     defaultModels: []
   },
@@ -281,8 +255,6 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     noApiKey: false,
     isACP: false,
     isOAuth: false,
-    defaultApiFormat: 'openai-chat',
-    defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'Deployment name (e.g., gpt-4o)',
     defaultModels: []
   },
@@ -298,8 +270,6 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     noApiKey: true,
     isACP: false,
     isOAuth: true,
-    defaultApiFormat: 'openai-chat',
-    defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'gpt-5-codex',
     defaultModels: []
   },
@@ -315,8 +285,6 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     noApiKey: true,
     isACP: false,
     isOAuth: true,
-    defaultApiFormat: 'anthropic',
-    defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'claude-sonnet-4-5',
     defaultModels: [model('claude-sonnet-4-5'), model('claude-opus-4-5')]
   },
@@ -332,8 +300,6 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     noApiKey: true,
     isACP: true,
     isOAuth: false,
-    defaultApiFormat: 'openai-chat',
-    defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'claude-code',
     defaultModels: [],
     acpCommand: 'claude-code-acp',
@@ -351,8 +317,6 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     noApiKey: true,
     isACP: true,
     isOAuth: false,
-    defaultApiFormat: 'openai-chat',
-    defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'gemini',
     defaultModels: [],
     acpCommand: 'gemini',
@@ -370,8 +334,6 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     noApiKey: true,
     isACP: true,
     isOAuth: false,
-    defaultApiFormat: 'openai-chat',
-    defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'codex',
     defaultModels: [],
     acpCommand: 'codex-acp',
@@ -389,8 +351,6 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     noApiKey: false,
     isACP: false,
     isOAuth: false,
-    defaultApiFormat: 'openai-chat',
-    defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'doubao-seed-1-6',
     defaultModels: []
   },
@@ -406,8 +366,6 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     noApiKey: true,
     isACP: false,
     isOAuth: false,
-    defaultApiFormat: 'openai-chat',
-    defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'llama3.2',
     defaultModels: []
   },
@@ -423,8 +381,6 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     noApiKey: false,
     isACP: false,
     isOAuth: false,
-    defaultApiFormat: 'openai-chat',
-    defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'provider/model',
     defaultModels: []
   },
@@ -440,8 +396,6 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     noApiKey: false,
     isACP: false,
     isOAuth: false,
-    defaultApiFormat: 'openai-chat',
-    defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'gpt-compatible',
     defaultModels: [],
     badge: 'CUSTOM'

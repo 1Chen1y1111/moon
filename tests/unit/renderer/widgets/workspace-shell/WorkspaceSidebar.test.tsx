@@ -37,7 +37,7 @@ describe('WorkspaceSidebar', () => {
     const sidebarShell = screen.getByRole('complementary', { name: 'Workspace navigation' })
 
     expect(sidebarShell).toBeInTheDocument()
-    expect(sidebarShell.firstElementChild).toHaveClass('border-moon-border-subtle')
+    expect(sidebarShell.firstElementChild).toHaveClass('border-border', 'bg-card', 'rounded-xl')
     expect(sidebarShell.firstElementChild).not.toHaveClass('shadow-moon-ring')
     expect(screen.getByTestId('window-chrome-collapse-trigger')).toBeInTheDocument()
     expect(screen.getByTestId('window-chrome-search-trigger')).toBeInTheDocument()

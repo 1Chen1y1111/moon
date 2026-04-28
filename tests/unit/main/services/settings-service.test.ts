@@ -56,9 +56,7 @@ describe('SettingsService', () => {
         provider: 'openai',
         apiKey: 'sk-openai-demo',
         model: 'gpt-5.4',
-        baseUrl: 'https://ignored.example.com',
-        apiFormat: 'openai-chat',
-        useMaxCompletionTokens: true
+        baseUrl: 'https://ignored.example.com'
       })
     )
   })

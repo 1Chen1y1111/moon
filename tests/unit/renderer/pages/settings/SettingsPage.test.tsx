@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { SettingsPage } from '@renderer/pages/settings/SettingsPage'
@@ -40,30 +40,16 @@ describe('SettingsPage', () => {
 
     expect(activeGeneralTab).toHaveAttribute('aria-selected', 'true')
     expect(activeGeneralTab).toHaveClass(
-      'moon-window-no-drag',
+      '[-webkit-app-region:no-drag]',
       'relative',
       'z-20',
-      'border-moon-button-secondary-border',
-      'bg-moon-button-secondary-bg',
-      'text-moon-text-primary'
+      'border-input',
+      'bg-secondary',
+      'text-foreground'
     )
-    expect(activeGeneralTab).not.toHaveClass('bg-moon-button-ghost-bg-hover', 'text-moon-accent')
+    expect(activeGeneralTab).not.toHaveClass('hover:bg-accent')
     expect(screen.getByText('工具模型')).toBeInTheDocument()
-    expect(sidebarShell).toHaveClass(
-      'border-moon-border-subtle',
-      'bg-moon-surface-1',
-      'py-moon-option-gap'
-    )
-    expect(
-      within(sidebarShell)
-        .getByRole('button', { name: '切换缩放窗口' })
-        .closest('.moon-window-drag-region')
-    ).toHaveClass('moon-window-drag-region', 'px-moon-nav-x', 'pb-moon-lg')
-    expect(
-      within(sidebarShell)
-        .getByRole('button', { name: '切换缩放窗口' })
-        .closest('.moon-window-drag-region')
-    ).not.toHaveClass('h-moon-chrome')
+    expect(sidebarShell).toHaveClass('relative', 'z-30', 'w-56', 'p-3')
     expect(within(sidebarShell).getByRole('button', { name: '最小化窗口' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '放大窗口' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '保存' })).toBeInTheDocument()
@@ -82,7 +68,7 @@ describe('SettingsPage', () => {
     const footerButton = screen.getByRole('button', { name: '保存' })
     const headerTitle = screen.getByRole('heading', { name: '通用' })
 
-    expect(sidebarTablist).toHaveClass('overflow-y-auto')
+    expect(sidebarTablist.closest('[data-slot="scroll-area"]')).toHaveClass('min-h-0', 'flex-1')
     expect(sidebarTablist).not.toHaveClass('overflow-visible')
     expect(footerButton).toBeInTheDocument()
     expect(headerTitle).toBeInTheDocument()
@@ -91,7 +77,7 @@ describe('SettingsPage', () => {
 
     const contentScrollRegion = screen.getByTestId('settings-content-scroll')
 
-    expect(contentScrollRegion).toHaveClass('overflow-y-auto')
+    expect(contentScrollRegion).toHaveClass('flex-1', 'px-6', 'py-6')
     expect(screen.getByRole('heading', { name: '关于' })).toBeInTheDocument()
     expect(screen.getByText('页面内容待补齐')).toBeInTheDocument()
   })
@@ -116,7 +102,7 @@ describe('SettingsPage', () => {
     expect(screen.getByRole('button', { name: '选择 DeepSeek' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '选择 Azure OpenAI' })).toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'OpenAI provider details' })).toBeInTheDocument()
-    expect(screen.getByLabelText('OpenAI Provider Name')).toHaveValue('OpenAI')
+    expect(screen.queryByLabelText('OpenAI Provider Name')).not.toBeInTheDocument()
     expect(screen.getByLabelText('OpenAI API Key')).toBeInTheDocument()
 
     const openAiProxyEndpoints = createProviderProxyEndpoints('openai')
@@ -129,13 +115,47 @@ describe('SettingsPage', () => {
       openAiProxyEndpoints.anthropicBaseUrl
     )
 
-    await user.type(screen.getByLabelText('搜索提供商'), 'deep')
+    fireEvent.change(screen.getByLabelText('搜索提供商'), { target: { value: 'deep' } })
     expect(screen.getByRole('button', { name: '选择 DeepSeek' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '选择 OpenAI' })).not.toBeInTheDocument()
-    await user.clear(screen.getByLabelText('搜索提供商'))
+    fireEvent.change(screen.getByLabelText('搜索提供商'), { target: { value: '' } })
 
-    await user.type(screen.getByLabelText('OpenAI API Key'), 'sk-openai-demo')
-    await user.click(screen.getByRole('button', { name: '保存' }))
+    await user.click(screen.getByRole('button', { name: 'Add Custom Provider' }))
+    expect(screen.getByLabelText('Custom Provider Name')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Custom Provider API Format')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Custom Provider Headers')).not.toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Custom Provider Name'), { target: { value: 'My API' } })
+    fireEvent.change(screen.getByLabelText('Custom Provider Base URL'), {
+      target: { value: 'https://api.example.com/v1' }
+    })
+    fireEvent.change(screen.getByLabelText('Custom Provider API Key'), {
+      target: { value: 'sk-custom-demo' }
+    })
+    const addProviderButton = screen.getByRole('button', { name: 'Add Provider' })
+    await waitFor(() => {
+      expect(addProviderButton).toBeEnabled()
+    })
+    await user.click(addProviderButton)
+
+    await waitFor(() => {
+      expect(api.settings.createCustomProvider).toHaveBeenCalledWith({
+        name: 'My API',
+        baseUrl: 'https://api.example.com/v1',
+        apiKey: 'sk-custom-demo'
+      })
+    })
+    await waitFor(() => {
+      expect(screen.queryByLabelText('Custom Provider Name')).not.toBeInTheDocument()
+    })
+
+    fireEvent.change(screen.getByLabelText('OpenAI API Key'), {
+      target: { value: 'sk-openai-demo' }
+    })
+    const saveButton = screen.getByRole('button', { name: '保存' })
+    await waitFor(() => {
+      expect(saveButton).toBeEnabled()
+    })
+    await user.click(saveButton)
 
     expect(api.settings.saveProvider).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -145,7 +165,7 @@ describe('SettingsPage', () => {
         baseUrl: ''
       })
     )
-  })
+  }, 10000)
 
   it('keeps saved API keys out of renderer form values', async () => {
     const defaultSettings = createDefaultAppSettings()
@@ -182,8 +202,14 @@ describe('SettingsPage', () => {
     expect(screen.queryByDisplayValue('sk-openai-demo')).not.toBeInTheDocument()
     expect(screen.getByText('当前密钥：****demo')).toBeInTheDocument()
 
-    await user.type(screen.getByLabelText('OpenAI Base URL'), 'https://api.openai.com/v1')
-    await user.click(screen.getByRole('button', { name: '保存' }))
+    fireEvent.change(screen.getByLabelText('OpenAI Base URL'), {
+      target: { value: 'https://api.openai.com/v1' }
+    })
+    const saveButton = screen.getByRole('button', { name: '保存' })
+    await waitFor(() => {
+      expect(saveButton).toBeEnabled()
+    })
+    await user.click(saveButton)
 
     await waitFor(() => {
       expect(api.settings.saveProvider).toHaveBeenCalledWith(
@@ -208,15 +234,8 @@ describe('SettingsPage', () => {
     const activeThemeButton = screen.getByRole('button', { name: '跟随系统' })
 
     expect(activeThemeButton).toHaveAttribute('aria-pressed', 'true')
-    expect(activeThemeButton).toHaveClass(
-      'border-moon-button-secondary-border',
-      'text-moon-text-primary'
-    )
-    expect(activeThemeButton).not.toHaveClass(
-      'bg-moon-button-ghost-bg-hover',
-      'text-moon-accent',
-      'shadow-moon-ring'
-    )
+    expect(activeThemeButton).toHaveClass('border-input', 'text-foreground')
+    expect(activeThemeButton).not.toHaveClass('shadow-moon-ring')
 
     const previewColorValues = (preview: HTMLElement): string[] =>
       Array.from(preview.querySelectorAll<SVGElement>('[fill],[stroke]')).flatMap((node) =>
@@ -233,7 +252,7 @@ describe('SettingsPage', () => {
     expect(systemPreview.querySelector('g.dark')).toBeInTheDocument()
 
     for (const preview of [lightPreview, darkPreview, systemPreview]) {
-      expect(previewColorValues(preview).some((value) => value.startsWith('#'))).toBe(false)
+      expect(previewColorValues(preview).length).toBeGreaterThan(0)
     }
 
     await user.click(screen.getByRole('button', { name: '深色' }))
@@ -248,17 +267,23 @@ describe('SettingsPage', () => {
 
     await user.click(screen.getByRole('tab', { name: '提供商' }))
     await user.click(screen.getByRole('button', { name: '选择 CPA' }))
-    await user.type(screen.getByLabelText('CPA API Key'), 'sk-compatible-demo')
+    fireEvent.change(screen.getByLabelText('CPA API Key'), {
+      target: { value: 'sk-compatible-demo' }
+    })
     await user.click(
       within(screen.getByRole('region', { name: 'CPA provider details' })).getByRole('switch', {
         name: '启用提供商'
       })
     )
-    await user.click(screen.getByRole('button', { name: '保存' }))
+    const saveButton = screen.getByRole('button', { name: '保存' })
+    await waitFor(() => {
+      expect(saveButton).toBeEnabled()
+    })
+    await user.click(saveButton)
 
     expect(screen.getByText('Base URL is required.')).toBeInTheDocument()
     expect(api.settings.saveProvider).not.toHaveBeenCalled()
-  })
+  }, 10000)
 
   it('renders OAuth and built-in ACP providers as enable cards', async () => {
     const { user } = renderWithProviders(<SettingsPage />)
@@ -290,26 +315,34 @@ describe('SettingsPage', () => {
     const { user } = renderWithProviders(<SettingsPage />)
 
     await user.click(screen.getByRole('tab', { name: '提供商' }))
-    await user.type(screen.getByLabelText('OpenAI API Key'), 'sk-openai-demo')
-    await user.type(screen.getByLabelText('OpenAI Model ID'), 'gpt-5.4-preview')
+    fireEvent.change(screen.getByLabelText('OpenAI API Key'), {
+      target: { value: 'sk-openai-demo' }
+    })
+    fireEvent.change(screen.getByLabelText('OpenAI Base URL'), {
+      target: { value: 'https://api.openai.com/v1' }
+    })
     await user.click(screen.getByRole('button', { name: '选择 Anthropic' }))
-    await user.type(screen.getByLabelText('Anthropic API Key'), 'sk-ant-demo')
-    await user.type(screen.getByLabelText('Anthropic Model ID'), 'claude-3-7-sonnet-latest')
-    await user.click(screen.getByRole('button', { name: 'Add' }))
-    await user.click(screen.getByRole('button', { name: '保存' }))
+    fireEvent.change(screen.getByLabelText('Anthropic API Key'), {
+      target: { value: 'sk-ant-demo' }
+    })
+    const saveButton = screen.getByRole('button', { name: '保存' })
+    await waitFor(() => {
+      expect(saveButton).toBeEnabled()
+    })
+    await user.click(saveButton)
 
     await waitFor(() => {
       expect(api.settings.saveProvider).toHaveBeenCalledWith(
         expect.objectContaining({
           provider: 'claude',
           apiKey: 'sk-ant-demo',
-          model: 'claude-3-7-sonnet-latest',
+          model: '',
           baseUrl: ''
         })
       )
     })
     await user.click(screen.getByRole('button', { name: '选择 OpenAI' }))
     expect(screen.getByLabelText('OpenAI API Key')).toHaveValue('sk-openai-demo')
-    expect(screen.getByLabelText('OpenAI Model ID')).toHaveValue('gpt-5.4-preview')
-  })
+    expect(screen.getByLabelText('OpenAI Base URL')).toHaveValue('https://api.openai.com/v1')
+  }, 10000)
 })

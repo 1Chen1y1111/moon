@@ -17,14 +17,14 @@ describe('SettingsChrome', () => {
 
     render(<SettingsChrome title="提供商" />)
 
-    expect(screen.getByRole('banner')).toHaveClass('moon-window-drag-region')
+    expect(screen.getByRole('banner')).toHaveClass('[-webkit-app-region:drag]', 'h-14', 'px-6')
     expect(screen.getByRole('heading', { name: '提供商' })).toBeInTheDocument()
     expect(screen.queryByTestId('window-chrome-search-trigger')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '切换缩放窗口' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: '放大窗口' })).toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: '放大窗口' }).closest('.moon-window-no-drag')
-    ).toHaveClass('moon-window-no-drag', 'relative', 'z-20')
+      screen.getByRole('button', { name: '放大窗口' }).closest('div')
+    ).toHaveClass('[-webkit-app-region:no-drag]', 'relative', 'z-20')
 
     await user.click(screen.getByRole('button', { name: '关闭窗口' }))
     await user.click(screen.getByRole('button', { name: '最小化窗口' }))

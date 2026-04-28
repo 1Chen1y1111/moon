@@ -52,7 +52,6 @@ function normalizeModel(model: ProviderModel): ProviderModel {
     id: model.id.trim(),
     name: model.name.trim() || model.id.trim(),
     enabled: model.enabled,
-    isManual: model.isManual,
     ...(model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow })
   }
 }
@@ -104,8 +103,7 @@ function ensureSelectedModel(models: ProviderModel[], modelId: string): Provider
     {
       id: modelId,
       name: modelId,
-      enabled: true,
-      isManual: true
+      enabled: true
     }
   ]
 }
@@ -194,9 +192,6 @@ export class SettingsRepository {
         models,
         availableModels,
         baseUrl: row.baseUrl,
-        apiFormat: row.apiFormat || defaults.apiFormat,
-        useMaxCompletionTokens: row.useMaxCompletionTokens,
-        customHeaders: row.customHeaders,
         enabled: row.enabled,
         isBuiltIn,
         isCustom,
@@ -228,9 +223,6 @@ export class SettingsRepository {
       type: 'custom',
       apiKey: input.apiKey,
       baseUrl: input.baseUrl,
-      apiFormat: input.apiFormat,
-      useMaxCompletionTokens: input.useMaxCompletionTokens,
-      customHeaders: input.customHeaders,
       enabled: false,
       requiresBaseUrl: true,
       noApiKey: false,
@@ -268,9 +260,6 @@ export class SettingsRepository {
       type: 'acp',
       apiKey: '',
       baseUrl: '',
-      apiFormat: 'openai-chat',
-      useMaxCompletionTokens: false,
-      customHeaders: '',
       enabled: false,
       requiresBaseUrl: false,
       noApiKey: true,
@@ -309,9 +298,6 @@ export class SettingsRepository {
     const model = selectedModel || models.find((entry) => entry.enabled)?.id || defaults.model
     const providerType = (draft.type ?? defaults.type) as ProviderSettings['type']
     const baseUrl = draft.baseUrl?.trim() ?? ''
-    const apiFormat = draft.apiFormat ?? defaults.apiFormat
-    const useMaxCompletionTokens = draft.useMaxCompletionTokens ?? defaults.useMaxCompletionTokens
-    const customHeaders = draft.customHeaders ?? ''
     const enabled = draft.enabled ?? defaults.enabled
     const isCustom = draft.isCustom ?? defaults.isCustom ?? !defaults.isBuiltIn
     const isACP = draft.isACP ?? defaults.isACP
@@ -332,9 +318,6 @@ export class SettingsRepository {
         availableModels,
         baseUrl,
         encryptedApiKey,
-        apiFormat,
-        useMaxCompletionTokens,
-        customHeaders,
         enabled,
         isCustom,
         isAcp: isACP,
@@ -355,9 +338,6 @@ export class SettingsRepository {
           availableModels,
           baseUrl,
           encryptedApiKey,
-          apiFormat,
-          useMaxCompletionTokens,
-          customHeaders,
           enabled,
           isCustom,
           isAcp: isACP,

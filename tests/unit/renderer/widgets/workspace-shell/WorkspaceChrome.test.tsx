@@ -17,7 +17,7 @@ describe('WorkspaceChrome', () => {
 
     render(<WorkspaceChrome />)
 
-    expect(screen.getByRole('banner')).toHaveClass('moon-window-drag-region', 'p-moon-md')
+    expect(screen.getByRole('banner')).toHaveClass('[-webkit-app-region:drag]', 'p-3')
     expect(screen.getByRole('banner')).not.toHaveClass('h-moon-chrome')
 
     await user.click(screen.getByRole('button', { name: '关闭窗口' }))
@@ -25,8 +25,8 @@ describe('WorkspaceChrome', () => {
     await user.click(screen.getByRole('button', { name: '切换缩放窗口' }))
 
     expect(
-      screen.getByTestId('mac-window-control-close-icon').closest('.moon-window-no-drag')
-    ).toHaveClass('moon-window-no-drag', 'relative', 'z-20')
+      screen.getByTestId('mac-window-control-close-icon').closest('div')
+    ).toHaveClass('[-webkit-app-region:no-drag]', 'relative', 'z-20')
     expect(screen.getByTestId('mac-window-control-close-icon').closest('button')).not.toHaveClass(
       'hover:brightness-75'
     )
@@ -36,7 +36,7 @@ describe('WorkspaceChrome', () => {
     )
     expect(screen.getByTestId('mac-window-control-close-icon')).toHaveAttribute(
       'stroke',
-      'var(--moon-window-control-glyph)'
+      '#171717'
     )
     expect(screen.getByTestId('mac-window-control-minimize-icon')).toHaveClass(
       'opacity-0',
@@ -44,7 +44,7 @@ describe('WorkspaceChrome', () => {
     )
     expect(screen.getByTestId('mac-window-control-minimize-icon')).toHaveAttribute(
       'stroke',
-      'var(--moon-window-control-glyph)'
+      '#171717'
     )
     expect(screen.getByTestId('mac-window-control-maximize-icon')).toHaveClass(
       'opacity-0',
@@ -52,7 +52,7 @@ describe('WorkspaceChrome', () => {
     )
     expect(screen.getByTestId('mac-window-control-maximize-icon')).toHaveAttribute(
       'stroke',
-      'var(--moon-window-control-glyph)'
+      '#171717'
     )
     expect(api.windowControls.close).toHaveBeenCalledTimes(1)
     expect(api.windowControls.minimize).toHaveBeenCalledTimes(1)
@@ -68,16 +68,16 @@ describe('WorkspaceChrome', () => {
     ]) {
       const utilityCard = trigger.firstElementChild as HTMLElement
 
-      expect(trigger.closest('.moon-window-no-drag')).toHaveClass(
-        'moon-window-no-drag',
+      expect(trigger.parentElement).toHaveClass(
+        '[-webkit-app-region:no-drag]',
         'relative',
         'z-20'
       )
       expect(utilityCard).toHaveClass(
         'border-transparent',
-        'group-hover:border-moon-button-secondary-border',
-        'group-hover:bg-moon-button-ghost-bg-hover',
-        'group-hover:text-moon-text-primary'
+        'group-hover:border-input',
+        'group-hover:bg-accent',
+        'group-hover:text-foreground'
       )
       expect(utilityCard).not.toHaveClass(
         'group-hover:text-moon-fg-inverse',

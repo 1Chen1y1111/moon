@@ -45,7 +45,8 @@ export function SettingsSidebar({
                           : '[-webkit-app-region:no-drag] relative z-20 h-10 gap-3 border border-transparent px-3 py-3 text-left text-sm font-medium leading-6 text-foreground transition-colors hover:bg-accent hover:text-foreground'
                       }
                     >
-                      <div
+                      <button
+                        type="button"
                         role="tab"
                         aria-selected={isActive}
                         onClick={() => onSectionChange(section.id)}
@@ -55,7 +56,7 @@ export function SettingsSidebar({
                           className="size-4 shrink-0 text-muted-foreground"
                         />
                         <span>{section.label}</span>
-                      </div>
+                      </button>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
                 )

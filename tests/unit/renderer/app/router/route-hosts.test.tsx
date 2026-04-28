@@ -26,12 +26,13 @@ describe('route layouts', () => {
     const workspaceChrome = within(workspaceDragRegion)
 
     expect(workspaceDragRegion).toHaveClass(
-      'moon-window-drag-region',
+      '[-webkit-app-region:drag]',
       'flex',
-      'h-moon-chrome',
+      'h-14',
       'shrink-0',
       'items-center',
-      'justify-end'
+      'justify-end',
+      'px-6'
     )
     expect(workspaceChrome.getByRole('button', { name: '最小化窗口' })).toBeInTheDocument()
     expect(workspaceChrome.getByRole('button', { name: '放大窗口' })).toBeInTheDocument()
@@ -51,7 +52,7 @@ describe('route layouts', () => {
     expect(
       screen.queryByRole('complementary', { name: 'Workspace navigation' })
     ).not.toBeInTheDocument()
-    expect(screen.getByTestId('settings-window-shell')).toHaveClass('h-screen', 'overflow-hidden')
+    expect(screen.getByTestId('settings-window-shell')).toHaveClass('h-screen', 'bg-background')
     expect(screen.getByTestId('settings-window-shell')).not.toHaveClass('min-h-screen')
     expect(screen.queryByTestId('settings-window-drag-strip')).not.toBeInTheDocument()
   })

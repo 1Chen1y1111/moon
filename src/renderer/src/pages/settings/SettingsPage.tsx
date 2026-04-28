@@ -15,7 +15,6 @@ import { SettingsChrome } from '@renderer/widgets/settings-window-shell'
 import { SettingsContent } from '@renderer/widgets/settings-content'
 
 import { Button } from '@shadcn/ui/button'
-import { ScrollArea } from '@shadcn/ui/scroll-area'
 
 type ProviderFooterState = Omit<ProviderSettingsFooterAction, 'onSave'>
 
