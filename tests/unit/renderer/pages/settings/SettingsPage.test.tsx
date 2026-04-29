@@ -76,7 +76,7 @@ describe('SettingsPage', () => {
     expect(api.settings.get).not.toHaveBeenCalled()
   })
 
-  it('keeps the header and footer fixed while the sidebar and content own scrolling', async () => {
+  it('keeps the header and footer fixed while switching content containers', async () => {
     const { user } = renderWithProviders(<SettingsPage />)
 
     const sidebarTablist = screen.getByRole('tablist', { name: '设置分类' })
@@ -92,9 +92,25 @@ describe('SettingsPage', () => {
 
     const contentScrollRegion = screen.getByTestId('settings-content-scroll')
 
+    expect(contentScrollRegion).toHaveAttribute('data-slot', 'scroll-area')
     expect(contentScrollRegion).toHaveClass('flex-1', 'px-6', 'py-6')
+    expect(screen.queryByTestId('settings-content')).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { name: '关于' })).toBeInTheDocument()
     expect(screen.getByText('页面内容待补齐')).toBeInTheDocument()
+  })
+
+  it('renders providers content in a div', () => {
+    renderWithProviders(<SettingsPage />, {
+      preloadedSettings: {
+        activeSection: 'providers'
+      }
+    })
+
+    const contentRegion = screen.getByTestId('settings-content')
+
+    expect(contentRegion).toHaveClass('flex-1', 'px-6', 'py-6')
+    expect(contentRegion).not.toHaveAttribute('data-slot', 'scroll-area')
+    expect(screen.queryByTestId('settings-content-scroll')).not.toBeInTheDocument()
   })
 
   it('renders the provider catalog and saves the selected provider from the footer', async () => {

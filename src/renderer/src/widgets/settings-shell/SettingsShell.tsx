@@ -53,6 +53,7 @@ export function SettingsShell({
   const handleFooterClose = (): void => {
     void window.api.windowControls.close()
   }
+  const contentClassName = 'h-[calc(100%-120px)] flex-1 px-6 py-6'
 
   return (
     <div
@@ -68,12 +69,15 @@ export function SettingsShell({
       <main className="w-full h-screen flex flex-1 flex-col">
         <SettingsChrome title={title} />
 
-        <ScrollArea
-          data-testid="settings-content-scroll"
-          className="h-[calc(100%-120px)] flex-1 px-6 py-6"
-        >
-          {children}
-        </ScrollArea>
+        {activeSection === 'providers' ? (
+          <div data-testid="settings-content" className={contentClassName}>
+            {children}
+          </div>
+        ) : (
+          <ScrollArea data-testid="settings-content-scroll" className={contentClassName}>
+            {children}
+          </ScrollArea>
+        )}
 
         <footer className="flex shrink-0 items-center justify-between border-t border-border px-6 h-16">
           <p className="text-sm leading-6 text-muted-foreground">{footerStatusText}</p>
