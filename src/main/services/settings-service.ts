@@ -23,7 +23,10 @@ import {
   type ProviderTestResult
 } from '../../shared/domain/settings'
 import {
+  isBuiltInProviderId,
+  providerMetadata,
   providerModelManualOverrideFields,
+  type ProviderId,
   type ProviderModel,
   type ProviderModelManualOverride
 } from '../../shared/domain/provider'
@@ -449,13 +452,21 @@ async function enrichModelsFromModelsDev(
   provider: string,
   models: ProviderModel[]
 ): Promise<ProviderModel[]> {
-  const modelsDevModels = await fetchModelsDevModels(provider)
+  const modelsDevModels = await fetchModelsDevModels(resolveModelsDevProviderId(provider))
 
   if (modelsDevModels === null) {
     return models
   }
 
   return models.map((model) => enrichModelFromModelsDev(model, modelsDevModels.get(model.id)))
+}
+
+function resolveModelsDevProviderId(provider: ProviderId): string {
+  if (!isBuiltInProviderId(provider)) {
+    return provider
+  }
+
+  return providerMetadata[provider].modelsDevProviderId ?? provider
 }
 
 function mergeModelsWithExistingState(

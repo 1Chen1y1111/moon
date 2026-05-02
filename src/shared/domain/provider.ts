@@ -96,6 +96,7 @@ export type ProviderMetadata = {
   defaultUseMaxCompletionTokens: boolean
   modelPlaceholder: string
   defaultModels: ProviderModel[]
+  modelsDevProviderId?: string
   badge?: string
   acpCommand?: string
   acpArgs?: string[]
@@ -149,7 +150,8 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     defaultApiFormat: 'openai-chat',
     defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'moonshot-v1-8k',
-    defaultModels: [model('moonshot-v1-8k'), model('moonshot-v1-32k'), model('moonshot-v1-128k')]
+    defaultModels: [model('moonshot-v1-8k'), model('moonshot-v1-32k'), model('moonshot-v1-128k')],
+    modelsDevProviderId: 'moonshotai'
   },
   openai: {
     provider: 'openai',
@@ -187,7 +189,8 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
       model('claude-sonnet-4-5'),
       model('claude-opus-4-5'),
       model('claude-3-7-sonnet-latest')
-    ]
+    ],
+    modelsDevProviderId: 'anthropic'
   },
   gemini: {
     provider: 'gemini',
@@ -204,7 +207,8 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     defaultApiFormat: 'openai-chat',
     defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'gemini-2.5-pro',
-    defaultModels: [model('gemini-2.5-pro'), model('gemini-2.5-flash')]
+    defaultModels: [model('gemini-2.5-pro'), model('gemini-2.5-flash')],
+    modelsDevProviderId: 'google'
   },
   aihubmix: {
     provider: 'aihubmix',

@@ -226,6 +226,79 @@ describe('SettingsService', () => {
     ])
   })
 
+  it.each([
+    {
+      provider: 'claude',
+      modelsDevProvider: 'anthropic',
+      modelId: 'claude-sonnet-4-5',
+      modelName: 'Claude Sonnet 4.5'
+    },
+    {
+      provider: 'gemini',
+      modelsDevProvider: 'google',
+      modelId: 'gemini-2.5-pro',
+      modelName: 'Gemini 2.5 Pro'
+    },
+    {
+      provider: 'moonshot',
+      modelsDevProvider: 'moonshotai',
+      modelId: 'kimi-k2.5',
+      modelName: 'Kimi K2.5'
+    }
+  ])(
+    'uses $modelsDevProvider as the models.dev provider key for $provider',
+    async ({ provider, modelsDevProvider, modelId, modelName }) => {
+      const settingsRepository = createSettingsRepositoryMock()
+      const service = new SettingsService(settingsRepository as never)
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(createJsonResponse({ data: [{ id: modelId }] }))
+        .mockResolvedValueOnce(
+          createJsonResponse({
+            [provider]: {
+              models: {
+                [modelId]: {
+                  name: 'Wrong Provider Model',
+                  tool_call: false
+                }
+              }
+            },
+            [modelsDevProvider]: {
+              models: {
+                [modelId]: {
+                  name: modelName,
+                  modalities: { input: ['text', 'image'], output: ['text'] },
+                  tool_call: true,
+                  reasoning: true,
+                  limit: { context: 200_000, output: 8192 }
+                }
+              }
+            }
+          })
+        )
+      vi.stubGlobal('fetch', fetchMock)
+
+      await service.fetchProviderModels(createFetchProviderModelsInput({ provider }))
+
+      const [, models] = settingsRepository.updateProviderModels.mock.calls[0] as [
+        string,
+        unknown[]
+      ]
+
+      expect(models).toEqual([
+        expect.objectContaining({
+          id: modelId,
+          name: modelName,
+          supportsVision: true,
+          supportsToolCalling: true,
+          supportsReasoning: true,
+          contextWindow: 200_000,
+          maxOutputTokens: 8192
+        })
+      ])
+    }
+  )
+
   it('keeps manual model overrides after models.dev enrichment', async () => {
     const settingsRepository = createSettingsRepositoryMock()
     const service = new SettingsService(settingsRepository as never)
