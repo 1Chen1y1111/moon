@@ -1,7 +1,7 @@
 import { PanelLeftClose, Search, SquarePen } from 'lucide-react'
 import { Tooltip as TooltipPrimitive } from 'radix-ui'
 
-import { Tooltip, TooltipProvider, TooltipTrigger } from '@shadcn/ui/tooltip'
+import { Tooltip, TooltipTrigger } from '@shadcn/ui/tooltip'
 
 const utilityCardClassName =
   'flex size-6 cursor-default select-none items-center justify-center rounded-md border border-transparent text-muted-foreground transition-[background-color,border-color,color,transform] duration-200 ease-out group-hover:border-input group-hover:bg-accent group-hover:text-foreground'
@@ -26,41 +26,39 @@ function WorkspaceTooltipContent({ children }: { children: string }): React.JSX.
 
 export function WorkspaceUtilityActions(): React.JSX.Element {
   return (
-    <TooltipProvider>
-      <div className="[-webkit-app-region:no-drag] relative z-20 flex items-center gap-2">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="group" data-testid="window-chrome-collapse-trigger">
-              <div className={utilityCardClassName}>
-                <PanelLeftClose aria-hidden="true" className="size-3" strokeWidth={1.75} />
-              </div>
+    <div className="[-webkit-app-region:no-drag] relative z-20 flex items-center gap-2">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="group" data-testid="window-chrome-collapse-trigger">
+            <div className={utilityCardClassName}>
+              <PanelLeftClose aria-hidden="true" className="size-3" strokeWidth={1.75} />
             </div>
-          </TooltipTrigger>
-          <WorkspaceTooltipContent>折叠侧边栏</WorkspaceTooltipContent>
-        </Tooltip>
+          </div>
+        </TooltipTrigger>
+        <WorkspaceTooltipContent>折叠侧边栏</WorkspaceTooltipContent>
+      </Tooltip>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="group" data-testid="window-chrome-search-trigger">
-              <div className={utilityCardClassName}>
-                <Search aria-hidden="true" className="size-3" strokeWidth={1.75} />
-              </div>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="group" data-testid="window-chrome-search-trigger">
+            <div className={utilityCardClassName}>
+              <Search aria-hidden="true" className="size-3" strokeWidth={1.75} />
             </div>
-          </TooltipTrigger>
-          <WorkspaceTooltipContent>搜索</WorkspaceTooltipContent>
-        </Tooltip>
+          </div>
+        </TooltipTrigger>
+        <WorkspaceTooltipContent>搜索</WorkspaceTooltipContent>
+      </Tooltip>
 
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <div className="group" data-testid="window-chrome-compose-trigger">
-              <div className={utilityCardClassName}>
-                <SquarePen aria-hidden="true" className="size-3" strokeWidth={1.75} />
-              </div>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <div className="group" data-testid="window-chrome-compose-trigger">
+            <div className={utilityCardClassName}>
+              <SquarePen aria-hidden="true" className="size-3" strokeWidth={1.75} />
             </div>
-          </TooltipTrigger>
-          <WorkspaceTooltipContent>新建聊天</WorkspaceTooltipContent>
-        </Tooltip>
-      </div>
-    </TooltipProvider>
+          </div>
+        </TooltipTrigger>
+        <WorkspaceTooltipContent>新建聊天</WorkspaceTooltipContent>
+      </Tooltip>
+    </div>
   )
 }

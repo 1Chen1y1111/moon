@@ -23,7 +23,7 @@ export type ProviderSettings = {
   description: string
   badge: string
   hasApiKey: boolean
-  apiKeyPreview: string
+  apiKey: string
   model: string
   models: ProviderModel[]
   availableModels: ProviderModel[]
@@ -70,10 +70,10 @@ export function createDefaultProviderSettings(provider: ProviderId): ProviderSet
     description: metadata?.description ?? 'Custom provider',
     badge: metadata?.badge ?? '',
     hasApiKey: false,
-    apiKeyPreview: '',
-    model: metadata?.defaultModels.find((model) => model.enabled)?.id ?? '',
-    models: metadata?.defaultModels ?? [],
-    availableModels: metadata?.defaultModels ?? [],
+    apiKey: '',
+    model: '',
+    models: [],
+    availableModels: [],
     baseUrl: '',
     defaultBaseUrl: metadata?.defaultBaseUrl ?? '',
     apiFormat: metadata?.defaultApiFormat ?? 'openai-chat',

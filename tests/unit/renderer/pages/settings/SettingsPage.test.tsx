@@ -2,6 +2,7 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { SettingsPage } from '@renderer/pages/settings/SettingsPage'
+import { Toaster } from '@shadcn/ui/sonner'
 import { createProviderProxyEndpoints } from '@shared/domain/provider-proxy'
 import { createDefaultAppSettings, type AppSettings } from '@shared/domain/settings'
 import { installMockWindowApi, type MockMoonApi } from '@tests/helpers/renderer/mock-window-api'
@@ -18,7 +19,7 @@ describe('SettingsPage', () => {
         ...defaultSettings.providers.claude,
         provider: 'claude',
         hasApiKey: true,
-        apiKeyPreview: '****demo',
+        apiKey: 'sk-ant-demo',
         model: 'claude-3-7-sonnet-latest',
         baseUrl: '',
         updatedAt: '2026-04-21T00:00:00.000Z'
@@ -135,6 +136,8 @@ describe('SettingsPage', () => {
     expect(screen.getByRole('region', { name: 'OpenAI provider details' })).toBeInTheDocument()
     expect(screen.queryByLabelText('OpenAI Provider Name')).not.toBeInTheDocument()
     expect(screen.getByLabelText('OpenAI API Key')).toBeInTheDocument()
+    expect(screen.getByText('暂无模型')).toBeInTheDocument()
+    expect(screen.getByText('点击 Fetch 拉取可用模型。')).toBeInTheDocument()
 
     const openAiProxyEndpoints = createProviderProxyEndpoints('openai')
     const proxyToggle = screen.getByText('API 代理端点').closest('[aria-expanded]')
@@ -150,7 +153,9 @@ describe('SettingsPage', () => {
 
     fireEvent.change(screen.getByLabelText('搜索提供商'), { target: { value: 'deep' } })
     expect(getProviderCatalogItem('DeepSeek')).toBeInTheDocument()
-    expect(within(screen.getByRole('list', { name: '提供商列表' })).queryByText('OpenAI')).not.toBeInTheDocument()
+    expect(
+      within(screen.getByRole('list', { name: '提供商列表' })).queryByText('OpenAI')
+    ).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('搜索提供商'), { target: { value: '' } })
 
     await user.click(screen.getByRole('button', { name: 'Add Custom Provider' }))
@@ -197,13 +202,13 @@ describe('SettingsPage', () => {
       expect.objectContaining({
         provider: 'openai',
         apiKey: 'sk-openai-demo',
-        model: 'gpt-5.4',
+        model: '',
         baseUrl: ''
       })
     )
   }, 10000)
 
-  it('keeps saved API keys out of renderer form values', async () => {
+  it('fills saved API keys into renderer form values', async () => {
     const defaultSettings = createDefaultAppSettings()
     const existingSettings: AppSettings = {
       ...defaultSettings,
@@ -213,7 +218,7 @@ describe('SettingsPage', () => {
           ...defaultSettings.providers.openai,
           provider: 'openai',
           hasApiKey: true,
-          apiKeyPreview: '****demo',
+          apiKey: 'sk-openai-demo',
           model: 'gpt-5.4',
           baseUrl: '',
           updatedAt: '2026-04-21T00:00:00.000Z'
@@ -234,9 +239,8 @@ describe('SettingsPage', () => {
       }
     })
 
-    expect(screen.getByLabelText('OpenAI API Key')).toHaveValue('')
-    expect(screen.queryByDisplayValue('sk-openai-demo')).not.toBeInTheDocument()
-    expect(screen.getByText('当前密钥：****demo')).toBeInTheDocument()
+    expect(screen.getByLabelText('OpenAI API Key')).toHaveValue('sk-openai-demo')
+    expect(screen.queryByText(/^当前密钥：/)).not.toBeInTheDocument()
 
     fireEvent.change(screen.getByLabelText('OpenAI Base URL'), {
       target: { value: 'https://api.openai.com/v1' }
@@ -251,12 +255,217 @@ describe('SettingsPage', () => {
       expect(api.settings.saveProvider).toHaveBeenCalledWith(
         expect.objectContaining({
           provider: 'openai',
-          apiKey: '',
+          apiKey: 'sk-openai-demo',
           model: 'gpt-5.4',
           baseUrl: 'https://api.openai.com/v1'
         })
       )
     })
+  })
+
+  it('configures model capabilities from the model list', async () => {
+    const defaultSettings = createDefaultAppSettings()
+    const existingSettings: AppSettings = {
+      ...defaultSettings,
+      providers: {
+        ...defaultSettings.providers,
+        openai: {
+          ...defaultSettings.providers.openai,
+          provider: 'openai',
+          hasApiKey: true,
+          apiKey: 'sk-openai-demo',
+          model: 'kimi-k2.5',
+          models: [
+            {
+              id: 'kimi-k2.5',
+              name: 'kimi-k2.5',
+              enabled: true,
+              isManual: true,
+              supportsVision: true,
+              supportsImageOutput: false,
+              supportsToolCalling: false,
+              supportsReasoning: false,
+              supportsEmbedding: false,
+              contextWindow: 262_144,
+              maxOutputTokens: 262_144,
+              providerOptions: '{\n\n}'
+            }
+          ],
+          availableModels: [
+            {
+              id: 'kimi-k2.5',
+              name: 'kimi-k2.5',
+              enabled: true,
+              isManual: true,
+              supportsVision: true,
+              supportsImageOutput: false,
+              supportsToolCalling: false,
+              supportsReasoning: false,
+              supportsEmbedding: false,
+              contextWindow: 262_144,
+              maxOutputTokens: 262_144,
+              providerOptions: '{\n\n}'
+            }
+          ],
+          baseUrl: '',
+          updatedAt: '2026-04-21T00:00:00.000Z'
+        }
+      }
+    }
+
+    api = installMockWindowApi({
+      appSettings: existingSettings,
+      savedSettings: existingSettings
+    })
+
+    const { user } = renderWithProviders(<SettingsPage />, {
+      preloadedSettings: {
+        activeSection: 'providers',
+        appSettings: existingSettings,
+        loadStatus: 'succeeded'
+      }
+    })
+
+    expect(screen.getByText('kimi-k2.5')).toBeInTheDocument()
+    expect(screen.getByLabelText('Supports image input')).toBeInTheDocument()
+    expect(screen.getByLabelText('Supports function calling')).toBeInTheDocument()
+    expect(screen.getByLabelText('Extended thinking/reasoning')).toBeInTheDocument()
+    expect(screen.getByLabelText('262,144 token context window')).toBeInTheDocument()
+    expect(screen.getByText('262K')).toBeInTheDocument()
+    await user.hover(screen.getByLabelText('Supports function calling'))
+    expect((await screen.findAllByText('Supports function calling')).length).toBeGreaterThan(0)
+
+    await user.click(screen.getByRole('button', { name: '配置模型 kimi-k2.5' }))
+    expect(screen.getByRole('dialog', { name: 'Model Options' })).toBeInTheDocument()
+    expect(screen.getByLabelText('kimi-k2.5 supports vision')).toHaveAttribute(
+      'aria-checked',
+      'true'
+    )
+    expect(screen.getByLabelText('kimi-k2.5 supports tool calling')).toHaveAttribute(
+      'aria-checked',
+      'true'
+    )
+    expect(screen.getByLabelText('kimi-k2.5 supports reasoning')).toHaveAttribute(
+      'aria-checked',
+      'true'
+    )
+    await user.click(screen.getByLabelText('kimi-k2.5 supports image output'))
+    await user.click(screen.getByLabelText('kimi-k2.5 supports embedding'))
+    await user.clear(screen.getByLabelText('kimi-k2.5 context window'))
+    await user.type(screen.getByLabelText('kimi-k2.5 context window'), '131072')
+    await user.clear(screen.getByLabelText('kimi-k2.5 max output tokens'))
+    await user.type(screen.getByLabelText('kimi-k2.5 max output tokens'), '8192')
+    fireEvent.change(screen.getByLabelText('kimi-k2.5 provider options json'), {
+      target: { value: '{ "thinking": { "type": "disabled" } }' }
+    })
+    await user.click(screen.getByRole('button', { name: 'Save' }))
+
+    const saveButton = screen.getByRole('button', { name: '保存' })
+    await waitFor(() => {
+      expect(saveButton).toBeEnabled()
+    })
+    await user.click(saveButton)
+
+    await waitFor(() => {
+      expect(api.settings.saveProvider).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: 'openai',
+          models: [
+            expect.objectContaining({
+              id: 'kimi-k2.5',
+              supportsVision: true,
+              supportsImageOutput: true,
+              supportsToolCalling: true,
+              supportsReasoning: true,
+              supportsEmbedding: true,
+              contextWindow: 131_072,
+              maxOutputTokens: 8192,
+              providerOptions: '{ "thinking": { "type": "disabled" } }',
+              manualOverrides: expect.arrayContaining([
+                'supportsImageOutput',
+                'supportsEmbedding',
+                'contextWindow',
+                'maxOutputTokens',
+                'providerOptions'
+              ])
+            })
+          ],
+          availableModels: [
+            expect.objectContaining({
+              id: 'kimi-k2.5',
+              supportsVision: true,
+              supportsImageOutput: true,
+              supportsToolCalling: true,
+              supportsReasoning: true,
+              supportsEmbedding: true,
+              contextWindow: 131_072,
+              maxOutputTokens: 8192,
+              providerOptions: '{ "thinking": { "type": "disabled" } }',
+              manualOverrides: expect.arrayContaining([
+                'supportsImageOutput',
+                'supportsEmbedding',
+                'contextWindow',
+                'maxOutputTokens',
+                'providerOptions'
+              ])
+            })
+          ]
+        })
+      )
+    })
+  })
+
+  it('formats million-token context windows in the model list', () => {
+    const defaultSettings = createDefaultAppSettings()
+    const existingSettings: AppSettings = {
+      ...defaultSettings,
+      providers: {
+        ...defaultSettings.providers,
+        openai: {
+          ...defaultSettings.providers.openai,
+          provider: 'openai',
+          hasApiKey: true,
+          apiKey: 'sk-openai-demo',
+          model: 'million-token-model',
+          models: [
+            {
+              id: 'million-token-model',
+              name: 'million-token-model',
+              enabled: true,
+              isManual: true,
+              contextWindow: 1_000_000
+            }
+          ],
+          availableModels: [
+            {
+              id: 'million-token-model',
+              name: 'million-token-model',
+              enabled: true,
+              isManual: true,
+              contextWindow: 1_000_000
+            }
+          ],
+          baseUrl: '',
+          updatedAt: '2026-04-21T00:00:00.000Z'
+        }
+      }
+    }
+
+    api = installMockWindowApi({
+      appSettings: existingSettings,
+      savedSettings: existingSettings
+    })
+
+    renderWithProviders(<SettingsPage />, {
+      preloadedSettings: {
+        activeSection: 'providers',
+        appSettings: existingSettings,
+        loadStatus: 'succeeded'
+      }
+    })
+
+    expect(screen.getByText('1M')).toBeInTheDocument()
+    expect(screen.getByLabelText('1,000,000 token context window')).toBeInTheDocument()
   })
 
   it('renders user interface theme choices and saves the selected theme', async () => {
@@ -319,6 +528,27 @@ describe('SettingsPage', () => {
 
     expect(screen.getByText('Base URL is required.')).toBeInTheDocument()
     expect(api.settings.saveProvider).not.toHaveBeenCalled()
+  })
+
+  it('shows a toast when provider model fetch fails', async () => {
+    api.settings.fetchProviderModels.mockRejectedValue(new Error('API key is required.'))
+
+    const { user } = renderWithProviders(
+      <>
+        <SettingsPage />
+        <Toaster />
+      </>,
+      {
+        preloadedSettings: {
+          activeSection: 'providers'
+        }
+      }
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Fetch' }))
+
+    expect(await screen.findByText('获取模型失败')).toBeInTheDocument()
+    expect(screen.getByText('API key is required.')).toBeInTheDocument()
   })
 
   it('renders OAuth and built-in ACP providers as enable cards', async () => {

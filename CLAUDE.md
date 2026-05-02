@@ -54,7 +54,7 @@ renderer feature -> window.api.settings.* -> preload typed invoke -> ipcMain han
   -> AppSettings response -> broadcast settings:on-change to all windows
 ```
 
-API keys are handled in the main process and encrypted through Electron `safeStorage` before persistence. The renderer receives derived provider state such as `hasApiKey` and `apiKeyPreview`, not the stored secret.
+API keys are handled in the main process and persisted through the settings repository. The existing `provider_settings.encrypted_api_key` column name is retained for compatibility, but new saves store the raw key value directly. The renderer receives provider state such as `hasApiKey` and `apiKey`.
 
 ### Provider integration
 

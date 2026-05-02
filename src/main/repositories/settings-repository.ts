@@ -16,13 +16,14 @@ import {
 import {
   isBuiltInProviderId,
   providerMetadata,
+  providerModelManualOverrideFields,
   type ProviderId,
+  type ProviderModelManualOverride,
   type ProviderModel
 } from '../../shared/domain/provider'
 import type { AppDatabaseConnection } from '../db/connection'
 import { providerSettings, settings as settingsTable } from '../db/schema'
 import { toIsoTimestamp } from '../db/timestamps'
-import type { SecretCodec } from '../security/secret-codec'
 
 const appearanceThemeKey = 'appearance.theme'
 const appearanceThemeSet = new Set<AppearanceTheme>(appearanceThemes)
@@ -33,27 +34,48 @@ type ProviderSaveDraft = Partial<SaveProviderInput> & {
   baseUrl?: string
 }
 
-function createApiKeyPreview(apiKey: string): string {
-  const trimmedApiKey = apiKey.trim()
+const providerModelManualOverrideFieldSet = new Set<string>(providerModelManualOverrideFields)
 
-  if (trimmedApiKey.length === 0) {
-    return ''
+function normalizeManualOverrides(
+  manualOverrides: ProviderModel['manualOverrides']
+): ProviderModelManualOverride[] | undefined {
+  if (manualOverrides === undefined) {
+    return undefined
   }
 
-  if (trimmedApiKey.length <= 4) {
-    return '****'
-  }
+  const normalizedOverrides = manualOverrides.filter(
+    (field, index) =>
+      providerModelManualOverrideFieldSet.has(field) && manualOverrides.indexOf(field) === index
+  )
 
-  return `****${trimmedApiKey.slice(-4)}`
+  return normalizedOverrides.length > 0 ? normalizedOverrides : undefined
 }
 
 function normalizeModel(model: ProviderModel): ProviderModel {
+  const manualOverrides = normalizeManualOverrides(model.manualOverrides)
+
   return {
     id: model.id.trim(),
     name: model.name.trim() || model.id.trim(),
     enabled: model.enabled,
     isManual: model.isManual,
-    ...(model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow })
+    ...(model.supportsVision === undefined ? {} : { supportsVision: model.supportsVision }),
+    ...(model.supportsImageOutput === undefined
+      ? {}
+      : { supportsImageOutput: model.supportsImageOutput }),
+    ...(model.supportsToolCalling === undefined
+      ? {}
+      : { supportsToolCalling: model.supportsToolCalling }),
+    ...(model.supportsReasoning === undefined
+      ? {}
+      : { supportsReasoning: model.supportsReasoning }),
+    ...(model.supportsEmbedding === undefined
+      ? {}
+      : { supportsEmbedding: model.supportsEmbedding }),
+    ...(model.contextWindow === undefined ? {} : { contextWindow: model.contextWindow }),
+    ...(model.maxOutputTokens === undefined ? {} : { maxOutputTokens: model.maxOutputTokens }),
+    ...(model.providerOptions === undefined ? {} : { providerOptions: model.providerOptions }),
+    ...(manualOverrides === undefined ? {} : { manualOverrides })
   }
 }
 
@@ -110,6 +132,19 @@ function ensureSelectedModel(models: ProviderModel[], modelId: string): Provider
   ]
 }
 
+function removeUnfetchedDefaultModels(
+  provider: ProviderId,
+  models: ProviderModel[]
+): ProviderModel[] {
+  if (!isBuiltInProviderId(provider)) {
+    return models
+  }
+
+  const defaultModelIds = new Set(providerMetadata[provider].defaultModels.map((model) => model.id))
+
+  return models.filter((model) => model.isManual || !defaultModelIds.has(model.id))
+}
+
 function createProviderSlug(name: string): string {
   const slug = name
     .trim()
@@ -146,10 +181,7 @@ function getProviderKind(input: {
 }
 
 export class SettingsRepository {
-  constructor(
-    private readonly database: AppDatabaseConnection,
-    private readonly secretCodec: SecretCodec
-  ) {}
+  constructor(private readonly database: AppDatabaseConnection) {}
 
   async getSettings(): Promise<AppSettings> {
     const settings = createDefaultAppSettings()
@@ -162,15 +194,22 @@ export class SettingsRepository {
     const rows = await this.database.db.select().from(providerSettings)
 
     for (const row of rows) {
-      const apiKey = this.secretCodec.decrypt(row.encryptedApiKey)
+      const apiKey = row.apiKey
       const defaults = createDefaultProviderSettings(row.provider)
+      const hasFetchedModels = row.modelsUpdatedAt !== null
       const rowModels = normalizeModels(row.models)
       const rowAvailableModels = normalizeModels(row.availableModels)
-      const models = rowModels.length > 0 ? rowModels : defaults.models
+      const persistedModels = hasFetchedModels
+        ? rowModels
+        : removeUnfetchedDefaultModels(row.provider, rowModels)
+      const persistedAvailableModels = hasFetchedModels
+        ? rowAvailableModels
+        : removeUnfetchedDefaultModels(row.provider, rowAvailableModels)
+      const models = persistedModels
       const availableModels =
-        rowAvailableModels.length > 0
-          ? mergeAvailableModels(models, rowAvailableModels)
-          : mergeAvailableModels(models, defaults.availableModels)
+        persistedAvailableModels.length > 0
+          ? mergeAvailableModels(models, persistedAvailableModels)
+          : mergeAvailableModels(models, [])
       const enabledModel = models.find((model) => model.enabled)
       const isBuiltIn = isBuiltInProviderId(row.provider)
       const isACP = row.isAcp || defaults.isACP
@@ -189,8 +228,8 @@ export class SettingsRepository {
           isOAuth
         }),
         hasApiKey: apiKey.trim().length > 0,
-        apiKeyPreview: createApiKeyPreview(apiKey),
-        model: row.model || enabledModel?.id || defaults.model,
+        apiKey,
+        model: row.model || enabledModel?.id || '',
         models,
         availableModels,
         baseUrl: row.baseUrl,
@@ -293,20 +332,16 @@ export class SettingsRepository {
     const defaults = createDefaultProviderSettings(provider)
     const selectedModel = draft.model?.trim() ?? ''
     const apiKey = draft.apiKey?.trim() ?? ''
-    const encryptedApiKey =
-      apiKey.length > 0
-        ? this.secretCodec.encrypt(apiKey)
-        : ((await this.getEncryptedProviderKey(provider)) ?? '')
+    const storedApiKey =
+      apiKey.length > 0 ? apiKey : ((await this.getStoredProviderKey(provider)) ?? '')
     const models = normalizeModels(
-      draft.models === undefined
-        ? ensureSelectedModel(defaults.models, selectedModel)
-        : draft.models
+      draft.models === undefined ? ensureSelectedModel([], selectedModel) : draft.models
     )
     const availableModels =
       draft.availableModels === undefined
-        ? mergeAvailableModels(models, defaults.availableModels)
+        ? mergeAvailableModels(models, [])
         : mergeAvailableModels(models, normalizeModels(draft.availableModels))
-    const model = selectedModel || models.find((entry) => entry.enabled)?.id || defaults.model
+    const model = selectedModel || models.find((entry) => entry.enabled)?.id || ''
     const providerType = (draft.type ?? defaults.type) as ProviderSettings['type']
     const baseUrl = draft.baseUrl?.trim() ?? ''
     const apiFormat = draft.apiFormat ?? defaults.apiFormat
@@ -331,7 +366,7 @@ export class SettingsRepository {
         models,
         availableModels,
         baseUrl,
-        encryptedApiKey,
+        apiKey: storedApiKey,
         apiFormat,
         useMaxCompletionTokens,
         customHeaders,
@@ -354,7 +389,7 @@ export class SettingsRepository {
           models,
           availableModels,
           baseUrl,
-          encryptedApiKey,
+          apiKey: storedApiKey,
           apiFormat,
           useMaxCompletionTokens,
           customHeaders,
@@ -399,20 +434,20 @@ export class SettingsRepository {
     return this.getSettings()
   }
 
-  async getEncryptedProviderKey(provider: ProviderId): Promise<string | null> {
+  async getStoredProviderKey(provider: ProviderId): Promise<string | null> {
     const row = await this.database.db
-      .select({ encryptedApiKey: providerSettings.encryptedApiKey })
+      .select({ apiKey: providerSettings.apiKey })
       .from(providerSettings)
       .where(eq(providerSettings.provider, provider))
       .then((rows) => rows[0])
 
-    return row?.encryptedApiKey ?? null
+    return row?.apiKey ?? null
   }
 
   async getProviderApiKey(provider: ProviderId): Promise<string> {
-    const encryptedApiKey = await this.getEncryptedProviderKey(provider)
+    const apiKey = await this.getStoredProviderKey(provider)
 
-    return encryptedApiKey === null ? '' : this.secretCodec.decrypt(encryptedApiKey)
+    return apiKey ?? ''
   }
 
   private async createUniqueProviderId(prefix: 'custom' | 'acp', name: string): Promise<string> {

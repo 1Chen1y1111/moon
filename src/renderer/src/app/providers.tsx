@@ -9,6 +9,8 @@ import {
   useSettingsDispatch,
   useSettingsSelector
 } from '@renderer/entities/settings'
+import { Toaster } from '@shadcn/ui/sonner'
+import { TooltipProvider } from '@shadcn/ui/tooltip'
 import type { AppearanceTheme } from '@shared/domain/settings'
 
 import { AppRouterContextStore, type AppRouteState } from './router/router-context'
@@ -70,6 +72,19 @@ function ThemeController(): null {
   return null
 }
 
+function AppToaster(): React.JSX.Element {
+  const appSettings = useSettingsSelector(selectAppSettings)
+
+  return (
+    <Toaster
+      richColors
+      icons={{ error: null, info: null, loading: null, success: null, warning: null }}
+      position="top-center"
+      theme={appSettings.appearance.theme}
+    />
+  )
+}
+
 export function AppProviders({ children }: { children: React.ReactNode }): React.JSX.Element {
   const [routeState, setRouteState] = useState<AppRouteState>({ activeChatId: null })
 
@@ -77,7 +92,8 @@ export function AppProviders({ children }: { children: React.ReactNode }): React
     <Provider store={store}>
       <AppRouterContextStore.Provider value={{ routeState, setRouteState }}>
         <ThemeController />
-        {children}
+        <TooltipProvider>{children}</TooltipProvider>
+        <AppToaster />
       </AppRouterContextStore.Provider>
     </Provider>
   )

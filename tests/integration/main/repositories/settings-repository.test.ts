@@ -8,16 +8,9 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { bootstrapDatabase } from '@main/db/bootstrap'
 import { createDatabaseConnection, type AppDatabaseConnection } from '@main/db/connection'
-import type { SecretCodec } from '@main/security/secret-codec'
 import { SettingsRepository } from '@main/repositories/settings-repository'
 
 const pgliteTestTimeout = 30_000
-
-const fakeSecretCodec: SecretCodec = {
-  encrypt: (plainText) => `encrypted:${Buffer.from(plainText).toString('base64')}`,
-  decrypt: (encryptedText) =>
-    Buffer.from(encryptedText.replace(/^encrypted:/, ''), 'base64').toString()
-}
 
 async function createBootstrappedConnection(databasePath: string): Promise<AppDatabaseConnection> {
   const connection = await createDatabaseConnection(databasePath)
@@ -37,19 +30,18 @@ describe('SettingsRepository', () => {
   })
 
   it(
-    'persists provider settings across PGlite connections without storing plaintext keys',
+    'persists provider settings across PGlite connections and returns stored keys',
     async () => {
       const directoryPath = mkdtempSync(join(tmpdir(), 'moon-settings-repository-'))
       const databasePath = join(directoryPath, 'moon-pglite')
       tempDirectories.push(directoryPath)
 
       const firstConnection = await createBootstrappedConnection(databasePath)
-      const firstRepository = new SettingsRepository(firstConnection, fakeSecretCodec)
+      const firstRepository = new SettingsRepository(firstConnection)
 
       expect((await firstRepository.getSettings()).providers.claude).toMatchObject({
         provider: 'claude',
         hasApiKey: false,
-        apiKeyPreview: '',
         model: '',
         baseUrl: '',
         updatedAt: ''
@@ -58,46 +50,76 @@ describe('SettingsRepository', () => {
       await firstRepository.saveProvider('claude', {
         apiKey: 'sk-ant-demo',
         model: 'claude-3-7-sonnet-latest',
-        baseUrl: ''
+        baseUrl: '',
+        models: [
+          {
+            id: 'claude-3-7-sonnet-latest',
+            name: 'claude-3-7-sonnet-latest',
+            enabled: true,
+            isManual: true,
+            supportsVision: true,
+            supportsImageOutput: false,
+            supportsToolCalling: true,
+            supportsReasoning: true,
+            supportsEmbedding: false,
+            contextWindow: 200_000,
+            maxOutputTokens: 8192,
+            providerOptions: '{\n\n}',
+            manualOverrides: ['supportsReasoning', 'contextWindow']
+          }
+        ],
+        availableModels: []
       })
 
-      expect(await firstRepository.getEncryptedProviderKey('claude')).toBe(
-        'encrypted:c2stYW50LWRlbW8='
-      )
-      expect(await firstRepository.getEncryptedProviderKey('claude')).not.toContain('sk-ant-demo')
+      expect(await firstRepository.getStoredProviderKey('claude')).toBe('sk-ant-demo')
 
       await firstConnection.close()
 
       const secondConnection = await createBootstrappedConnection(databasePath)
-      const secondRepository = new SettingsRepository(secondConnection, fakeSecretCodec)
+      const secondRepository = new SettingsRepository(secondConnection)
       const persistedSettings = await secondRepository.getSettings()
 
       expect(persistedSettings.providers.claude).toMatchObject({
         provider: 'claude',
         hasApiKey: true,
-        apiKeyPreview: '****demo',
+        apiKey: 'sk-ant-demo',
         model: 'claude-3-7-sonnet-latest',
+        models: [
+          {
+            id: 'claude-3-7-sonnet-latest',
+            name: 'claude-3-7-sonnet-latest',
+            enabled: true,
+            isManual: true,
+            supportsVision: true,
+            supportsImageOutput: false,
+            supportsToolCalling: true,
+            supportsReasoning: true,
+            supportsEmbedding: false,
+            contextWindow: 200_000,
+            maxOutputTokens: 8192,
+            providerOptions: '{\n\n}',
+            manualOverrides: ['supportsReasoning', 'contextWindow']
+          }
+        ],
         baseUrl: ''
       })
       expect(persistedSettings.providers.claude.updatedAt).toMatch(
         /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
       )
-      expect(persistedSettings.providers.claude).not.toHaveProperty('apiKey')
-
       await secondConnection.close()
     },
     pgliteTestTimeout
   )
 
   it(
-    'keeps the encrypted provider key when saving provider metadata without a new key',
+    'keeps the stored provider key when saving provider metadata without a new key',
     async () => {
       const directoryPath = mkdtempSync(join(tmpdir(), 'moon-settings-repository-'))
       const databasePath = join(directoryPath, 'moon-pglite')
       tempDirectories.push(directoryPath)
 
       const connection = await createBootstrappedConnection(databasePath)
-      const repository = new SettingsRepository(connection, fakeSecretCodec)
+      const repository = new SettingsRepository(connection)
 
       await repository.saveProvider('openai', {
         apiKey: 'sk-openai-demo',
@@ -113,14 +135,80 @@ describe('SettingsRepository', () => {
 
       const settings = await repository.getSettings()
 
-      expect(await repository.getEncryptedProviderKey('openai')).toBe(
-        'encrypted:c2stb3BlbmFpLWRlbW8='
-      )
+      expect(await repository.getStoredProviderKey('openai')).toBe('sk-openai-demo')
       expect(settings.providers.openai).toMatchObject({
         hasApiKey: true,
-        apiKeyPreview: '****demo',
+        apiKey: 'sk-openai-demo',
         model: 'gpt-5.4-mini'
       })
+
+      await connection.close()
+    },
+    pgliteTestTimeout
+  )
+
+  it(
+    'does not surface unfetched built-in default models',
+    async () => {
+      const directoryPath = mkdtempSync(join(tmpdir(), 'moon-settings-repository-'))
+      const databasePath = join(directoryPath, 'moon-pglite')
+      tempDirectories.push(directoryPath)
+
+      const connection = await createBootstrappedConnection(databasePath)
+      const repository = new SettingsRepository(connection)
+
+      await repository.saveProvider('openai', {
+        apiKey: 'sk-openai-demo',
+        model: 'custom-model',
+        baseUrl: '',
+        models: [
+          {
+            id: 'gpt-5.4',
+            name: 'gpt-5.4',
+            enabled: true,
+            isManual: false
+          },
+          {
+            id: 'custom-model',
+            name: 'custom-model',
+            enabled: true,
+            isManual: true
+          }
+        ],
+        availableModels: [
+          {
+            id: 'gpt-5.2',
+            name: 'gpt-5.2',
+            enabled: false,
+            isManual: false
+          },
+          {
+            id: 'custom-model',
+            name: 'custom-model',
+            enabled: true,
+            isManual: true
+          }
+        ]
+      })
+
+      const settings = await repository.getSettings()
+
+      expect(settings.providers.openai.models).toEqual([
+        {
+          id: 'custom-model',
+          name: 'custom-model',
+          enabled: true,
+          isManual: true
+        }
+      ])
+      expect(settings.providers.openai.availableModels).toEqual([
+        {
+          id: 'custom-model',
+          name: 'custom-model',
+          enabled: true,
+          isManual: true
+        }
+      ])
 
       await connection.close()
     },
@@ -135,7 +223,7 @@ describe('SettingsRepository', () => {
       tempDirectories.push(directoryPath)
 
       const connection = await createBootstrappedConnection(databasePath)
-      const repository = new SettingsRepository(connection, fakeSecretCodec)
+      const repository = new SettingsRepository(connection)
 
       await repository.saveProvider('deepseek', {
         apiKey: 'sk-deepseek-demo',
@@ -148,7 +236,7 @@ describe('SettingsRepository', () => {
       expect(settings.providers.deepseek).toMatchObject({
         provider: 'deepseek',
         hasApiKey: true,
-        apiKeyPreview: '****demo',
+        apiKey: 'sk-deepseek-demo',
         model: 'deepseek-chat',
         baseUrl: 'https://api.deepseek.com/v1'
       })
@@ -166,7 +254,7 @@ describe('SettingsRepository', () => {
       tempDirectories.push(directoryPath)
 
       const firstConnection = await createBootstrappedConnection(databasePath)
-      const firstRepository = new SettingsRepository(firstConnection, fakeSecretCodec)
+      const firstRepository = new SettingsRepository(firstConnection)
 
       expect((await firstRepository.getSettings()).appearance.theme).toBe('system')
 
@@ -177,40 +265,11 @@ describe('SettingsRepository', () => {
       await firstConnection.close()
 
       const secondConnection = await createBootstrappedConnection(databasePath)
-      const secondRepository = new SettingsRepository(secondConnection, fakeSecretCodec)
+      const secondRepository = new SettingsRepository(secondConnection)
 
       expect((await secondRepository.getSettings()).appearance.theme).toBe('dark')
 
       await secondConnection.close()
-    },
-    pgliteTestTimeout
-  )
-
-  it(
-    'does not write a provider row when encryption is unavailable',
-    async () => {
-      const directoryPath = mkdtempSync(join(tmpdir(), 'moon-settings-repository-'))
-      const databasePath = join(directoryPath, 'moon-pglite')
-      tempDirectories.push(directoryPath)
-
-      const connection = await createBootstrappedConnection(databasePath)
-      const repository = new SettingsRepository(connection, {
-        encrypt: () => {
-          throw new Error('Secure storage is unavailable.')
-        },
-        decrypt: (encryptedText) => encryptedText
-      })
-
-      await expect(
-        repository.saveProvider('openai', {
-          apiKey: 'sk-openai-demo',
-          model: 'gpt-5.4',
-          baseUrl: ''
-        })
-      ).rejects.toThrow('Secure storage is unavailable.')
-      expect(await repository.getEncryptedProviderKey('openai')).toBeNull()
-
-      await connection.close()
     },
     pgliteTestTimeout
   )

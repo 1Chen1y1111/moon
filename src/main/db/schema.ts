@@ -37,7 +37,7 @@ export const providerSettings = pgTable('provider_settings', {
     .default(sql`'[]'::jsonb`)
     .$type<ProviderModel[]>(),
   baseUrl: text('base_url').notNull(),
-  encryptedApiKey: text('encrypted_api_key').notNull(),
+  apiKey: text('encrypted_api_key').notNull(),
   apiFormat: text('api_format').notNull().default('openai-chat').$type<ProviderApiFormat>(),
   useMaxCompletionTokens: boolean('use_max_completion_tokens').notNull().default(false),
   customHeaders: text('custom_headers').notNull().default(''),

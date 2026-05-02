@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { providerApiFormats } from './provider'
+import { providerApiFormats, providerModelManualOverrideFields } from './provider'
 import { appearanceThemes } from './settings'
 
 export const providerIdSchema = z.string().trim().min(1, 'Provider is required.')
@@ -16,7 +16,15 @@ export const providerModelSchema = z.object({
   name: z.string().trim().min(1, 'Display name is required.'),
   enabled: z.boolean(),
   isManual: z.boolean(),
-  contextWindow: z.number().int().positive().optional()
+  supportsVision: z.boolean().optional(),
+  supportsImageOutput: z.boolean().optional(),
+  supportsToolCalling: z.boolean().optional(),
+  supportsReasoning: z.boolean().optional(),
+  supportsEmbedding: z.boolean().optional(),
+  contextWindow: z.number().int().positive().optional(),
+  maxOutputTokens: z.number().int().positive().optional(),
+  providerOptions: z.string().optional(),
+  manualOverrides: z.array(z.enum(providerModelManualOverrideFields)).optional()
 })
 
 export const providerApiFormatSchema = z.enum(providerApiFormats)
@@ -29,7 +37,7 @@ export const providerSettingsSchema = z.object({
   description: z.string(),
   badge: z.string(),
   hasApiKey: z.boolean(),
-  apiKeyPreview: z.string(),
+  apiKey: z.string(),
   model: z.string(),
   models: z.array(providerModelSchema),
   availableModels: z.array(providerModelSchema),

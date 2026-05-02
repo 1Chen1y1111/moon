@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Blocks, Bot, Cloud, Github, Plus, Search, Terminal, Workflow, Info } from 'lucide-react'
+import { toast } from 'sonner'
 
 import {
   createCustomAcpProviderSettings,
@@ -169,7 +170,7 @@ function createDraftFromProvider(provider: ProviderSettings): ProviderDraft {
     provider: provider.provider,
     name: provider.name,
     type: provider.type,
-    apiKey: '',
+    apiKey: provider.apiKey,
     model: provider.model,
     models: provider.models,
     availableModels: provider.availableModels,
@@ -191,6 +192,26 @@ function createDraftFromProvider(provider: ProviderSettings): ProviderDraft {
 
 function normalizeSearchText(value: string): string {
   return value.trim().toLowerCase()
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message
+  }
+
+  if (typeof error === 'object' && error !== null && 'message' in error) {
+    const message = error.message
+
+    if (typeof message === 'string' && message.length > 0) {
+      return message
+    }
+  }
+
+  if (typeof error === 'string' && error.length > 0) {
+    return error
+  }
+
+  return '请检查 Provider 配置后重试。'
 }
 
 function getProviderStatus(provider: ProviderSettings): 'active' | 'inactive' | 'missing' {
@@ -262,6 +283,18 @@ function removeModel(draft: ProviderDraft, modelId: string): ProviderDraft {
   }
 }
 
+function updateModelOptions(draft: ProviderDraft, nextModel: ProviderModel): ProviderDraft {
+  function update(models: ProviderModel[]): ProviderModel[] {
+    return models.map((model) => (model.id === nextModel.id ? nextModel : model))
+  }
+
+  return {
+    ...draft,
+    models: update(draft.models),
+    availableModels: update(draft.availableModels)
+  }
+}
+
 function DialogFieldLabel({
   children,
   htmlFor
@@ -305,7 +338,11 @@ function CustomProviderDialog({
 
   return (
     <Dialog open onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <DialogContent className="px-0" showCloseButton={false} aria-label="Add Custom Provider">
+      <DialogContent
+        className="px-0 sm:max-w-105"
+        showCloseButton={false}
+        aria-label="Add Custom Provider"
+      >
         <DialogHeader className="px-4">
           <DialogTitle className="text-xl font-medium leading-7 text-foreground">
             Add Custom Provider
@@ -438,7 +475,11 @@ function CustomAcpProviderDialog({
 
   return (
     <Dialog open onOpenChange={(open) => (!open ? onClose() : undefined)}>
-      <DialogContent showCloseButton={false} aria-label="Add Custom ACP Provider">
+      <DialogContent
+        className="sm:max-w-105"
+        showCloseButton={false}
+        aria-label="Add Custom ACP Provider"
+      >
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2 text-md text-foreground">
             <Terminal aria-hidden="true" />
@@ -656,8 +697,10 @@ export function ProviderSettingsSection({
         ...current,
         [selectedProvider]: undefined
       }))
-    } catch {
-      // The settings slice owns the displayed save error.
+    } catch (error) {
+      toast.error('获取模型失败', {
+        description: getErrorMessage(error)
+      })
     } finally {
       setFetchingProviders((current) => ({ ...current, [selectedProvider]: false }))
     }
@@ -964,6 +1007,12 @@ export function ProviderSettingsSection({
             setDraftOverrides((current) => ({
               ...current,
               [selectedProvider]: removeModel(selectedDraft, modelId)
+            }))
+          }}
+          onUpdateModel={(model) => {
+            setDraftOverrides((current) => ({
+              ...current,
+              [selectedProvider]: updateModelOptions(selectedDraft, model)
             }))
           }}
         />

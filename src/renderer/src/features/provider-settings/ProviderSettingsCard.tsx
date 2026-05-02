@@ -1,5 +1,6 @@
 import {
   Bolt,
+  Brain,
   Check,
   ChevronDown,
   Copy,
@@ -7,22 +8,39 @@ import {
   ExternalLink,
   Eye,
   EyeOff,
+  ImageIcon,
+  PackageOpen,
   Search,
   Server,
+  SlidersHorizontal,
   Terminal,
   Trash2,
+  Waypoints,
+  Wrench,
   X
 } from 'lucide-react'
 import { useState } from 'react'
 
+import { Badge } from '@shadcn/ui/badge'
 import { Button } from '@shadcn/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle
+} from '@shadcn/ui/dialog'
+import { Empty, EmptyDescription, EmptyHeader, EmptyMedia, EmptyTitle } from '@shadcn/ui/empty'
 import { Input } from '@shadcn/ui/input'
 import { Label } from '@shadcn/ui/label'
 import { Switch } from '@shadcn/ui/switch'
+import { Textarea } from '@shadcn/ui/textarea'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@shadcn/ui/tooltip'
 import { InputGroup, InputGroupAddon, InputGroupInput } from '@shadcn/ui/input-group'
 import { ScrollArea } from '@shadcn/ui/scroll-area'
 import { cn } from '@shadcn/lib/utils'
-import type { ProviderModel } from '@shared/domain/provider'
+import type { ProviderModel, ProviderModelManualOverride } from '@shared/domain/provider'
 import { createProviderProxyEndpoints } from '@shared/domain/provider-proxy'
 import type { ProviderSettings, ProviderTestResult } from '@shared/domain/settings'
 import type { SaveProviderInput } from '@shared/domain/settings-validation'
@@ -55,13 +73,32 @@ type ProviderSettingsCardProps = {
   onAddManualModel: () => void
   onToggleModel: (modelId: string) => void
   onRemoveModel: (modelId: string) => void
+  onUpdateModel: (model: ProviderModel) => void
 }
 
-const switchClassName = 'data-checked:bg-primary data-unchecked:bg-secondary'
+type ModelOptionsDraft = {
+  supportsVision: boolean
+  supportsImageOutput: boolean
+  supportsToolCalling: boolean
+  supportsReasoning: boolean
+  supportsEmbedding: boolean
+  contextWindow: string
+  maxOutputTokens: string
+  providerOptions: string
+}
 
 function formatContextWindow(model: ProviderModel): string {
   if (model.contextWindow === undefined) {
     return ''
+  }
+
+  if (model.contextWindow >= 1_000_000) {
+    const contextWindowInMillions = model.contextWindow / 1_000_000
+    const displayValue = Number.isInteger(contextWindowInMillions)
+      ? String(contextWindowInMillions)
+      : String(Number(contextWindowInMillions.toFixed(1)))
+
+    return `${displayValue}M`
   }
 
   if (model.contextWindow >= 1000) {
@@ -87,6 +124,359 @@ function FieldLabel({
 
 function FieldHint({ children }: { children: React.ReactNode }): React.JSX.Element {
   return <span className="mt-1.5 block text-xs leading-5 text-muted-foreground">{children}</span>
+}
+
+function hasModelManualOverride(model: ProviderModel, field: ProviderModelManualOverride): boolean {
+  return model.manualOverrides?.includes(field) ?? false
+}
+
+function createModelOptionsDraft(model: ProviderModel): ModelOptionsDraft {
+  return {
+    supportsVision: hasModelManualOverride(model, 'supportsVision')
+      ? (model.supportsVision ?? false)
+      : true,
+    supportsImageOutput: model.supportsImageOutput ?? false,
+    supportsToolCalling: hasModelManualOverride(model, 'supportsToolCalling')
+      ? (model.supportsToolCalling ?? false)
+      : true,
+    supportsReasoning: hasModelManualOverride(model, 'supportsReasoning')
+      ? (model.supportsReasoning ?? false)
+      : true,
+    supportsEmbedding: model.supportsEmbedding ?? false,
+    contextWindow: model.contextWindow === undefined ? '' : String(model.contextWindow),
+    maxOutputTokens: model.maxOutputTokens === undefined ? '' : String(model.maxOutputTokens),
+    providerOptions: model.providerOptions ?? '{\n\n}'
+  }
+}
+
+function parsePositiveInteger(value: string): number | undefined {
+  const trimmedValue = value.trim()
+
+  if (trimmedValue.length === 0) {
+    return undefined
+  }
+
+  const parsedValue = Number(trimmedValue)
+
+  return Number.isInteger(parsedValue) && parsedValue > 0 ? parsedValue : undefined
+}
+
+function isJsonObject(value: string): boolean {
+  const trimmedValue = value.trim()
+
+  if (trimmedValue.length === 0) {
+    return true
+  }
+
+  try {
+    const parsedValue = JSON.parse(trimmedValue) as unknown
+
+    return parsedValue !== null && typeof parsedValue === 'object' && !Array.isArray(parsedValue)
+  } catch {
+    return false
+  }
+}
+
+function ModelCapabilityToggle({
+  auto,
+  checked,
+  icon,
+  label,
+  modelId,
+  onCheckedChange
+}: {
+  auto?: boolean
+  checked: boolean
+  icon: React.ReactNode
+  label: string
+  modelId: string
+  onCheckedChange: (checked: boolean) => void
+}): React.JSX.Element {
+  return (
+    <label className="flex items-center gap-3 rounded-lg bg-secondary p-2">
+      {icon}
+      <span className="min-w-0 flex-1 text-sm leading-6 text-foreground">
+        {label}
+        {auto ? <span className="ml-2 text-xs text-muted-foreground">(auto)</span> : null}
+      </span>
+      <Switch
+        checked={checked}
+        aria-label={`${modelId} supports ${label.toLowerCase()}`}
+        onCheckedChange={onCheckedChange}
+      />
+    </label>
+  )
+}
+
+function ModelCapabilityIcon({
+  children,
+  label,
+  supported
+}: {
+  children: React.ReactNode
+  label: string
+  supported: boolean
+}): React.JSX.Element {
+  return (
+    <Tooltip delayDuration={0}>
+      <TooltipTrigger asChild>
+        <span
+          aria-label={label}
+          className={cn(
+            'inline-flex size-5 items-center justify-center rounded-md transition-colors',
+            supported ? 'text-primary' : 'text-muted-foreground/35'
+          )}
+        >
+          {children}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" sideOffset={6}>
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
+function ModelContextWindowBadge({
+  label,
+  value
+}: {
+  label: string
+  value: string
+}): React.JSX.Element {
+  return (
+    <Tooltip delayDuration={0}>
+      <TooltipTrigger asChild>
+        <span
+          aria-label={label}
+          className="inline-flex items-center rounded-md text-xs leading-5 text-muted-foreground"
+        >
+          {value}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="top" sideOffset={6}>
+        {label}
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
+function ModelOptionsDialog({
+  model,
+  onClose,
+  onSave
+}: {
+  model: ProviderModel
+  onClose: () => void
+  onSave: (model: ProviderModel) => void
+}): React.JSX.Element {
+  const [draft, setDraft] = useState<ModelOptionsDraft>(() => createModelOptionsDraft(model))
+  const [manualOverrides, setManualOverrides] = useState<ProviderModelManualOverride[]>(
+    () => model.manualOverrides ?? []
+  )
+  const parsedContextWindow = parsePositiveInteger(draft.contextWindow)
+  const parsedMaxOutputTokens = parsePositiveInteger(draft.maxOutputTokens)
+  const hasInvalidContextWindow =
+    draft.contextWindow.trim().length > 0 && parsedContextWindow === undefined
+  const hasInvalidMaxOutputTokens =
+    draft.maxOutputTokens.trim().length > 0 && parsedMaxOutputTokens === undefined
+  const hasInvalidProviderOptions = !isJsonObject(draft.providerOptions)
+  const hasInvalidInput =
+    hasInvalidContextWindow || hasInvalidMaxOutputTokens || hasInvalidProviderOptions
+
+  function markManualOverride(field: ProviderModelManualOverride): void {
+    setManualOverrides((current) => (current.includes(field) ? current : [...current, field]))
+  }
+
+  function handleSave(): void {
+    if (hasInvalidInput) {
+      return
+    }
+
+    const nextModel: ProviderModel = {
+      ...model,
+      supportsVision: draft.supportsVision,
+      supportsImageOutput: draft.supportsImageOutput,
+      supportsToolCalling: draft.supportsToolCalling,
+      supportsReasoning: draft.supportsReasoning,
+      supportsEmbedding: draft.supportsEmbedding,
+      providerOptions: draft.providerOptions
+    }
+
+    if (parsedContextWindow === undefined) {
+      delete nextModel.contextWindow
+    } else {
+      nextModel.contextWindow = parsedContextWindow
+    }
+
+    if (parsedMaxOutputTokens === undefined) {
+      delete nextModel.maxOutputTokens
+    } else {
+      nextModel.maxOutputTokens = parsedMaxOutputTokens
+    }
+
+    if (manualOverrides.length === 0) {
+      delete nextModel.manualOverrides
+    } else {
+      nextModel.manualOverrides = manualOverrides
+    }
+
+    onSave(nextModel)
+  }
+
+  return (
+    <Dialog open onOpenChange={(open) => (!open ? onClose() : undefined)}>
+      <DialogContent className="sm:max-w-120" showCloseButton={false} aria-label="Model Options">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-xl font-medium leading-7 text-foreground">
+            <SlidersHorizontal aria-hidden="true" className="size-5 text-muted-foreground" />
+            Model Options
+          </DialogTitle>
+          <DialogDescription className="text-sm leading-6 text-muted-foreground">
+            Configure options for <Badge variant="secondary">{model.id}</Badge>
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div>
+            <h3 className="text-sm font-medium leading-6 text-foreground">Model Capabilities</h3>
+            <p className="mt-1 text-xs leading-5 text-muted-foreground">
+              配置这个模型在列表中展示的能力标记。
+            </p>
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <ModelCapabilityToggle
+              auto
+              checked={draft.supportsVision}
+              icon={<Eye aria-hidden="true" className="size-3.5 text-muted-foreground" />}
+              label="Vision"
+              modelId={model.id}
+              onCheckedChange={(checked) => {
+                markManualOverride('supportsVision')
+                setDraft((current) => ({ ...current, supportsVision: checked }))
+              }}
+            />
+            <ModelCapabilityToggle
+              checked={draft.supportsImageOutput}
+              icon={<ImageIcon aria-hidden="true" className="size-3.5 text-muted-foreground" />}
+              label="Image Output"
+              modelId={model.id}
+              onCheckedChange={(checked) => {
+                markManualOverride('supportsImageOutput')
+                setDraft((current) => ({ ...current, supportsImageOutput: checked }))
+              }}
+            />
+            <ModelCapabilityToggle
+              auto
+              checked={draft.supportsToolCalling}
+              icon={<Wrench aria-hidden="true" className="size-3.5 text-muted-foreground" />}
+              label="Tool Calling"
+              modelId={model.id}
+              onCheckedChange={(checked) => {
+                markManualOverride('supportsToolCalling')
+                setDraft((current) => ({ ...current, supportsToolCalling: checked }))
+              }}
+            />
+            <ModelCapabilityToggle
+              auto
+              checked={draft.supportsReasoning}
+              icon={<Brain aria-hidden="true" className="size-3.5 text-muted-foreground" />}
+              label="Reasoning"
+              modelId={model.id}
+              onCheckedChange={(checked) => {
+                markManualOverride('supportsReasoning')
+                setDraft((current) => ({ ...current, supportsReasoning: checked }))
+              }}
+            />
+            <ModelCapabilityToggle
+              checked={draft.supportsEmbedding}
+              icon={<Waypoints aria-hidden="true" className="size-3.5 text-muted-foreground" />}
+              label="Embedding"
+              modelId={model.id}
+              onCheckedChange={(checked) => {
+                markManualOverride('supportsEmbedding')
+                setDraft((current) => ({ ...current, supportsEmbedding: checked }))
+              }}
+            />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-1.5">
+              <Label htmlFor="model-context-window" className="text-sm leading-6 text-foreground">
+                Context Window
+              </Label>
+              <Input
+                id="model-context-window"
+                aria-label={`${model.id} context window`}
+                inputMode="numeric"
+                value={draft.contextWindow}
+                onChange={(event) => {
+                  markManualOverride('contextWindow')
+                  setDraft((current) => ({ ...current, contextWindow: event.target.value }))
+                }}
+                placeholder="e.g., 262144"
+              />
+              {hasInvalidContextWindow ? <FieldHint>上下文长度必须是正整数。</FieldHint> : null}
+            </div>
+
+            <div className="grid gap-1.5">
+              <Label
+                htmlFor="model-max-output-tokens"
+                className="text-sm leading-6 text-foreground"
+              >
+                Max Output Tokens
+              </Label>
+              <Input
+                id="model-max-output-tokens"
+                aria-label={`${model.id} max output tokens`}
+                inputMode="numeric"
+                value={draft.maxOutputTokens}
+                onChange={(event) => {
+                  markManualOverride('maxOutputTokens')
+                  setDraft((current) => ({ ...current, maxOutputTokens: event.target.value }))
+                }}
+                placeholder="e.g., 8192"
+              />
+              {hasInvalidMaxOutputTokens ? (
+                <FieldHint>最大输出 token 必须是正整数。</FieldHint>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="grid gap-1.5">
+            <Label htmlFor="model-provider-options" className="text-sm leading-6 text-foreground">
+              Provider Options (JSON)
+            </Label>
+            <Textarea
+              id="model-provider-options"
+              aria-label={`${model.id} provider options json`}
+              value={draft.providerOptions}
+              onChange={(event) => {
+                markManualOverride('providerOptions')
+                setDraft((current) => ({ ...current, providerOptions: event.target.value }))
+              }}
+              className="min-h-32 resize-none font-mono"
+            />
+            <FieldHint>
+              {hasInvalidProviderOptions
+                ? 'Provider Options 必须是 JSON object。'
+                : 'Example: { "thinking": { "type": "disabled" } } to disable reasoning for models like doubao-seed-1.8'}
+            </FieldHint>
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button type="button" variant="outline" size="lg" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="button" size="lg" disabled={hasInvalidInput} onClick={handleSave}>
+            Save
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 function ProxyEndpointRow({
@@ -147,7 +537,8 @@ export function ProviderSettingsCard({
   onDeleteProvider,
   onModelSearchChange,
   onToggleModel,
-  onRemoveModel
+  onRemoveModel,
+  onUpdateModel
 }: ProviderSettingsCardProps): React.JSX.Element {
   const statusLabel = provider.enabled
     ? 'Active'
@@ -166,6 +557,10 @@ export function ProviderSettingsCard({
   const usesEnableOnlyCard = provider.isOAuth || (provider.isACP && !provider.isCustom)
   const [showsProxyEndpoints, setShowsProxyEndpoints] = useState(false)
   const [copiedProxyValue, setCopiedProxyValue] = useState('')
+  const [optionsModelId, setOptionsModelId] = useState<string | null>(null)
+  const optionsModel = optionsModelId
+    ? allModels.find((model) => model.id === optionsModelId)
+    : undefined
   const proxyEndpoints = createProviderProxyEndpoints(provider.provider)
   const claudeCodeEnvironment = [
     `export ANTHROPIC_BASE_URL=${proxyEndpoints.anthropicBaseUrl}`,
@@ -243,7 +638,6 @@ export function ProviderSettingsCard({
               checked={draft.enabled}
               aria-label="启用提供商"
               disabled={isSaving}
-              className={switchClassName}
               onCheckedChange={(checked) => onDraftChange('enabled', checked)}
             />
           </div>
@@ -285,7 +679,7 @@ export function ProviderSettingsCard({
                 type="button"
                 className="flex w-full items-center gap-3 rounded-md border border-input bg-secondary px-6 py-6 text-left text-sm  leading-6 text-foreground"
               >
-                <Terminal aria-hidden="true" className="size-4 text-muted-foreground" />
+                <Terminal aria-hidden="true" className="size-3.5 text-muted-foreground" />
                 <span className="min-w-0 flex-1">ACP 代理端点</span>
                 <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-1 text-xs  uppercase tracking-wide text-primary">
                   高级
@@ -327,10 +721,10 @@ export function ProviderSettingsCard({
               <div className="space-y-3">
                 <div
                   aria-expanded={showsProxyEndpoints}
-                  className="flex w-full items-center gap-3 rounded-md border border-input bg-secondary px-3 py-3 text-left text-sm  leading-6 text-foreground"
+                  className="flex w-full items-center gap-3 rounded-md border border-input bg-secondary p-2 text-left text-sm  leading-6 text-foreground"
                   onClick={() => setShowsProxyEndpoints((current) => !current)}
                 >
-                  <Server aria-hidden="true" className="size-4 text-muted-foreground" />
+                  <Server aria-hidden="true" className="size-3.5 text-muted-foreground" />
                   <span className="min-w-0 flex-1">API 代理端点</span>
                   <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-1 text-xs  uppercase tracking-wide text-primary">
                     高级
@@ -389,7 +783,7 @@ export function ProviderSettingsCard({
                           您可以通过设置以下环境变量，将此提供商与 Claude Code 一起使用：
                         </div>
 
-                        <pre className="rounded-md border border-border bg-card px-3 py-3 font-mono text-xs leading-5 text-foreground min-w-0 overflow-x-auto whitespace-pre-wrap">
+                        <pre className="rounded-md border border-border bg-card p-2 font-mono text-xs leading-5 text-foreground min-w-0 overflow-x-auto whitespace-pre-wrap">
                           {claudeCodeEnvironment}
                         </pre>
                       </div>
@@ -409,9 +803,7 @@ export function ProviderSettingsCard({
                       disabled={isSaving}
                       onChange={(event) => onDraftChange('apiKey', event.target.value)}
                       className={cn('min-w-0 flex-1')}
-                      placeholder={
-                        provider.hasApiKey ? '留空以保留已保存密钥' : 'Enter your API key'
-                      }
+                      placeholder="Enter your API key"
                     />
                     <Button
                       type="button"
@@ -425,8 +817,6 @@ export function ProviderSettingsCard({
                   </div>
                   {errors.apiKey ? (
                     <FieldHint>{errors.apiKey}</FieldHint>
-                  ) : provider.apiKeyPreview ? (
-                    <FieldHint>当前密钥：{provider.apiKeyPreview}</FieldHint>
                   ) : provider.apiKeyHelpUrl ? (
                     <FieldHint>
                       Get your API key from{' '}
@@ -494,63 +884,119 @@ export function ProviderSettingsCard({
                 Showing {filteredModels.length} models ({enabledModelCount} enabled)
               </p>
 
-              <div className="max-h-72 overflow-y-auto rounded-lg border border-border">
-                {filteredModels.length > 0 ? (
-                  filteredModels.map((model) => {
-                    const contextWindow = formatContextWindow(model)
+              <TooltipProvider>
+                <div className="max-h-72 overflow-y-auto rounded-lg border border-border">
+                  {filteredModels.length > 0 ? (
+                    filteredModels.map((model) => {
+                      const contextWindow = formatContextWindow(model)
+                      const contextWindowLabel =
+                        model.contextWindow === undefined
+                          ? ''
+                          : `${model.contextWindow.toLocaleString('en-US')} token context window`
 
-                    return (
-                      <div
-                        key={model.id}
-                        className="flex items-center justify-between gap-2 border-b border-border px-3 py-3 last:border-b-0"
-                      >
-                        <div className="min-w-0">
-                          <p className="truncate text-sm leading-6 text-foreground">{model.name}</p>
-                          {model.name !== model.id ? (
-                            <p className="truncate text-xs leading-5 text-muted-foreground">
-                              {model.id}
+                      return (
+                        <div
+                          key={model.id}
+                          className="flex items-center justify-between gap-2 border-b border-border p-2 last:border-b-0"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm leading-6 text-foreground">
+                              {model.name}
                             </p>
-                          ) : null}
-                        </div>
+                            <div className="mt-1 flex min-w-0 items-center gap-2">
+                              <ModelCapabilityIcon
+                                supported={model.supportsVision ?? false}
+                                label="Supports image input"
+                              >
+                                <Eye aria-hidden="true" className="size-3.5" />
+                              </ModelCapabilityIcon>
+                              <ModelCapabilityIcon
+                                supported={model.supportsToolCalling ?? false}
+                                label="Supports function calling"
+                              >
+                                <Wrench aria-hidden="true" className="size-3.5" />
+                              </ModelCapabilityIcon>
+                              <ModelCapabilityIcon
+                                supported={model.supportsReasoning ?? false}
+                                label="Extended thinking/reasoning"
+                              >
+                                <Brain aria-hidden="true" className="size-3.5" />
+                              </ModelCapabilityIcon>
+                              {contextWindow ? (
+                                <ModelContextWindowBadge
+                                  value={contextWindow}
+                                  label={contextWindowLabel}
+                                />
+                              ) : null}
+                              {model.name !== model.id ? (
+                                <span className="min-w-0 truncate text-xs leading-5 text-muted-foreground">
+                                  {model.id}
+                                </span>
+                              ) : null}
+                            </div>
+                          </div>
 
-                        <div className="flex items-center gap-2">
-                          {contextWindow ? (
-                            <span className="inline-flex items-center rounded-md bg-primary/10 px-2 py-1 text-xs  uppercase tracking-wide text-primary">
-                              {contextWindow}
-                            </span>
-                          ) : null}
-                          {model.isManual ? (
-                            <button
+                          <div className="flex items-center gap-2">
+                            <Button
                               type="button"
-                              aria-label={`删除模型 ${model.id}`}
-                              className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                              onClick={() => onRemoveModel(model.id)}
+                              variant="secondary"
+                              size="icon-sm"
+                              aria-label={`配置模型 ${model.id}`}
+                              title="模型配置"
+                              onClick={() => setOptionsModelId(model.id)}
                             >
-                              <X aria-hidden="true" className="size-3.5" />
-                            </button>
-                          ) : (
-                            <span />
-                          )}
-                          <Switch
-                            checked={model.enabled}
-                            aria-label={`启用模型 ${model.id}`}
-                            className={switchClassName}
-                            onCheckedChange={() => onToggleModel(model.id)}
-                          />
+                              <SlidersHorizontal aria-hidden="true" />
+                            </Button>
+                            {model.isManual ? (
+                              <button
+                                type="button"
+                                aria-label={`删除模型 ${model.id}`}
+                                className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                onClick={() => onRemoveModel(model.id)}
+                              >
+                                <X aria-hidden="true" className="size-3.5" />
+                              </button>
+                            ) : (
+                              <span />
+                            )}
+                            <Switch
+                              checked={model.enabled}
+                              aria-label={`启用模型 ${model.id}`}
+                              onCheckedChange={() => onToggleModel(model.id)}
+                            />
+                          </div>
                         </div>
-                      </div>
-                    )
-                  })
-                ) : (
-                  <p className="px-6 py-6 text-center text-sm leading-6 text-muted-foreground">
-                    No model found.
-                  </p>
-                )}
-              </div>
+                      )
+                    })
+                  ) : (
+                    <Empty className="min-h-48 border-0">
+                      <EmptyHeader>
+                        <EmptyMedia variant="icon">
+                          <PackageOpen aria-hidden="true" />
+                        </EmptyMedia>
+                        <EmptyTitle>暂无模型</EmptyTitle>
+                        <EmptyDescription>点击 Fetch 拉取可用模型。</EmptyDescription>
+                      </EmptyHeader>
+                    </Empty>
+                  )}
+                </div>
+              </TooltipProvider>
             </section>
           ) : null}
         </div>
       </ScrollArea>
+
+      {optionsModel ? (
+        <ModelOptionsDialog
+          key={optionsModel.id}
+          model={optionsModel}
+          onClose={() => setOptionsModelId(null)}
+          onSave={(model) => {
+            onUpdateModel(model)
+            setOptionsModelId(null)
+          }}
+        />
+      ) : null}
     </div>
   )
 }

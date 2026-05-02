@@ -22,11 +22,18 @@ import {
   type AppSettings,
   type ProviderTestResult
 } from '../../shared/domain/settings'
-import type { ProviderModel } from '../../shared/domain/provider'
+import {
+  providerModelManualOverrideFields,
+  type ProviderModel,
+  type ProviderModelManualOverride
+} from '../../shared/domain/provider'
 import type { SettingsRepository } from '../repositories/settings-repository'
 
 const execFileAsync = promisify(execFile)
 const anthropicVersion = '2023-06-01'
+const modelsDevApiUrl = 'https://models.dev/api.json'
+const modelsDevFetchTimeoutMs = 5_000
+const providerModelManualOverrideFieldSet = new Set<string>(providerModelManualOverrideFields)
 
 type ProviderConnectionConfig = SaveProviderInput & {
   apiKey: string
@@ -37,6 +44,19 @@ type ModelListPayload = {
   data?: unknown
   models?: unknown
 }
+
+type ModelsDevProviderModel = Partial<
+  Pick<
+    ProviderModel,
+    | 'name'
+    | 'supportsVision'
+    | 'supportsImageOutput'
+    | 'supportsToolCalling'
+    | 'supportsReasoning'
+    | 'contextWindow'
+    | 'maxOutputTokens'
+  >
+>
 
 function joinEndpoint(baseUrl: string, path: string): string {
   return `${baseUrl.replace(/\/+$/g, '')}/${path.replace(/^\/+/g, '')}`
@@ -50,6 +70,14 @@ function joinVersionedEndpoint(baseUrl: string, path: string): string {
   }
 
   return joinEndpoint(normalizedBaseUrl, path)
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+}
+
+function isPositiveInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isInteger(value) && value > 0
 }
 
 function parseCustomHeaders(value: string): Record<string, string> {
@@ -123,6 +151,208 @@ async function readErrorResponse(response: Response): Promise<string> {
   return body.slice(0, 300)
 }
 
+function normalizeManualOverrides(
+  manualOverrides: ProviderModel['manualOverrides']
+): ProviderModelManualOverride[] | undefined {
+  if (manualOverrides === undefined) {
+    return undefined
+  }
+
+  const normalizedOverrides = manualOverrides.filter(
+    (field, index) =>
+      providerModelManualOverrideFieldSet.has(field) && manualOverrides.indexOf(field) === index
+  )
+
+  return normalizedOverrides.length > 0 ? normalizedOverrides : undefined
+}
+
+function normalizeModelsDevModel(rawModel: unknown): ModelsDevProviderModel | null {
+  if (!isRecord(rawModel)) {
+    return null
+  }
+
+  const nextModel: ModelsDevProviderModel = {}
+
+  if (typeof rawModel['name'] === 'string' && rawModel['name'].trim().length > 0) {
+    nextModel.name = rawModel['name'].trim()
+  }
+
+  const modalities = rawModel['modalities']
+
+  if (isRecord(modalities)) {
+    if (Array.isArray(modalities['input'])) {
+      nextModel.supportsVision = modalities['input'].includes('image')
+    }
+
+    if (Array.isArray(modalities['output'])) {
+      nextModel.supportsImageOutput = modalities['output'].includes('image')
+    }
+  }
+
+  if (typeof rawModel['tool_call'] === 'boolean') {
+    nextModel.supportsToolCalling = rawModel['tool_call']
+  }
+
+  if (typeof rawModel['reasoning'] === 'boolean') {
+    nextModel.supportsReasoning = rawModel['reasoning']
+  }
+
+  const limit = rawModel['limit']
+
+  if (isRecord(limit)) {
+    if (isPositiveInteger(limit['context'])) {
+      nextModel.contextWindow = limit['context']
+    }
+
+    if (isPositiveInteger(limit['output'])) {
+      nextModel.maxOutputTokens = limit['output']
+    }
+  }
+
+  return Object.keys(nextModel).length > 0 ? nextModel : null
+}
+
+function normalizeModelsDevPayload(
+  provider: string,
+  payload: unknown
+): Map<string, ModelsDevProviderModel> | null {
+  if (!isRecord(payload) || !isRecord(payload[provider])) {
+    return null
+  }
+
+  const rawModels = payload[provider]['models']
+
+  if (!isRecord(rawModels)) {
+    return null
+  }
+
+  const models = new Map<string, ModelsDevProviderModel>()
+
+  for (const [modelId, rawModel] of Object.entries(rawModels)) {
+    const normalizedModel = normalizeModelsDevModel(rawModel)
+
+    if (normalizedModel !== null) {
+      models.set(modelId, normalizedModel)
+    }
+  }
+
+  return models
+}
+
+function enrichModelFromModelsDev(
+  model: ProviderModel,
+  modelsDevModel: ModelsDevProviderModel | undefined
+): ProviderModel {
+  if (modelsDevModel === undefined) {
+    return model
+  }
+
+  return {
+    ...model,
+    ...modelsDevModel,
+    id: model.id,
+    enabled: model.enabled,
+    isManual: model.isManual,
+    ...(model.providerOptions === undefined ? {} : { providerOptions: model.providerOptions }),
+    ...(model.manualOverrides === undefined ? {} : { manualOverrides: model.manualOverrides })
+  }
+}
+
+function applyManualOverride(
+  model: ProviderModel,
+  existingModel: ProviderModel,
+  field: ProviderModelManualOverride
+): void {
+  if (field === 'name') {
+    model.name = existingModel.name
+  } else if (field === 'supportsVision') {
+    if (existingModel.supportsVision === undefined) {
+      delete model.supportsVision
+    } else {
+      model.supportsVision = existingModel.supportsVision
+    }
+  } else if (field === 'supportsImageOutput') {
+    if (existingModel.supportsImageOutput === undefined) {
+      delete model.supportsImageOutput
+    } else {
+      model.supportsImageOutput = existingModel.supportsImageOutput
+    }
+  } else if (field === 'supportsToolCalling') {
+    if (existingModel.supportsToolCalling === undefined) {
+      delete model.supportsToolCalling
+    } else {
+      model.supportsToolCalling = existingModel.supportsToolCalling
+    }
+  } else if (field === 'supportsReasoning') {
+    if (existingModel.supportsReasoning === undefined) {
+      delete model.supportsReasoning
+    } else {
+      model.supportsReasoning = existingModel.supportsReasoning
+    }
+  } else if (field === 'supportsEmbedding') {
+    if (existingModel.supportsEmbedding === undefined) {
+      delete model.supportsEmbedding
+    } else {
+      model.supportsEmbedding = existingModel.supportsEmbedding
+    }
+  } else if (field === 'contextWindow') {
+    if (existingModel.contextWindow === undefined) {
+      delete model.contextWindow
+    } else {
+      model.contextWindow = existingModel.contextWindow
+    }
+  } else if (field === 'maxOutputTokens') {
+    if (existingModel.maxOutputTokens === undefined) {
+      delete model.maxOutputTokens
+    } else {
+      model.maxOutputTokens = existingModel.maxOutputTokens
+    }
+  } else if (existingModel.providerOptions === undefined) {
+    delete model.providerOptions
+  } else {
+    model.providerOptions = existingModel.providerOptions
+  }
+}
+
+function applyExistingModelState(
+  model: ProviderModel,
+  existingModel: ProviderModel | undefined
+): ProviderModel {
+  if (existingModel === undefined) {
+    return model
+  }
+
+  const nextModel: ProviderModel = {
+    ...model,
+    enabled: existingModel.enabled
+  }
+  const manualOverrides = normalizeManualOverrides(existingModel.manualOverrides)
+
+  if (existingModel.providerOptions !== undefined) {
+    nextModel.providerOptions = existingModel.providerOptions
+  }
+
+  if (manualOverrides !== undefined) {
+    nextModel.manualOverrides = manualOverrides
+
+    for (const field of manualOverrides) {
+      applyManualOverride(nextModel, existingModel, field)
+    }
+  }
+
+  return nextModel
+}
+
+function createExistingModelsById(existingModels: ProviderModel[]): Map<string, ProviderModel> {
+  const existingModelsById = new Map<string, ProviderModel>()
+
+  for (const model of existingModels) {
+    existingModelsById.set(model.id, model)
+  }
+
+  return existingModelsById
+}
+
 function normalizeFetchedModel(rawModel: unknown): ProviderModel | null {
   if (rawModel === null || typeof rawModel !== 'object') {
     return null
@@ -145,9 +375,13 @@ function normalizeFetchedModel(rawModel: unknown): ProviderModel | null {
   const contextWindow =
     typeof record['context_window'] === 'number'
       ? record['context_window']
-      : typeof record['inputTokenLimit'] === 'number'
-        ? record['inputTokenLimit']
-        : undefined
+      : typeof record['context_length'] === 'number'
+        ? record['context_length']
+        : typeof record['contextWindow'] === 'number'
+          ? record['contextWindow']
+          : typeof record['inputTokenLimit'] === 'number'
+            ? record['inputTokenLimit']
+            : undefined
 
   return {
     id,
@@ -158,16 +392,12 @@ function normalizeFetchedModel(rawModel: unknown): ProviderModel | null {
   }
 }
 
-function normalizeFetchedModels(
-  payload: ModelListPayload,
-  existingModels: ProviderModel[]
-): ProviderModel[] {
+function normalizeFetchedModels(payload: ModelListPayload): ProviderModel[] {
   const rawModels = Array.isArray(payload.data)
     ? payload.data
     : Array.isArray(payload.models)
       ? payload.models
       : []
-  const enabledById = new Map(existingModels.map((model) => [model.id, model.enabled]))
   const seen = new Set<string>()
   const models: ProviderModel[] = []
 
@@ -179,10 +409,7 @@ function normalizeFetchedModels(
     }
 
     seen.add(model.id)
-    models.push({
-      ...model,
-      enabled: enabledById.get(model.id) ?? model.enabled
-    })
+    models.push(model)
   }
 
   return models
@@ -196,6 +423,48 @@ async function fetchJson(url: string, init: RequestInit): Promise<unknown> {
   }
 
   return response.json()
+}
+
+async function fetchModelsDevModels(
+  provider: string
+): Promise<Map<string, ModelsDevProviderModel> | null> {
+  const abortController = new AbortController()
+  const timeout = setTimeout(() => abortController.abort(), modelsDevFetchTimeoutMs)
+
+  try {
+    const payload = await fetchJson(modelsDevApiUrl, {
+      method: 'GET',
+      signal: abortController.signal
+    })
+
+    return normalizeModelsDevPayload(provider, payload)
+  } catch {
+    return null
+  } finally {
+    clearTimeout(timeout)
+  }
+}
+
+async function enrichModelsFromModelsDev(
+  provider: string,
+  models: ProviderModel[]
+): Promise<ProviderModel[]> {
+  const modelsDevModels = await fetchModelsDevModels(provider)
+
+  if (modelsDevModels === null) {
+    return models
+  }
+
+  return models.map((model) => enrichModelFromModelsDev(model, modelsDevModels.get(model.id)))
+}
+
+function mergeModelsWithExistingState(
+  models: ProviderModel[],
+  existingModels: ProviderModel[]
+): ProviderModel[] {
+  const existingModelsById = createExistingModelsById(existingModels)
+
+  return models.map((model) => applyExistingModelState(model, existingModelsById.get(model.id)))
 }
 
 function ensureReadyForHttp(config: ProviderConnectionConfig): void {
@@ -278,19 +547,14 @@ export class SettingsService {
               headers: createHeaders(config),
               method: 'GET'
             })
-    const fetchedModels = normalizeFetchedModels(payload as ModelListPayload, config.models)
-    const mergedModels = fetchedModels.map((model) => ({
-      ...model,
-      enabled: config.models.find((entry) => entry.id === model.id)?.enabled ?? model.enabled
-    }))
+    const fetchedModels = normalizeFetchedModels(payload as ModelListPayload)
+    const enrichedModels = await enrichModelsFromModelsDev(config.provider, fetchedModels)
+    const existingModels = [...config.availableModels, ...config.models]
+    const mergedModels = mergeModelsWithExistingState(enrichedModels, existingModels)
 
     await this.settingsRepository.saveProvider(config.provider, config)
 
-    return this.settingsRepository.updateProviderModels(
-      config.provider,
-      mergedModels,
-      fetchedModels
-    )
+    return this.settingsRepository.updateProviderModels(config.provider, mergedModels, mergedModels)
   }
 
   async testProvider(input: ProviderConnectionInput): Promise<ProviderTestResult> {
@@ -396,8 +660,8 @@ export class SettingsService {
       acpCommand: input.acpCommand ?? defaults.acpCommand,
       acpArgs: input.acpArgs ?? defaults.acpArgs,
       acpAuthMethodId: input.acpAuthMethodId ?? defaults.acpAuthMethodId,
-      models: input.models ?? defaults.models,
-      availableModels: input.availableModels ?? defaults.availableModels
+      models: input.models ?? [],
+      availableModels: input.availableModels ?? []
     }
   }
 

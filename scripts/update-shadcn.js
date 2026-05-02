@@ -9,15 +9,19 @@ const __dirname = dirname(__filename)
 const projectRoot = join(__dirname, '..')
 
 const components = [
+  'badge',
   'button',
   'tooltip',
   'checkbox',
   'dialog',
+  'empty',
   'input',
   'label',
   'select',
+  'sonner',
   'switch',
   'textarea',
+  'sidebar',
   'scroll-area',
   'input-group'
 ]

@@ -50,12 +50,34 @@ export type ProviderType =
   | 'cloudflare-ai-gateway'
   | 'custom'
 
+export const providerModelManualOverrideFields = [
+  'name',
+  'supportsVision',
+  'supportsImageOutput',
+  'supportsToolCalling',
+  'supportsReasoning',
+  'supportsEmbedding',
+  'contextWindow',
+  'maxOutputTokens',
+  'providerOptions'
+] as const
+
+export type ProviderModelManualOverride = (typeof providerModelManualOverrideFields)[number]
+
 export type ProviderModel = {
   id: string
   name: string
   enabled: boolean
   isManual: boolean
+  supportsVision?: boolean
+  supportsImageOutput?: boolean
+  supportsToolCalling?: boolean
+  supportsReasoning?: boolean
+  supportsEmbedding?: boolean
   contextWindow?: number
+  maxOutputTokens?: number
+  providerOptions?: string
+  manualOverrides?: ProviderModelManualOverride[]
 }
 
 export type ProviderMetadata = {

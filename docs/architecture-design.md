@@ -160,7 +160,6 @@ preload 的职责是把主进程能力收敛为受控 API。当前只暴露 `win
       bootstrap/                 应用图标、窗口创建、IPC 注册、窗口状态事件
       db/                        PGlite 连接、Drizzle schema、migration bootstrap
       repositories/              按表/聚合组织的数据访问层
-      security/                  secret codec 和 Electron safeStorage 封装
       services/                  面向业务用例的服务层，编排校验和 repository
       types/                     本地第三方类型补充
       index.ts                   main process 入口和依赖装配
@@ -263,7 +262,6 @@ Renderer UI
   -> SettingsService.saveProvider
   -> saveProviderInputSchema.parse(input)
   -> SettingsRepository.saveProvider
-  -> SafeStorageSecretCodec encrypt(apiKey)
   -> Drizzle upsert provider_settings table
   -> AppSettings response
   -> broadcastSettingsChange(settings)
@@ -361,7 +359,7 @@ messages
   GIN INDEX messages_content_search_idx(to_tsvector('simple', content))
 ```
 
-当前实际接入 IPC 的持久化对象是外观设置和 provider 设置。外观主题以 `appearance.theme` 写入 `settings` 表；API Key 由主进程使用 Electron `safeStorage` 加密后写入 `provider_settings.encrypted_api_key`，renderer 收到的是解密后派生出的 `hasApiKey` 和 `apiKeyPreview`，不会收到明文 API Key。`sessions` 与 `messages` 已有 repository，但还没有注册对应 IPC handler；`projects` 目前只保留表结构，等待明确 UI 用例后再接入。
+当前实际接入 IPC 的持久化对象是外观设置和 provider 设置。外观主题以 `appearance.theme` 写入 `settings` 表；API Key 由主进程通过 settings repository 写入 `provider_settings.encrypted_api_key`。该列名为兼容既有 schema 保留，新保存值为原始 key；renderer 收到 `hasApiKey` 和 `apiKey`，不再接收 `apiKeyPreview`。`sessions` 与 `messages` 已有 repository，但还没有注册对应 IPC handler；`projects` 目前只保留表结构，等待明确 UI 用例后再接入。
 
 ## 7. Renderer 架构
 

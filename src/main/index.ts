@@ -11,7 +11,6 @@ import { registerIpcHandlers } from './bootstrap/register-ipc'
 import { bootstrapDatabase } from './db/bootstrap'
 import { createDatabaseConnection, type AppDatabaseConnection } from './db/connection'
 import { SettingsRepository } from './repositories/settings-repository'
-import { createSafeStorageSecretCodec } from './security/safe-storage-secret-codec'
 import { ProviderProxyServer } from './services/provider-proxy-server'
 import { SettingsService } from './services/settings-service'
 
@@ -70,10 +69,7 @@ app.whenReady().then(async () => {
   databaseConnection = await createDatabaseConnection(join(app.getPath('userData'), 'moon-pglite'))
   await bootstrapDatabase(databaseConnection, getMigrationsFolder())
 
-  const settingsRepository = new SettingsRepository(
-    databaseConnection,
-    createSafeStorageSecretCodec()
-  )
+  const settingsRepository = new SettingsRepository(databaseConnection)
   providerProxyServer = new ProviderProxyServer(settingsRepository)
   providerProxyServer.start()
 
