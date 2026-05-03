@@ -136,8 +136,8 @@ describe('SettingsPage', () => {
     expect(screen.getByRole('region', { name: 'OpenAI provider details' })).toBeInTheDocument()
     expect(screen.queryByLabelText('OpenAI Provider Name')).not.toBeInTheDocument()
     expect(screen.getByLabelText('OpenAI API Key')).toBeInTheDocument()
-    expect(screen.getByText('暂无模型')).toBeInTheDocument()
-    expect(screen.getByText('点击 Fetch 拉取可用模型。')).toBeInTheDocument()
+    expect(screen.queryByText('Models')).not.toBeInTheDocument()
+    expect(screen.queryByText('暂无模型')).not.toBeInTheDocument()
 
     const openAiProxyEndpoints = createProviderProxyEndpoints('openai')
     const proxyToggle = screen.getByText('API 代理端点').closest('[aria-expanded]')
@@ -192,6 +192,9 @@ describe('SettingsPage', () => {
     fireEvent.change(screen.getByLabelText('OpenAI API Key'), {
       target: { value: 'sk-openai-demo' }
     })
+    expect(screen.getByText('Models')).toBeInTheDocument()
+    expect(screen.getByText('暂无模型')).toBeInTheDocument()
+    expect(screen.getByText('点击 Fetch 拉取可用模型。')).toBeInTheDocument()
     const saveButton = screen.getByRole('button', { name: '保存' })
     await waitFor(() => {
       expect(saveButton).toBeEnabled()
@@ -330,6 +333,8 @@ describe('SettingsPage', () => {
     expect(screen.getByLabelText('Supports image input')).toBeInTheDocument()
     expect(screen.getByLabelText('Supports function calling')).toBeInTheDocument()
     expect(screen.getByLabelText('Extended thinking/reasoning')).toBeInTheDocument()
+    expect(screen.getByLabelText('Supports function calling')).toHaveClass('text-primary')
+    expect(screen.getByLabelText('Extended thinking/reasoning')).toHaveClass('text-primary')
     expect(screen.getByLabelText('262,144 token context window')).toBeInTheDocument()
     expect(screen.getByText('262K')).toBeInTheDocument()
     await user.hover(screen.getByLabelText('Supports function calling'))
@@ -545,6 +550,9 @@ describe('SettingsPage', () => {
       }
     )
 
+    fireEvent.change(screen.getByLabelText('OpenAI API Key'), {
+      target: { value: 'sk-openai-demo' }
+    })
     await user.click(screen.getByRole('button', { name: 'Fetch' }))
 
     expect(await screen.findByText('获取模型失败')).toBeInTheDocument()

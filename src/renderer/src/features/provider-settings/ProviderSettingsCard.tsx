@@ -87,6 +87,11 @@ type ModelOptionsDraft = {
   providerOptions: string
 }
 
+type AutoModelCapability = Extract<
+  ProviderModelManualOverride,
+  'supportsVision' | 'supportsToolCalling' | 'supportsReasoning'
+>
+
 function formatContextWindow(model: ProviderModel): string {
   if (model.contextWindow === undefined) {
     return ''
@@ -130,18 +135,16 @@ function hasModelManualOverride(model: ProviderModel, field: ProviderModelManual
   return model.manualOverrides?.includes(field) ?? false
 }
 
+function resolveAutoModelCapability(model: ProviderModel, field: AutoModelCapability): boolean {
+  return hasModelManualOverride(model, field) ? (model[field] ?? false) : true
+}
+
 function createModelOptionsDraft(model: ProviderModel): ModelOptionsDraft {
   return {
-    supportsVision: hasModelManualOverride(model, 'supportsVision')
-      ? (model.supportsVision ?? false)
-      : true,
+    supportsVision: resolveAutoModelCapability(model, 'supportsVision'),
     supportsImageOutput: model.supportsImageOutput ?? false,
-    supportsToolCalling: hasModelManualOverride(model, 'supportsToolCalling')
-      ? (model.supportsToolCalling ?? false)
-      : true,
-    supportsReasoning: hasModelManualOverride(model, 'supportsReasoning')
-      ? (model.supportsReasoning ?? false)
-      : true,
+    supportsToolCalling: resolveAutoModelCapability(model, 'supportsToolCalling'),
+    supportsReasoning: resolveAutoModelCapability(model, 'supportsReasoning'),
     supportsEmbedding: model.supportsEmbedding ?? false,
     contextWindow: model.contextWindow === undefined ? '' : String(model.contextWindow),
     maxOutputTokens: model.maxOutputTokens === undefined ? '' : String(model.maxOutputTokens),
@@ -555,6 +558,8 @@ export function ProviderSettingsCard({
   )
   const enabledModelCount = draftModels.filter((model) => model.enabled).length
   const usesEnableOnlyCard = provider.isOAuth || (provider.isACP && !provider.isCustom)
+  const showsModelsSection =
+    !usesEnableOnlyCard && (provider.noApiKey || draft.apiKey.trim().length > 0)
   const [showsProxyEndpoints, setShowsProxyEndpoints] = useState(false)
   const [copiedProxyValue, setCopiedProxyValue] = useState('')
   const [optionsModelId, setOptionsModelId] = useState<string | null>(null)
@@ -852,7 +857,7 @@ export function ProviderSettingsCard({
             </div>
           )}
 
-          {!usesEnableOnlyCard ? (
+          {showsModelsSection ? (
             <section className="mt-6 space-y-4">
               <div className="flex items-center justify-between gap-6">
                 <FieldLabel>Models</FieldLabel>
@@ -905,19 +910,19 @@ export function ProviderSettingsCard({
                             </p>
                             <div className="mt-1 flex min-w-0 items-center gap-2">
                               <ModelCapabilityIcon
-                                supported={model.supportsVision ?? false}
+                                supported={resolveAutoModelCapability(model, 'supportsVision')}
                                 label="Supports image input"
                               >
                                 <Eye aria-hidden="true" className="size-3.5" />
                               </ModelCapabilityIcon>
                               <ModelCapabilityIcon
-                                supported={model.supportsToolCalling ?? false}
+                                supported={resolveAutoModelCapability(model, 'supportsToolCalling')}
                                 label="Supports function calling"
                               >
                                 <Wrench aria-hidden="true" className="size-3.5" />
                               </ModelCapabilityIcon>
                               <ModelCapabilityIcon
-                                supported={model.supportsReasoning ?? false}
+                                supported={resolveAutoModelCapability(model, 'supportsReasoning')}
                                 label="Extended thinking/reasoning"
                               >
                                 <Brain aria-hidden="true" className="size-3.5" />
