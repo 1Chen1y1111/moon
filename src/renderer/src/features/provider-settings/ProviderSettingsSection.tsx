@@ -715,11 +715,19 @@ export function ProviderSettingsSection({
       setTestResults((current) => ({ ...current, [selectedProvider]: null }))
 
       try {
+        const startedAt = performance.now()
         const result = await window.api.settings.testProvider({
           ...selectedDraft,
           selectedModel: modelId ?? ''
         })
-        setTestResults((current) => ({ ...current, [selectedProvider]: result }))
+        const elapsedMs = Math.round(performance.now() - startedAt)
+        setTestResults((current) => ({
+          ...current,
+          [selectedProvider]: {
+            ...result,
+            message: result.success ? `连接成功！ (${elapsedMs}ms)` : result.message
+          }
+        }))
       } finally {
         setTestingProviders((current) => ({ ...current, [selectedProvider]: false }))
       }

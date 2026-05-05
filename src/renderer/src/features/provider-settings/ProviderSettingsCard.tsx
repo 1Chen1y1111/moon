@@ -1,5 +1,5 @@
 import {
-  Bolt,
+  Zap,
   Brain,
   Check,
   ChevronDown,
@@ -20,6 +20,7 @@ import {
   X
 } from 'lucide-react'
 import { useState } from 'react'
+import { Popover as PopoverPrimitive } from 'radix-ui'
 
 import { Badge } from '@shadcn/ui/badge'
 import { Button } from '@shadcn/ui/button'
@@ -563,9 +564,22 @@ export function ProviderSettingsCard({
   const [showsProxyEndpoints, setShowsProxyEndpoints] = useState(false)
   const [copiedProxyValue, setCopiedProxyValue] = useState('')
   const [optionsModelId, setOptionsModelId] = useState<string | null>(null)
+  const [isTestModelPopoverOpen, setIsTestModelPopoverOpen] = useState(false)
+  const [testModelQuery, setTestModelQuery] = useState('')
   const optionsModel = optionsModelId
     ? allModels.find((model) => model.id === optionsModelId)
     : undefined
+  const testButtonTitle = isTesting
+    ? '正在测试连接'
+    : testResult?.success === true
+      ? '连接成功，选择模型重新测试'
+      : testResult?.success === false
+        ? '连接失败，选择模型重新测试'
+        : '选择要测试的模型'
+  const testModelSearch = testModelQuery.trim().toLowerCase()
+  const filteredTestModels = allModels.filter((model) =>
+    `${model.id} ${model.name}`.toLowerCase().includes(testModelSearch)
+  )
   const proxyEndpoints = createProviderProxyEndpoints(provider.provider)
   const claudeCodeEnvironment = [
     `export ANTHROPIC_BASE_URL=${proxyEndpoints.anthropicBaseUrl}`,
@@ -581,6 +595,12 @@ export function ProviderSettingsCard({
 
     setCopiedProxyValue(value)
     window.setTimeout(() => setCopiedProxyValue(''), 1600)
+  }
+
+  function handleTestModelSelect(modelId: string): void {
+    setIsTestModelPopoverOpen(false)
+    setTestModelQuery('')
+    onTestProvider(modelId)
   }
 
   return (
@@ -613,6 +633,16 @@ export function ProviderSettingsCard({
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
             {provider.updatedAt ? `上次保存于 ${provider.updatedAt}` : '尚未保存'}
           </p>
+          {testResult ? (
+            <p
+              className={cn(
+                'mt-3 text-xs leading-6',
+                testResult.success ? 'text-primary' : 'text-destructive'
+              )}
+            >
+              {testResult.message}
+            </p>
+          ) : null}
         </div>
 
         {!usesEnableOnlyCard ? (
@@ -629,18 +659,87 @@ export function ProviderSettingsCard({
                 <Trash2 aria-hidden="true" />
               </Button>
             ) : null}
-            <Button
-              type="button"
-              variant="secondary"
-              size="lg"
-              aria-label="测试连接"
-              disabled={isTesting || isSaving}
-              onClick={() => onTestProvider()}
+            <PopoverPrimitive.Root
+              open={isTestModelPopoverOpen}
+              onOpenChange={(open) => {
+                setIsTestModelPopoverOpen(open)
+                if (open) {
+                  setTestModelQuery('')
+                }
+              }}
             >
-              <Bolt aria-hidden="true" />
-              {isTesting ? 'Testing' : 'Test'}
-              <ChevronDown aria-hidden="true" />
-            </Button>
+              <PopoverPrimitive.Trigger asChild>
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="lg"
+                  aria-label={testButtonTitle}
+                  title={testButtonTitle}
+                  aria-expanded={isTestModelPopoverOpen}
+                  className={cn(
+                    'h-9 min-w-16 justify-center gap-2 rounded-lg px-3',
+                    testResult?.success === true
+                      ? 'text-primary'
+                      : testResult?.success === false
+                        ? 'text-destructive'
+                        : ''
+                  )}
+                  disabled={isTesting || isSaving || allModels.length === 0}
+                >
+                  {testResult?.success === true ? (
+                    <Check aria-hidden="true" />
+                  ) : testResult?.success === false ? (
+                    <X aria-hidden="true" />
+                  ) : (
+                    <Zap aria-hidden="true" />
+                  )}
+                  <ChevronDown aria-hidden="true" className="size-3.5 text-muted-foreground" />
+                </Button>
+              </PopoverPrimitive.Trigger>
+              <PopoverPrimitive.Portal>
+                <PopoverPrimitive.Content
+                  align="end"
+                  sideOffset={10}
+                  className="z-50 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-popover p-2 text-popover-foreground shadow-lg ring-1 ring-foreground/10"
+                >
+                  <InputGroup className="h-10 rounded-md border-transparent bg-secondary">
+                    <InputGroupAddon align="inline-start">
+                      <Search />
+                    </InputGroupAddon>
+                    <InputGroupInput
+                      aria-label="搜索要测试的模型"
+                      value={testModelQuery}
+                      onChange={(event) => setTestModelQuery(event.target.value)}
+                      placeholder="选择要测试的模型"
+                    />
+                  </InputGroup>
+
+                  <div className="mt-2 max-h-80 overflow-y-auto">
+                    {filteredTestModels.length > 0 ? (
+                      filteredTestModels.map((model) => (
+                        <button
+                          key={model.id}
+                          type="button"
+                          className={cn(
+                            'flex w-full min-w-0 items-center rounded-md px-3 py-2 text-left text-sm leading-6 text-foreground outline-none transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent focus-visible:text-accent-foreground',
+                            testResult?.modelId === model.id
+                              ? 'bg-accent text-accent-foreground'
+                              : ''
+                          )}
+                          onClick={() => handleTestModelSelect(model.id)}
+                        >
+                          <span className="min-w-0 truncate">{model.name}</span>
+                        </button>
+                      ))
+                    ) : (
+                      <p className="px-3 py-6 text-center text-sm leading-6 text-muted-foreground">
+                        未找到匹配模型
+                      </p>
+                    )}
+                  </div>
+                </PopoverPrimitive.Content>
+              </PopoverPrimitive.Portal>
+            </PopoverPrimitive.Root>
             <Switch
               checked={draft.enabled}
               aria-label="启用提供商"
@@ -653,19 +752,6 @@ export function ProviderSettingsCard({
 
       <ScrollArea className="h-[calc(100%-132px)]">
         <div className="px-6 py-6">
-          {testResult ? (
-            <div
-              className={cn(
-                'mb-6 rounded-md border px-6 py-3 text-sm leading-6',
-                testResult.success
-                  ? 'border-primary/20 bg-primary/10 text-foreground'
-                  : 'border-destructive bg-secondary text-destructive'
-              )}
-            >
-              {testResult.message}
-            </div>
-          ) : null}
-
           {usesEnableOnlyCard ? (
             <div className="flex items-start justify-between gap-10 rounded-lg border border-border bg-secondary px-6 py-6">
               <p className="min-w-0 flex-1 text-sm leading-6 text-muted-foreground">

@@ -419,6 +419,82 @@ describe('SettingsPage', () => {
     })
   })
 
+  it('tests the selected model from the provider test menu', async () => {
+    const defaultSettings = createDefaultAppSettings()
+    const existingSettings: AppSettings = {
+      ...defaultSettings,
+      providers: {
+        ...defaultSettings.providers,
+        moonshot: {
+          ...defaultSettings.providers.moonshot,
+          provider: 'moonshot',
+          hasApiKey: true,
+          apiKey: 'sk-moonshot-demo',
+          model: '',
+          models: [
+            {
+              id: 'moonshot-v1-32k',
+              name: 'moonshot-v1-32k',
+              enabled: true,
+              isManual: false
+            },
+            {
+              id: 'kimi-k2.5',
+              name: 'kimi-k2.5',
+              enabled: true,
+              isManual: false
+            }
+          ],
+          availableModels: [
+            {
+              id: 'moonshot-v1-32k',
+              name: 'moonshot-v1-32k',
+              enabled: true,
+              isManual: false
+            },
+            {
+              id: 'kimi-k2.5',
+              name: 'kimi-k2.5',
+              enabled: true,
+              isManual: false
+            }
+          ],
+          baseUrl: '',
+          updatedAt: '2026-04-21T00:00:00.000Z'
+        }
+      }
+    }
+
+    api = installMockWindowApi({
+      appSettings: existingSettings,
+      savedSettings: existingSettings
+    })
+
+    const { user } = renderWithProviders(<SettingsPage />, {
+      preloadedSettings: {
+        activeSection: 'providers',
+        appSettings: existingSettings,
+        loadStatus: 'succeeded'
+      }
+    })
+
+    await user.click(getProviderCatalogItem('Moonshot'))
+    await user.click(screen.getByRole('button', { name: '选择要测试的模型' }))
+    await user.type(screen.getByLabelText('搜索要测试的模型'), 'k2.5')
+    await user.click(screen.getByRole('button', { name: 'kimi-k2.5' }))
+
+    await waitFor(() => {
+      expect(api.settings.testProvider).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: 'moonshot',
+          selectedModel: 'kimi-k2.5'
+        })
+      )
+    })
+    expect(await screen.findByText(/连接成功！ \(\d+ms\)/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '连接成功，选择模型重新测试' })).toBeInTheDocument()
+  })
+
   it('formats million-token context windows in the model list', () => {
     const defaultSettings = createDefaultAppSettings()
     const existingSettings: AppSettings = {
