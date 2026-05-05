@@ -16,8 +16,7 @@ export const builtInProviderIds = [
   'codex-acp',
   'volcengine',
   'ollama',
-  'cloudflare-ai-gateway',
-  'openai-compatible'
+  'cloudflare-ai-gateway'
 ] as const
 
 export const providerIds = builtInProviderIds
@@ -130,8 +129,7 @@ export const providerLabels = {
   'codex-acp': 'Codex CLI (ACP)',
   volcengine: 'Volcengine',
   ollama: 'Ollama',
-  'cloudflare-ai-gateway': 'Cloudflare AI Gateway',
-  'openai-compatible': 'CPA'
+  'cloudflare-ai-gateway': 'Cloudflare AI Gateway'
 } as const satisfies Record<BuiltInProviderId, string>
 
 export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
@@ -453,24 +451,6 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'provider/model',
     defaultModels: []
-  },
-  'openai-compatible': {
-    provider: 'openai-compatible',
-    label: providerLabels['openai-compatible'],
-    description: '兼容 OpenAI 协议的自定义 API 端点。',
-    type: 'custom',
-    kind: 'custom',
-    defaultBaseUrl: '',
-    apiKeyHelpUrl: '',
-    requiresBaseUrl: true,
-    noApiKey: false,
-    isACP: false,
-    isOAuth: false,
-    defaultApiFormat: 'openai-chat',
-    defaultUseMaxCompletionTokens: false,
-    modelPlaceholder: 'gpt-compatible',
-    defaultModels: [],
-    badge: 'CUSTOM'
   }
 }
 

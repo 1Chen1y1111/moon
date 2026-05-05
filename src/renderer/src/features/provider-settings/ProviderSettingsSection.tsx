@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Blocks, Bot, Cloud, Github, Plus, Search, Terminal, Workflow, Info } from 'lucide-react'
+import { Bot, Cloud, Github, Plus, Search, Terminal, Workflow, Info } from 'lucide-react'
 import { toast } from 'sonner'
 
 import {
@@ -123,7 +123,6 @@ const providerIconAssets = {
 } as const satisfies Partial<Record<ProviderId, ProviderIconAsset>>
 
 const providerFallbackIcons = {
-  'openai-compatible': Blocks,
   'github-copilot': Github,
   'claude-subscription': AnthropicIcon,
   'claude-code-acp': Terminal,
@@ -733,9 +732,11 @@ export function ProviderSettingsSection({
       return
     }
 
-    const action = selectedSettings.isBuiltIn ? '重置' : '删除'
+    if (selectedSettings.isBuiltIn) {
+      return
+    }
 
-    if (!window.confirm(`${action} ${selectedSettings.name}？此操作会移除本地保存的配置。`)) {
+    if (!window.confirm(`删除 ${selectedSettings.name}？此操作会移除本地保存的配置。`)) {
       return
     }
 

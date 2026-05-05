@@ -617,16 +617,18 @@ export function ProviderSettingsCard({
 
         {!usesEnableOnlyCard ? (
           <div className="flex shrink-0 items-center gap-3">
-            <Button
-              type="button"
-              variant="secondary"
-              size="icon-lg"
-              aria-label={provider.isBuiltIn ? '重置提供商' : '删除提供商'}
-              title={provider.isBuiltIn ? '重置提供商' : '删除提供商'}
-              onClick={onDeleteProvider}
-            >
-              <Trash2 aria-hidden="true" />
-            </Button>
+            {!provider.isBuiltIn ? (
+              <Button
+                type="button"
+                variant="secondary"
+                size="icon-lg"
+                aria-label="删除提供商"
+                title="删除提供商"
+                onClick={onDeleteProvider}
+              >
+                <Trash2 aria-hidden="true" />
+              </Button>
+            ) : null}
             <Button
               type="button"
               variant="secondary"

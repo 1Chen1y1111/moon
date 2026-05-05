@@ -124,7 +124,6 @@ describe('SettingsPage', () => {
     expect(screen.getByRole('button', { name: 'Add Custom ACP Provider' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Add Custom Provider' })).toBeEnabled()
     expect(getProviderCatalogItem('Moonshot')).toBeInTheDocument()
-    expect(getProviderCatalogItem('CPA')).toBeInTheDocument()
     const openAiProviderButton = getProviderCatalogItem('OpenAI')
 
     expect(openAiProviderButton).toHaveAttribute('aria-pressed', 'true')
@@ -510,29 +509,6 @@ describe('SettingsPage', () => {
     await waitFor(() => {
       expect(api.settings.saveAppearance).toHaveBeenCalledWith({ theme: 'dark' })
     })
-  })
-
-  it('validates the compatible provider base url before saving', async () => {
-    const { user } = renderWithProviders(<SettingsPage />)
-
-    await user.click(screen.getByRole('tab', { name: '提供商' }))
-    await user.click(getProviderCatalogItem('CPA'))
-    fireEvent.change(screen.getByLabelText('CPA API Key'), {
-      target: { value: 'sk-compatible-demo' }
-    })
-    await user.click(
-      within(screen.getByRole('region', { name: 'CPA provider details' })).getByRole('switch', {
-        name: '启用提供商'
-      })
-    )
-    const saveButton = screen.getByRole('button', { name: '保存' })
-    await waitFor(() => {
-      expect(saveButton).toBeEnabled()
-    })
-    await user.click(saveButton)
-
-    expect(screen.getByText('Base URL is required.')).toBeInTheDocument()
-    expect(api.settings.saveProvider).not.toHaveBeenCalled()
   })
 
   it('shows a toast when provider model fetch fails', async () => {
