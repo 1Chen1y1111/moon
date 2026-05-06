@@ -19,6 +19,7 @@ import {
   Wrench,
   X
 } from 'lucide-react'
+import dayjs from 'dayjs'
 import { useState } from 'react'
 import { Popover as PopoverPrimitive } from 'radix-ui'
 
@@ -580,6 +581,9 @@ export function ProviderSettingsCard({
   const filteredTestModels = allModels.filter((model) =>
     `${model.id} ${model.name}`.toLowerCase().includes(testModelSearch)
   )
+  const formattedUpdatedAt = provider.updatedAt
+    ? dayjs(provider.updatedAt).format('YYYY-MM-DD HH:mm:ss')
+    : ''
   const proxyEndpoints = createProviderProxyEndpoints(provider.provider)
   const claudeCodeEnvironment = [
     `export ANTHROPIC_BASE_URL=${proxyEndpoints.anthropicBaseUrl}`,
@@ -631,7 +635,7 @@ export function ProviderSettingsCard({
           </div>
           <p className="mt-1.5 text-sm leading-6 text-muted-foreground">{displayBaseUrl}</p>
           <p className="mt-1 text-xs leading-5 text-muted-foreground">
-            {provider.updatedAt ? `上次保存于 ${provider.updatedAt}` : '尚未保存'}
+            {formattedUpdatedAt ? `上次保存于 ${formattedUpdatedAt}` : '尚未保存'}
           </p>
           {testResult ? (
             <p
@@ -750,7 +754,7 @@ export function ProviderSettingsCard({
         ) : null}
       </div>
 
-      <ScrollArea className="h-[calc(100%-132px)]">
+      <ScrollArea className={testResult ? 'h-[calc(100%-159px)]' : 'h-[calc(100%-123px)]'}>
         <div className="px-6 py-6">
           {usesEnableOnlyCard ? (
             <div className="flex items-start justify-between gap-10 rounded-lg border border-border bg-secondary px-6 py-6">
@@ -978,101 +982,106 @@ export function ProviderSettingsCard({
               </p>
 
               <TooltipProvider>
-                <div className="max-h-72 overflow-y-auto rounded-lg border border-border">
-                  {filteredModels.length > 0 ? (
-                    filteredModels.map((model) => {
-                      const contextWindow = formatContextWindow(model)
-                      const contextWindowLabel =
-                        model.contextWindow === undefined
-                          ? ''
-                          : `${model.contextWindow.toLocaleString('en-US')} token context window`
+                <ScrollArea className="border border-border rounded-lg">
+                  <div className="max-h-72">
+                    {filteredModels.length > 0 ? (
+                      filteredModels.map((model) => {
+                        const contextWindow = formatContextWindow(model)
+                        const contextWindowLabel =
+                          model.contextWindow === undefined
+                            ? ''
+                            : `${model.contextWindow.toLocaleString('en-US')} token context window`
 
-                      return (
-                        <div
-                          key={model.id}
-                          className="flex items-center justify-between gap-2 border-b border-border p-2 last:border-b-0"
-                        >
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate text-sm leading-6 text-foreground">
-                              {model.name}
-                            </p>
-                            <div className="mt-1 flex min-w-0 items-center gap-2">
-                              <ModelCapabilityIcon
-                                supported={resolveAutoModelCapability(model, 'supportsVision')}
-                                label="Supports image input"
+                        return (
+                          <div
+                            key={model.id}
+                            className="flex items-center justify-between gap-2 border-b border-border p-2 pr-4 last:border-b-0"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <p className="truncate text-sm leading-6 text-foreground">
+                                {model.name}
+                              </p>
+                              <div className="mt-1 flex min-w-0 items-center gap-2">
+                                <ModelCapabilityIcon
+                                  supported={resolveAutoModelCapability(model, 'supportsVision')}
+                                  label="Supports image input"
+                                >
+                                  <Eye aria-hidden="true" className="size-3.5" />
+                                </ModelCapabilityIcon>
+                                <ModelCapabilityIcon
+                                  supported={resolveAutoModelCapability(
+                                    model,
+                                    'supportsToolCalling'
+                                  )}
+                                  label="Supports function calling"
+                                >
+                                  <Wrench aria-hidden="true" className="size-3.5" />
+                                </ModelCapabilityIcon>
+                                <ModelCapabilityIcon
+                                  supported={resolveAutoModelCapability(model, 'supportsReasoning')}
+                                  label="Extended thinking/reasoning"
+                                >
+                                  <Brain aria-hidden="true" className="size-3.5" />
+                                </ModelCapabilityIcon>
+                                {contextWindow ? (
+                                  <ModelContextWindowBadge
+                                    value={contextWindow}
+                                    label={contextWindowLabel}
+                                  />
+                                ) : null}
+                                {model.name !== model.id ? (
+                                  <span className="min-w-0 truncate text-xs leading-5 text-muted-foreground">
+                                    {model.id}
+                                  </span>
+                                ) : null}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <Button
+                                type="button"
+                                variant="secondary"
+                                size="icon-sm"
+                                aria-label={`配置模型 ${model.id}`}
+                                title="模型配置"
+                                onClick={() => setOptionsModelId(model.id)}
                               >
-                                <Eye aria-hidden="true" className="size-3.5" />
-                              </ModelCapabilityIcon>
-                              <ModelCapabilityIcon
-                                supported={resolveAutoModelCapability(model, 'supportsToolCalling')}
-                                label="Supports function calling"
-                              >
-                                <Wrench aria-hidden="true" className="size-3.5" />
-                              </ModelCapabilityIcon>
-                              <ModelCapabilityIcon
-                                supported={resolveAutoModelCapability(model, 'supportsReasoning')}
-                                label="Extended thinking/reasoning"
-                              >
-                                <Brain aria-hidden="true" className="size-3.5" />
-                              </ModelCapabilityIcon>
-                              {contextWindow ? (
-                                <ModelContextWindowBadge
-                                  value={contextWindow}
-                                  label={contextWindowLabel}
-                                />
-                              ) : null}
-                              {model.name !== model.id ? (
-                                <span className="min-w-0 truncate text-xs leading-5 text-muted-foreground">
-                                  {model.id}
-                                </span>
-                              ) : null}
+                                <SlidersHorizontal aria-hidden="true" />
+                              </Button>
+                              {model.isManual ? (
+                                <button
+                                  type="button"
+                                  aria-label={`删除模型 ${model.id}`}
+                                  className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                                  onClick={() => onRemoveModel(model.id)}
+                                >
+                                  <X aria-hidden="true" className="size-3.5" />
+                                </button>
+                              ) : (
+                                <span />
+                              )}
+                              <Switch
+                                checked={model.enabled}
+                                aria-label={`启用模型 ${model.id}`}
+                                onCheckedChange={() => onToggleModel(model.id)}
+                              />
                             </div>
                           </div>
-
-                          <div className="flex items-center gap-2">
-                            <Button
-                              type="button"
-                              variant="secondary"
-                              size="icon-sm"
-                              aria-label={`配置模型 ${model.id}`}
-                              title="模型配置"
-                              onClick={() => setOptionsModelId(model.id)}
-                            >
-                              <SlidersHorizontal aria-hidden="true" />
-                            </Button>
-                            {model.isManual ? (
-                              <button
-                                type="button"
-                                aria-label={`删除模型 ${model.id}`}
-                                className="flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                                onClick={() => onRemoveModel(model.id)}
-                              >
-                                <X aria-hidden="true" className="size-3.5" />
-                              </button>
-                            ) : (
-                              <span />
-                            )}
-                            <Switch
-                              checked={model.enabled}
-                              aria-label={`启用模型 ${model.id}`}
-                              onCheckedChange={() => onToggleModel(model.id)}
-                            />
-                          </div>
-                        </div>
-                      )
-                    })
-                  ) : (
-                    <Empty className="min-h-48 border-0">
-                      <EmptyHeader>
-                        <EmptyMedia variant="icon">
-                          <PackageOpen aria-hidden="true" />
-                        </EmptyMedia>
-                        <EmptyTitle>暂无模型</EmptyTitle>
-                        <EmptyDescription>点击 Fetch 拉取可用模型。</EmptyDescription>
-                      </EmptyHeader>
-                    </Empty>
-                  )}
-                </div>
+                        )
+                      })
+                    ) : (
+                      <Empty className="min-h-48 border-0">
+                        <EmptyHeader>
+                          <EmptyMedia variant="icon">
+                            <PackageOpen aria-hidden="true" />
+                          </EmptyMedia>
+                          <EmptyTitle>暂无模型</EmptyTitle>
+                          <EmptyDescription>点击 Fetch 拉取可用模型。</EmptyDescription>
+                        </EmptyHeader>
+                      </Empty>
+                    )}
+                  </div>
+                </ScrollArea>
               </TooltipProvider>
             </section>
           ) : null}
