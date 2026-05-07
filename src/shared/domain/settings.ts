@@ -68,7 +68,7 @@ export function createDefaultProviderSettings(provider: ProviderId): ProviderSet
     type: metadata?.type ?? 'custom',
     kind: metadata?.kind ?? 'custom',
     description: metadata?.description ?? 'Custom provider',
-    badge: metadata?.badge ?? '',
+    badge: metadata?.badge ?? (metadata === undefined ? 'Custom' : ''),
     hasApiKey: false,
     apiKey: '',
     model: '',
