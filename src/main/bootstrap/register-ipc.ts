@@ -3,9 +3,11 @@ import { BrowserWindow, ipcMain } from 'electron'
 import { ipcChannels } from '@ipc/channels'
 import { openSettingsInputSchema } from '@ipc/window-contracts'
 import type { AppSettings } from '../../shared/domain/settings'
+import type { ChatService } from '../services/chat-service'
 import type { SettingsService } from '../services/settings-service'
 
 type RegisterIpcDependencies = {
+  chatService: ChatService
   settingsService: SettingsService
   openSettingsWindow: (input?: { section?: 'providers' }) => BrowserWindow
 }
@@ -17,9 +19,14 @@ function broadcastSettingsChange(settings: AppSettings): void {
 }
 
 export function registerIpcHandlers({
+  chatService,
   openSettingsWindow,
   settingsService
 }: RegisterIpcDependencies): void {
+  ipcMain.removeHandler(ipcChannels.chat.listSessions)
+  ipcMain.removeHandler(ipcChannels.chat.getMessages)
+  ipcMain.removeHandler(ipcChannels.chat.createSession)
+  ipcMain.removeHandler(ipcChannels.chat.sendMessage)
   ipcMain.removeHandler(ipcChannels.settings.get)
   ipcMain.removeHandler(ipcChannels.settings.createCustomProvider)
   ipcMain.removeHandler(ipcChannels.settings.createCustomAcpProvider)
@@ -34,6 +41,14 @@ export function registerIpcHandlers({
   ipcMain.removeHandler(ipcChannels.window.openSettings)
   ipcMain.removeHandler(ipcChannels.window.getState)
 
+  ipcMain.handle(ipcChannels.chat.listSessions, () => chatService.listSessions())
+  ipcMain.handle(ipcChannels.chat.getMessages, (_event, input) => chatService.getMessages(input))
+  ipcMain.handle(ipcChannels.chat.createSession, () => chatService.createSession())
+  ipcMain.handle(ipcChannels.chat.sendMessage, (event, input) =>
+    chatService.sendMessage(input, (messageEvent) => {
+      event.sender.send(ipcChannels.chat.sendMessageEvent, messageEvent)
+    })
+  )
   ipcMain.handle(ipcChannels.settings.get, () => settingsService.getSettings())
   ipcMain.handle(ipcChannels.settings.createCustomProvider, async (_event, input) => {
     const settings = await settingsService.createCustomProvider(input)

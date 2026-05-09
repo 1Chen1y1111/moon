@@ -5,18 +5,44 @@ import {
   ImageIcon,
   MessageSquareMore,
   Music4,
+  Plus,
   Settings,
   SlidersHorizontal
 } from 'lucide-react'
 
+import {
+  createChatSession,
+  loadChatSessions,
+  selectChatCreateStatus,
+  selectChatSessions,
+  selectChatSessionsStatus,
+  useChatDispatch,
+  useChatSelector
+} from '@renderer/entities/chat'
+import { useAppRouterContext } from '@renderer/app/router/router-context'
 import { Button } from '@shadcn/ui/button'
 import { ScrollArea } from '@shadcn/ui/scroll-area'
 
 import { WorkspaceChrome } from './WorkspaceChrome'
 
+function navigateToChat(): void {
+  window.location.hash = '#/chat'
+}
+
 export function WorkspaceSidebar(): React.JSX.Element {
+  const dispatch = useChatDispatch()
+  const sessions = useChatSelector(selectChatSessions)
+  const sessionsStatus = useChatSelector(selectChatSessionsStatus)
+  const createStatus = useChatSelector(selectChatCreateStatus)
+  const { routeState, setRouteState } = useAppRouterContext()
   const [isMoreActionsOpen, setIsMoreActionsOpen] = useState(false)
   const closeTimeoutRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    if (sessionsStatus === 'idle') {
+      void dispatch(loadChatSessions())
+    }
+  }, [dispatch, sessionsStatus])
 
   useEffect(() => {
     return () => {
@@ -50,19 +76,72 @@ export function WorkspaceSidebar(): React.JSX.Element {
     void window.api.windowControls.openSettings()
   }
 
+  const handleCreateSession = async (): Promise<void> => {
+    try {
+      const session = await dispatch(createChatSession()).unwrap()
+
+      setRouteState((state) => ({
+        ...state,
+        activeChatId: session.id
+      }))
+      navigateToChat()
+    } catch {
+      navigateToChat()
+    }
+  }
+
+  const handleSelectSession = (sessionId: string): void => {
+    setRouteState((state) => ({
+      ...state,
+      activeChatId: sessionId
+    }))
+    navigateToChat()
+  }
+
   return (
     <aside aria-label="Workspace navigation" className="relative z-30 flex w-56 shrink-0 p-3">
       <div className="flex min-h-0 w-full flex-1 flex-col overflow-visible rounded-xl border border-border bg-card">
         <WorkspaceChrome />
 
         <ScrollArea role="group" aria-label="Primary actions" className="h-[calc(100%-93px)]">
-          <div className="flex flex-col gap-3 px-3 py-6">
-            <Button variant="ghost" size="lg">
-              清除历史
-            </Button>
-            <Button variant="secondary" size="lg">
+          <div className="flex flex-col gap-4 px-3 py-6">
+            <Button
+              type="button"
+              variant="secondary"
+              size="lg"
+              className="justify-start gap-2"
+              disabled={createStatus === 'creating'}
+              onClick={() => {
+                void handleCreateSession()
+              }}
+            >
+              <Plus aria-hidden="true" className="size-4" />
               新建聊天
             </Button>
+
+            <div className="space-y-2">
+              <div className="px-2 text-xs font-medium leading-5 text-muted-foreground">
+                最近会话
+              </div>
+              <div role="list" aria-label="最近会话" className="space-y-1">
+                {sessions.map((session) => {
+                  const isActive = routeState.activeChatId === session.id
+
+                  return (
+                    <div key={session.id} role="listitem">
+                      <button
+                        type="button"
+                        aria-current={isActive ? 'page' : undefined}
+                        className="flex w-full min-w-0 rounded-md px-2 py-2 text-left text-xs leading-5 text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-current:bg-accent"
+                        onClick={() => handleSelectSession(session.id)}
+                      >
+                        <span className="truncate">{session.title}</span>
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           </div>
         </ScrollArea>
 

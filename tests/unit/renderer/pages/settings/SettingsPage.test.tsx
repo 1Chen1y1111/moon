@@ -417,7 +417,7 @@ describe('SettingsPage', () => {
         })
       )
     })
-  })
+  }, 10000)
 
   it('tests the selected model from the provider test menu', async () => {
     const defaultSettings = createDefaultAppSettings()

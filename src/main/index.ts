@@ -10,7 +10,10 @@ import { createMainWindow } from './bootstrap/create-window'
 import { registerIpcHandlers } from './bootstrap/register-ipc'
 import { bootstrapDatabase } from './db/bootstrap'
 import { createDatabaseConnection, type AppDatabaseConnection } from './db/connection'
+import { MessagesRepository } from './repositories/messages-repository'
 import { SettingsRepository } from './repositories/settings-repository'
+import { SessionsRepository } from './repositories/sessions-repository'
+import { ChatService } from './services/chat-service'
 import { ProviderProxyServer } from './services/provider-proxy-server'
 import { SettingsService } from './services/settings-service'
 
@@ -70,10 +73,17 @@ app.whenReady().then(async () => {
   await bootstrapDatabase(databaseConnection, getMigrationsFolder())
 
   const settingsRepository = new SettingsRepository(databaseConnection)
+  const sessionsRepository = new SessionsRepository(databaseConnection)
+  const messagesRepository = new MessagesRepository(databaseConnection)
   providerProxyServer = new ProviderProxyServer(settingsRepository)
   providerProxyServer.start()
 
   registerIpcHandlers({
+    chatService: new ChatService({
+      messagesRepository,
+      sessionsRepository,
+      settingsRepository
+    }),
     openSettingsWindow,
     settingsService: new SettingsService(settingsRepository)
   })

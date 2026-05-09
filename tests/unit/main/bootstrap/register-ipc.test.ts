@@ -23,6 +23,12 @@ function getRegisteredHandler(channel: string): ((...args: unknown[]) => unknown
 }
 
 describe('registerIpcHandlers', () => {
+  const chatService = {
+    createSession: vi.fn(),
+    getMessages: vi.fn(),
+    listSessions: vi.fn(),
+    sendMessage: vi.fn()
+  }
   const settingsService = {
     getSettings: vi.fn(),
     saveAppearance: vi.fn(),
@@ -36,6 +42,10 @@ describe('registerIpcHandlers', () => {
     fromWebContentsMock.mockReset()
     getAllWindowsMock.mockReset()
     getAllWindowsMock.mockReturnValue([])
+    chatService.createSession.mockReset()
+    chatService.getMessages.mockReset()
+    chatService.listSessions.mockReset()
+    chatService.sendMessage.mockReset()
     settingsService.getSettings.mockReset()
     settingsService.saveAppearance.mockReset()
     settingsService.saveProvider.mockReset()
@@ -59,6 +69,7 @@ describe('registerIpcHandlers', () => {
     settingsService.saveProvider.mockResolvedValue(settings)
 
     registerIpcHandlers({
+      chatService: chatService as never,
       openSettingsWindow,
       settingsService: settingsService as never
     })
@@ -77,6 +88,70 @@ describe('registerIpcHandlers', () => {
     expect(settingsService.saveProvider).toHaveBeenCalledWith(input)
   })
 
+  it('registers chat handlers that delegate through the chat service', async () => {
+    const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
+    const { ipcChannels } = await import('@ipc/channels')
+    const session = {
+      id: 'session-1',
+      projectId: null,
+      provider: 'openai',
+      title: '新聊天',
+      status: 'active',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:00.000Z'
+    }
+    const message = {
+      id: 'message-1',
+      sessionId: 'session-1',
+      role: 'user',
+      content: 'hello',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:00.000Z'
+    }
+
+    chatService.listSessions.mockResolvedValue([session])
+    chatService.getMessages.mockResolvedValue([message])
+    chatService.createSession.mockResolvedValue(session)
+    chatService.sendMessage.mockResolvedValue({ session, messages: [message] })
+
+    registerIpcHandlers({
+      chatService: chatService as never,
+      openSettingsWindow,
+      settingsService: settingsService as never
+    })
+
+    expect(await getRegisteredHandler(ipcChannels.chat.listSessions)?.({ sender: {} })).toEqual([
+      session
+    ])
+    expect(
+      await getRegisteredHandler(ipcChannels.chat.getMessages)?.(
+        { sender: {} },
+        { sessionId: 'session-1' }
+      )
+    ).toEqual([message])
+    expect(await getRegisteredHandler(ipcChannels.chat.createSession)?.({ sender: {} })).toBe(
+      session
+    )
+    const sender = { send: vi.fn() }
+    expect(
+      await getRegisteredHandler(ipcChannels.chat.sendMessage)?.({ sender }, { content: 'hello' })
+    ).toEqual({
+      session,
+      messages: [message]
+    })
+    expect(chatService.getMessages).toHaveBeenCalledWith({ sessionId: 'session-1' })
+    expect(chatService.sendMessage).toHaveBeenCalledWith({ content: 'hello' }, expect.any(Function))
+
+    const eventListener = chatService.sendMessage.mock.calls[0][1]
+    eventListener({ type: 'user-message', session, message })
+
+    expect(sender.send).toHaveBeenCalledWith(ipcChannels.chat.sendMessageEvent, {
+      type: 'user-message',
+      session,
+      message
+    })
+  })
+
   it('broadcasts saved settings to open renderer windows', async () => {
     const { createDefaultAppSettings } = await import('@shared/domain/settings')
     const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
@@ -92,6 +167,7 @@ describe('registerIpcHandlers', () => {
     ])
 
     registerIpcHandlers({
+      chatService: chatService as never,
       openSettingsWindow,
       settingsService: settingsService as never
     })
@@ -118,6 +194,7 @@ describe('registerIpcHandlers', () => {
     const { ipcChannels } = await import('@ipc/channels')
 
     registerIpcHandlers({
+      chatService: chatService as never,
       openSettingsWindow,
       settingsService: settingsService as never
     })
@@ -148,6 +225,7 @@ describe('registerIpcHandlers', () => {
     const { ipcChannels } = await import('@ipc/channels')
 
     registerIpcHandlers({
+      chatService: chatService as never,
       settingsService: settingsService as never,
       openSettingsWindow
     })
@@ -169,6 +247,7 @@ describe('registerIpcHandlers', () => {
     const { ipcChannels } = await import('@ipc/channels')
 
     registerIpcHandlers({
+      chatService: chatService as never,
       settingsService: settingsService as never,
       openSettingsWindow
     })
@@ -190,6 +269,7 @@ describe('registerIpcHandlers', () => {
     const { ipcChannels } = await import('@ipc/channels')
 
     registerIpcHandlers({
+      chatService: chatService as never,
       settingsService: settingsService as never,
       openSettingsWindow
     })

@@ -15,6 +15,23 @@ function invokeIpcChannel<TChannel extends keyof AppIpcContractMap>(
 }
 
 const api: MoonApi = {
+  chat: {
+    listSessions: () => invokeIpcChannel(ipcChannels.chat.listSessions),
+    getMessages: (input) => invokeIpcChannel(ipcChannels.chat.getMessages, input),
+    createSession: () => invokeIpcChannel(ipcChannels.chat.createSession),
+    sendMessage: (input) => invokeIpcChannel(ipcChannels.chat.sendMessage, input),
+    onSendMessageEvent: (listener) => {
+      const channel = ipcChannels.chat.sendMessageEvent
+      const handler = (_event: unknown, payload: Parameters<typeof listener>[0]): void =>
+        listener(payload)
+
+      ipcRenderer.on(channel, handler)
+
+      return () => {
+        ipcRenderer.off(channel, handler)
+      }
+    }
+  },
   settings: {
     get: () => invokeIpcChannel(ipcChannels.settings.get),
     createCustomProvider: (input) =>

@@ -1,17 +1,28 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { WorkspaceSidebar } from '@renderer/widgets/workspace-shell/WorkspaceSidebar'
 import { WorkspaceShell } from '@renderer/widgets/workspace-shell'
+import { renderWithProviders } from '@tests/helpers/renderer/render-with-providers'
 import { installMockWindowApi, type MockMoonApi } from '@tests/helpers/renderer/mock-window-api'
 
+const session = {
+  id: 'session-1',
+  projectId: null,
+  provider: 'openai',
+  title: '计划讨论',
+  status: 'active',
+  createdAt: '2026-05-09T00:00:00.000Z',
+  updatedAt: '2026-05-09T00:00:00.000Z'
+} as const
+
 function renderRail(): void {
-  render(<WorkspaceSidebar />)
+  renderWithProviders(<WorkspaceSidebar />)
 }
 
 function renderInShell(): void {
-  render(
+  renderWithProviders(
     <WorkspaceShell>
       <section aria-label="Test route stage">route content</section>
     </WorkspaceShell>
@@ -22,14 +33,15 @@ describe('WorkspaceSidebar', () => {
   let api: MockMoonApi
 
   beforeEach(() => {
-    api = installMockWindowApi()
+    window.location.hash = '#/'
+    api = installMockWindowApi({ chatSessions: [session] })
   })
 
   afterEach(() => {
     vi.useRealTimers()
   })
 
-  it('renders the Moon floating rail assets', async () => {
+  it('renders the Moon floating rail assets and recent sessions', async () => {
     const user = userEvent.setup()
 
     renderRail()
@@ -38,17 +50,13 @@ describe('WorkspaceSidebar', () => {
 
     expect(sidebarShell).toBeInTheDocument()
     expect(sidebarShell.firstElementChild).toHaveClass('border-border', 'bg-card', 'rounded-xl')
-    expect(sidebarShell.firstElementChild).not.toHaveClass('shadow-moon-ring')
     expect(screen.getByTestId('window-chrome-collapse-trigger')).toBeInTheDocument()
     expect(screen.getByTestId('window-chrome-search-trigger')).toBeInTheDocument()
     expect(screen.getByTestId('window-chrome-compose-trigger')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '更新' })).not.toHaveClass('shadow-moon-ring')
-
-    const newChatButtons = screen.getAllByRole('button', { name: '新建聊天' })
-
-    expect(newChatButtons).toHaveLength(1)
-    expect(newChatButtons.find((button) => !(button as HTMLButtonElement).disabled)).toBeEnabled()
-    expect(screen.getByRole('button', { name: '清除历史' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '更新' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '新建聊天' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: '清除历史' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: '计划讨论' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '设置' })).not.toBeInTheDocument()
 
     await user.hover(screen.getByRole('button', { name: '更多操作' }))
@@ -56,24 +64,23 @@ describe('WorkspaceSidebar', () => {
     expect(await screen.findByRole('button', { name: '设置' })).toBeInTheDocument()
   })
 
-  it('opens the dedicated settings window from the shell rail', async () => {
+  it('creates chats and opens settings from the shell rail', async () => {
     const user = userEvent.setup()
 
     renderInShell()
 
     const rail = screen.getByRole('complementary', { name: 'Workspace navigation' })
     const shellMain = screen.getByRole('main')
-    const railNewChatButton = within(rail)
-      .getAllByRole('button', { name: '新建聊天' })
-      .find((button) => !(button as HTMLButtonElement).disabled)
 
     expect(shellMain).toHaveClass('flex', 'min-h-screen', 'min-w-0', 'flex-1')
     expect(within(shellMain).getByRole('region', { name: 'Test route stage' })).toBeInTheDocument()
 
-    fireEvent.click(within(rail).getByRole('button', { name: '清除历史' }))
-    fireEvent.click(railNewChatButton as HTMLButtonElement)
+    await user.click(within(rail).getByRole('button', { name: '新建聊天' }))
+    await waitFor(() => expect(api.chat.createSession).toHaveBeenCalledTimes(1))
+    expect(window.location.hash).toBe('#/chat')
+
     await user.hover(within(rail).getByRole('button', { name: '更多操作' }))
-    fireEvent.click(within(rail).getByRole('button', { name: '设置' }))
+    await user.click(await within(rail).findByRole('button', { name: '设置' }))
 
     expect(api.windowControls.openSettings).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('dialog', { name: 'Configure Provider' })).not.toBeInTheDocument()

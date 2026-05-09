@@ -2,6 +2,13 @@ import { vi } from 'vitest'
 
 import type { MoonApi } from '@ipc/contracts'
 import type { OpenSettingsInput, WindowState } from '@ipc/window-contracts'
+import type {
+  MessageRecord,
+  SendMessageEvent,
+  SendMessageResult,
+  SessionRecord
+} from '@shared/domain/chat'
+import type { GetChatMessagesInput, SendChatMessageInput } from '@shared/domain/chat-validation'
 import {
   createDefaultAppSettings,
   type AppSettings,
@@ -19,6 +26,13 @@ import type {
 type MockFn<T extends (...args: never[]) => unknown> = ReturnType<typeof vi.fn<T>>
 
 export type MockMoonApi = {
+  chat: {
+    listSessions: MockFn<() => Promise<SessionRecord[]>>
+    getMessages: MockFn<(input: GetChatMessagesInput) => Promise<MessageRecord[]>>
+    createSession: MockFn<() => Promise<SessionRecord>>
+    sendMessage: MockFn<(input: SendChatMessageInput) => Promise<SendMessageResult>>
+    onSendMessageEvent: MockFn<(listener: (event: SendMessageEvent) => void) => () => void>
+  }
   settings: {
     get: MockFn<() => Promise<AppSettings>>
     createCustomProvider: MockFn<(input: CreateCustomProviderInput) => Promise<AppSettings>>
@@ -42,6 +56,10 @@ export type MockMoonApi = {
 
 type MockWindowApiOptions = {
   appSettings?: AppSettings
+  chatMessages?: MessageRecord[]
+  chatSessions?: SessionRecord[]
+  createdChatSession?: SessionRecord
+  sentChatMessage?: SendMessageResult
   savedSettings?: AppSettings
   windowState?: WindowState
 }
@@ -50,8 +68,40 @@ function createMockWindowApi(options: MockWindowApiOptions = {}): MockMoonApi {
   const appSettings = options.appSettings ?? createDefaultAppSettings()
   const savedSettings = options.savedSettings ?? appSettings
   const windowState = options.windowState ?? { isMaximized: false }
+  const chatSessions = options.chatSessions ?? []
+  const chatMessages = options.chatMessages ?? []
+  const createdChatSession =
+    options.createdChatSession ??
+    ({
+      id: 'session-1',
+      projectId: null,
+      provider: 'openai',
+      title: '新聊天',
+      status: 'active',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:00.000Z'
+    } satisfies SessionRecord)
+  const sentChatMessage =
+    options.sentChatMessage ??
+    ({
+      session: createdChatSession,
+      messages: chatMessages
+    } satisfies SendMessageResult)
 
   return {
+    chat: {
+      listSessions: vi.fn<() => Promise<SessionRecord[]>>().mockResolvedValue(chatSessions),
+      getMessages: vi
+        .fn<(input: GetChatMessagesInput) => Promise<MessageRecord[]>>()
+        .mockResolvedValue(chatMessages),
+      createSession: vi.fn<() => Promise<SessionRecord>>().mockResolvedValue(createdChatSession),
+      sendMessage: vi
+        .fn<(input: SendChatMessageInput) => Promise<SendMessageResult>>()
+        .mockResolvedValue(sentChatMessage),
+      onSendMessageEvent: vi
+        .fn<(listener: (event: SendMessageEvent) => void) => () => void>()
+        .mockReturnValue(() => undefined)
+    },
     settings: {
       get: vi.fn<() => Promise<AppSettings>>().mockResolvedValue(appSettings),
       createCustomProvider: vi

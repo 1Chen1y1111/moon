@@ -25,3 +25,16 @@ export const messageRecordSchema = z.object({
   createdAt: z.string(),
   updatedAt: z.string()
 })
+
+export const getChatMessagesInputSchema = z.object({
+  sessionId: z.string().trim().min(1, 'Session ID is required.')
+})
+
+export type GetChatMessagesInput = z.infer<typeof getChatMessagesInputSchema>
+
+export const sendChatMessageInputSchema = z.object({
+  sessionId: z.string().trim().min(1, 'Session ID is required.').optional(),
+  content: z.string().trim().min(1, 'Message is required.')
+})
+
+export type SendChatMessageInput = z.infer<typeof sendChatMessageInputSchema>

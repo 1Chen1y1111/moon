@@ -1,4 +1,11 @@
 export const ipcChannels = {
+  chat: {
+    listSessions: 'chat:listSessions',
+    getMessages: 'chat:getMessages',
+    createSession: 'chat:createSession',
+    sendMessage: 'chat:sendMessage',
+    sendMessageEvent: 'chat:sendMessageEvent'
+  },
   settings: {
     get: 'settings:get',
     createCustomProvider: 'settings:create-custom-provider',

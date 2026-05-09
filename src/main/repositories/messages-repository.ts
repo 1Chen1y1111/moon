@@ -1,4 +1,4 @@
-import { desc, sql } from 'drizzle-orm'
+import { asc, desc, eq, sql } from 'drizzle-orm'
 
 import { messageRecordSchema } from '@shared/domain/chat-validation'
 
@@ -13,11 +13,17 @@ export class MessagesRepository {
   async list(): Promise<MessageRecord[]> {
     const rows = await this.database.db.select().from(messages).orderBy(desc(messages.createdAt))
 
-    return rows.map((message) => ({
-      ...message,
-      createdAt: toIsoTimestamp(message.createdAt),
-      updatedAt: toIsoTimestamp(message.updatedAt)
-    }))
+    return rows.map(toMessageRecord)
+  }
+
+  async listBySession(sessionId: string): Promise<MessageRecord[]> {
+    const rows = await this.database.db
+      .select()
+      .from(messages)
+      .where(eq(messages.sessionId, sessionId))
+      .orderBy(asc(messages.createdAt))
+
+    return rows.map(toMessageRecord)
   }
 
   async save(message: MessageRecord): Promise<MessageRecord> {
@@ -60,5 +66,13 @@ export class MessagesRepository {
     `)
 
     return result.rows
+  }
+}
+
+function toMessageRecord(message: typeof messages.$inferSelect): MessageRecord {
+  return {
+    ...message,
+    createdAt: toIsoTimestamp(message.createdAt),
+    updatedAt: toIsoTimestamp(message.updatedAt)
   }
 }

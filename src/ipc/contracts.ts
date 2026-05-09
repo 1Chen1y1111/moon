@@ -1,3 +1,10 @@
+import type {
+  MessageRecord,
+  SendMessageEvent,
+  SendMessageResult,
+  SessionRecord
+} from '../shared/domain/chat'
+import type { GetChatMessagesInput, SendChatMessageInput } from '../shared/domain/chat-validation'
 import type { AppSettings, ProviderTestResult } from '../shared/domain/settings'
 import type {
   CreateCustomAcpProviderInput,
@@ -11,6 +18,22 @@ import { ipcChannels } from './channels'
 import type { OpenSettingsInput, WindowState } from './window-contracts'
 
 export type AppIpcContractMap = {
+  [ipcChannels.chat.listSessions]: {
+    request: undefined
+    response: SessionRecord[]
+  }
+  [ipcChannels.chat.getMessages]: {
+    request: GetChatMessagesInput
+    response: MessageRecord[]
+  }
+  [ipcChannels.chat.createSession]: {
+    request: undefined
+    response: SessionRecord
+  }
+  [ipcChannels.chat.sendMessage]: {
+    request: SendChatMessageInput
+    response: SendMessageResult
+  }
   [ipcChannels.settings.get]: {
     request: undefined
     response: AppSettings
@@ -66,6 +89,13 @@ export type AppIpcContractMap = {
 }
 
 export type MoonApi = {
+  chat: {
+    listSessions: () => Promise<SessionRecord[]>
+    getMessages: (input: GetChatMessagesInput) => Promise<MessageRecord[]>
+    createSession: () => Promise<SessionRecord>
+    sendMessage: (input: SendChatMessageInput) => Promise<SendMessageResult>
+    onSendMessageEvent: (listener: (event: SendMessageEvent) => void) => () => void
+  }
   settings: {
     get: () => Promise<AppSettings>
     createCustomProvider: (input: CreateCustomProviderInput) => Promise<AppSettings>

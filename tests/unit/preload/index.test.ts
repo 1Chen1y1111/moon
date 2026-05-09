@@ -60,11 +60,21 @@ describe('preload api', () => {
     const api = getExposedApi()
 
     await api.settings.get()
+    await api.chat.listSessions()
+    await api.chat.getMessages({ sessionId: 'session-1' })
+    await api.chat.createSession()
+    await api.chat.sendMessage({ content: 'hello' })
     await api.settings.saveAppearance({ theme: 'dark' })
     await api.settings.saveProvider(input)
     await api.windowControls.openSettings({ section: 'providers' })
 
     expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.settings.get)
+    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.listSessions)
+    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.getMessages, {
+      sessionId: 'session-1'
+    })
+    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.createSession)
+    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.sendMessage, { content: 'hello' })
     expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.settings.saveAppearance, {
       theme: 'dark'
     })
@@ -114,5 +124,30 @@ describe('preload api', () => {
 
     expect(listener).toHaveBeenCalledWith(settings)
     expect(ipcOffMock).toHaveBeenCalledWith(ipcChannels.settings.onChange, handler)
+  })
+
+  it('cleans up the chat send message event subscription', async () => {
+    await import('@preload/index')
+
+    const api = getExposedApi()
+    const listener = vi.fn()
+    const event = {
+      type: 'assistant-delta',
+      messageId: 'message-1',
+      delta: 'hello'
+    } as const
+
+    const unsubscribe = api.chat.onSendMessageEvent(listener)
+    const handler = ipcOnMock.mock.calls.find(
+      ([channel]) => channel === ipcChannels.chat.sendMessageEvent
+    )?.[1]
+
+    expect(handler).toBeTypeOf('function')
+
+    handler?.({}, event)
+    unsubscribe()
+
+    expect(listener).toHaveBeenCalledWith(event)
+    expect(ipcOffMock).toHaveBeenCalledWith(ipcChannels.chat.sendMessageEvent, handler)
   })
 })

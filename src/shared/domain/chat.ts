@@ -27,6 +27,32 @@ export type MessageRecord = {
   updatedAt: string
 }
 
+export type SendMessageResult = {
+  session: SessionRecord
+  messages: MessageRecord[]
+}
+
+export type SendMessageEvent =
+  | {
+      type: 'user-message'
+      session: SessionRecord
+      message: MessageRecord
+    }
+  | {
+      type: 'assistant-start'
+      message: MessageRecord
+    }
+  | {
+      type: 'assistant-delta'
+      messageId: string
+      delta: string
+    }
+  | {
+      type: 'assistant-finish'
+      session: SessionRecord
+      message: MessageRecord
+    }
+
 export type MessageSearchResult = {
   messageId: string
   sessionId: string

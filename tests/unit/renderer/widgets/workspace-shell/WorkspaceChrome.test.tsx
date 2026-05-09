@@ -1,9 +1,10 @@
-import { render, screen } from '@testing-library/react'
+import { screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { WorkspaceChrome } from '@renderer/widgets/workspace-shell/WorkspaceChrome'
 import { installMockWindowApi, type MockMoonApi } from '@tests/helpers/renderer/mock-window-api'
+import { renderWithProviders } from '@tests/helpers/renderer/render-with-providers'
 
 describe('WorkspaceChrome', () => {
   let api: MockMoonApi
@@ -15,7 +16,7 @@ describe('WorkspaceChrome', () => {
   it('renders mac window controls and workspace utility actions together', async () => {
     const user = userEvent.setup()
 
-    render(<WorkspaceChrome />)
+    renderWithProviders(<WorkspaceChrome />)
 
     expect(screen.getByRole('banner')).toHaveClass('[-webkit-app-region:drag]', 'p-3')
     expect(screen.getByRole('banner')).not.toHaveClass('h-moon-chrome')
@@ -24,9 +25,11 @@ describe('WorkspaceChrome', () => {
     await user.click(screen.getByRole('button', { name: '最小化窗口' }))
     await user.click(screen.getByRole('button', { name: '切换缩放窗口' }))
 
-    expect(
-      screen.getByTestId('mac-window-control-close-icon').closest('div')
-    ).toHaveClass('[-webkit-app-region:no-drag]', 'relative', 'z-20')
+    expect(screen.getByTestId('mac-window-control-close-icon').closest('div')).toHaveClass(
+      '[-webkit-app-region:no-drag]',
+      'relative',
+      'z-20'
+    )
     expect(screen.getByTestId('mac-window-control-close-icon').closest('button')).not.toHaveClass(
       'hover:brightness-75'
     )
@@ -34,10 +37,7 @@ describe('WorkspaceChrome', () => {
       'opacity-0',
       'group-hover:opacity-70'
     )
-    expect(screen.getByTestId('mac-window-control-close-icon')).toHaveAttribute(
-      'stroke',
-      '#171717'
-    )
+    expect(screen.getByTestId('mac-window-control-close-icon')).toHaveAttribute('stroke', '#171717')
     expect(screen.getByTestId('mac-window-control-minimize-icon')).toHaveClass(
       'opacity-0',
       'group-hover:opacity-70'
@@ -68,11 +68,7 @@ describe('WorkspaceChrome', () => {
     ]) {
       const utilityCard = trigger.firstElementChild as HTMLElement
 
-      expect(trigger.parentElement).toHaveClass(
-        '[-webkit-app-region:no-drag]',
-        'relative',
-        'z-20'
-      )
+      expect(trigger.parentElement).toHaveClass('[-webkit-app-region:no-drag]', 'relative', 'z-20')
       expect(utilityCard).toHaveClass(
         'border-transparent',
         'group-hover:border-input',

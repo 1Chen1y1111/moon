@@ -1,4 +1,4 @@
-import { desc } from 'drizzle-orm'
+import { desc, eq } from 'drizzle-orm'
 
 import { sessionRecordSchema } from '@shared/domain/chat-validation'
 
@@ -13,11 +13,17 @@ export class SessionsRepository {
   async list(): Promise<SessionRecord[]> {
     const rows = await this.database.db.select().from(sessions).orderBy(desc(sessions.updatedAt))
 
-    return rows.map((session) => ({
-      ...session,
-      createdAt: toIsoTimestamp(session.createdAt),
-      updatedAt: toIsoTimestamp(session.updatedAt)
-    }))
+    return rows.map(toSessionRecord)
+  }
+
+  async findById(id: string): Promise<SessionRecord | null> {
+    const row = await this.database.db
+      .select()
+      .from(sessions)
+      .where(eq(sessions.id, id))
+      .then((rows) => rows[0])
+
+    return row === undefined ? null : toSessionRecord(row)
   }
 
   async save(session: SessionRecord): Promise<SessionRecord> {
@@ -38,5 +44,13 @@ export class SessionsRepository {
       })
 
     return parsedSession
+  }
+}
+
+function toSessionRecord(session: typeof sessions.$inferSelect): SessionRecord {
+  return {
+    ...session,
+    createdAt: toIsoTimestamp(session.createdAt),
+    updatedAt: toIsoTimestamp(session.updatedAt)
   }
 }

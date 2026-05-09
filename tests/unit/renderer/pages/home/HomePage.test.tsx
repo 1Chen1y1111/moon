@@ -4,9 +4,10 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { HomePage } from '@renderer/pages/home/HomePage'
 import { WorkspaceShell } from '@renderer/widgets/workspace-shell'
 import { installMockWindowApi, type MockMoonApi } from '@tests/helpers/renderer/mock-window-api'
+import { renderWithProviders } from '@tests/helpers/renderer/render-with-providers'
 
 function renderInShell(): void {
-  render(
+  renderWithProviders(
     <WorkspaceShell>
       <HomePage />
     </WorkspaceShell>
