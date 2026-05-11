@@ -1,16 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import {
-  selectActiveSettingsSection,
-  setActiveSettingsSection,
   settingsSections,
-  useSettingsDispatch,
-  useSettingsSelector,
   type SettingsSectionId
 } from '@renderer/entities/settings'
-import type { ProviderSettingsFooterAction } from '@renderer/features/provider-settings'
-import { SettingsContent } from '@renderer/widgets/settings-content'
-import { SettingsShell } from '@renderer/widgets/settings-shell'
+import { selectActiveSettingsSection } from '@renderer/store/settings/selectors'
+import { useSettingsStore } from '@renderer/store/settings'
+import type { ProviderSettingsFooterAction } from '@renderer/features/ProviderSettings'
+import { SettingsShell } from '@renderer/layouts/settings-shell'
+
+import { SettingsContent } from './SettingsContent'
 
 type ProviderFooterState = Omit<ProviderSettingsFooterAction, 'onSave'>
 
@@ -40,8 +39,8 @@ function isSameProviderFooterState(
 }
 
 export function SettingsPage(): React.JSX.Element {
-  const dispatch = useSettingsDispatch()
-  const activeSection = useSettingsSelector(selectActiveSettingsSection)
+  const activeSection = useSettingsStore(selectActiveSettingsSection)
+  const setActiveSettingsSection = useSettingsStore((state) => state.setActiveSettingsSection)
   const activeMeta = settingsSections.find((section) => section.id === activeSection)
   const providerFooterSaveRef = useRef<(() => void) | null>(null)
   const [providerFooterState, setProviderFooterState] = useState<ProviderFooterState | null>(null)
@@ -63,9 +62,9 @@ export function SettingsPage(): React.JSX.Element {
     const initialSection = readInitialSectionFromHash()
 
     if (initialSection !== null) {
-      dispatch(setActiveSettingsSection(initialSection))
+      setActiveSettingsSection(initialSection)
     }
-  }, [dispatch])
+  }, [setActiveSettingsSection])
 
   const footerStatusText =
     activeSection === 'providers'
@@ -83,7 +82,7 @@ export function SettingsPage(): React.JSX.Element {
       footerSaveDisabled={footerSaveDisabled}
       footerSaveLabel={footerSaveLabel}
       onFooterSave={handleFooterSave}
-      onSectionChange={(sectionId) => dispatch(setActiveSettingsSection(sectionId))}
+      onSectionChange={setActiveSettingsSection}
     >
       <SettingsContent
         activeSection={activeSection}

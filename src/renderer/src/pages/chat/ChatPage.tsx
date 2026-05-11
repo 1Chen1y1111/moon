@@ -3,21 +3,16 @@ import { MessageSquareText, SendHorizontal } from 'lucide-react'
 
 import { useAppRouterContext } from '@renderer/app/router/router-context'
 import {
-  applySendMessageEvent,
-  clearChatMessages,
-  loadChatMessages,
-  loadChatSessions,
   selectChatError,
   selectChatMessages,
   selectChatMessagesStatus,
   selectChatSendStatus,
   selectChatSessions,
-  selectChatSessionsStatus,
-  sendChatMessage,
-  useChatDispatch,
-  useChatSelector
-} from '@renderer/entities/chat'
-import { selectAppSettings, useSettingsSelector } from '@renderer/entities/settings'
+  selectChatSessionsStatus
+} from '@renderer/store/chat/selectors'
+import { useChatStore } from '@renderer/store/chat'
+import { selectAppSettings } from '@renderer/store/settings/selectors'
+import { useSettingsStore } from '@renderer/store/settings'
 import { Button } from '@shadcn/ui/button'
 import { cn } from '@shadcn/lib/utils'
 import { Textarea } from '@shadcn/ui/textarea'
@@ -37,15 +32,19 @@ function selectProviderModel(provider: ProviderSettings | undefined): string {
 }
 
 export function ChatPage(): React.JSX.Element {
-  const dispatch = useChatDispatch()
   const { routeState, setRouteState } = useAppRouterContext()
-  const sessions = useChatSelector(selectChatSessions)
-  const sessionsStatus = useChatSelector(selectChatSessionsStatus)
-  const messages = useChatSelector(selectChatMessages)
-  const messagesStatus = useChatSelector(selectChatMessagesStatus)
-  const sendStatus = useChatSelector(selectChatSendStatus)
-  const error = useChatSelector(selectChatError)
-  const appSettings = useSettingsSelector(selectAppSettings)
+  const sessions = useChatStore(selectChatSessions)
+  const sessionsStatus = useChatStore(selectChatSessionsStatus)
+  const messages = useChatStore(selectChatMessages)
+  const messagesStatus = useChatStore(selectChatMessagesStatus)
+  const sendStatus = useChatStore(selectChatSendStatus)
+  const error = useChatStore(selectChatError)
+  const loadChatSessions = useChatStore((state) => state.loadChatSessions)
+  const loadChatMessages = useChatStore((state) => state.loadChatMessages)
+  const sendChatMessage = useChatStore((state) => state.sendChatMessage)
+  const applySendMessageEvent = useChatStore((state) => state.applySendMessageEvent)
+  const clearChatMessages = useChatStore((state) => state.clearChatMessages)
+  const appSettings = useSettingsStore(selectAppSettings)
   const [content, setContent] = useState('')
   const activeSession = useMemo(
     () => sessions.find((session) => session.id === routeState.activeChatId),
@@ -58,24 +57,24 @@ export function ChatPage(): React.JSX.Element {
 
   useEffect(() => {
     if (sessionsStatus === 'idle') {
-      void dispatch(loadChatSessions())
+      void loadChatSessions()
     }
-  }, [dispatch, sessionsStatus])
+  }, [loadChatSessions, sessionsStatus])
 
   useEffect(() => {
     return window.api.chat.onSendMessageEvent((event) => {
-      dispatch(applySendMessageEvent(event))
+      applySendMessageEvent(event)
     })
-  }, [dispatch])
+  }, [applySendMessageEvent])
 
   useEffect(() => {
     if (routeState.activeChatId === null) {
-      dispatch(clearChatMessages())
+      clearChatMessages()
       return
     }
 
-    void dispatch(loadChatMessages(routeState.activeChatId))
-  }, [dispatch, routeState.activeChatId])
+    void loadChatMessages(routeState.activeChatId)
+  }, [clearChatMessages, loadChatMessages, routeState.activeChatId])
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
     event.preventDefault()
@@ -89,12 +88,10 @@ export function ChatPage(): React.JSX.Element {
     setContent('')
 
     try {
-      const result = await dispatch(
-        sendChatMessage({
-          ...(routeState.activeChatId === null ? {} : { sessionId: routeState.activeChatId }),
-          content: trimmedContent
-        })
-      ).unwrap()
+      const result = await sendChatMessage({
+        ...(routeState.activeChatId === null ? {} : { sessionId: routeState.activeChatId }),
+        content: trimmedContent
+      })
 
       setRouteState((state) => ({
         ...state,

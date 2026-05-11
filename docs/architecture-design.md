@@ -147,7 +147,7 @@ preload 的职责是把主进程能力收敛为受控 API。当前只暴露 `win
     unit/                        单元和轻量边界测试
       main/                      main process、窗口、IPC、service 测试
       preload/                   preload bridge 暴露行为测试
-      renderer/                  renderer 页面、widget、entity 测试
+      renderer/                  renderer 页面、layout、entity 测试
     integration/                 轻集成测试
       main/                      PGlite、repository、database bootstrap 测试
 
@@ -178,16 +178,15 @@ preload 的职责是把主进程能力收敛为受控 API。当前只暴露 `win
         home/                    首页和空状态入口
         settings/                设置页路由入口，组合 settings 窗口内容
 
-      widgets/                   复合 UI 块，组合多个 feature/entity/shared
-        settings-content/        设置页内容分发和占位设置 section
-        settings-window-shell/   独立设置窗口外框、标题栏、窗口控制
+      layouts/                   路由/窗口外壳，组合页面内容和全局导航
+        settings-shell/          独立设置窗口外框、标题栏、窗口控制
         workspace-shell/         主工作区外框、侧边栏、工作区窗口控制
 
       features/                  用户可触发的功能片段
-        general-settings/        通用设置展示和交互
-        provider-settings/       Provider 表单、本地草稿、保存校验
-        settings-navigation/     设置分类侧边栏导航
-        user-interface/          用户界面主题选择和外观保存
+        GeneralSettings/         通用设置展示和交互
+        ProviderSettings/        Provider 表单、本地草稿、保存校验
+        settingsNavigation/      设置分类侧边栏导航
+        UserInterface/           用户界面主题选择和外观保存
 
       entities/                  业务实体模型和状态
         settings/                settings 实体聚合
@@ -219,7 +218,7 @@ preload 的职责是把主进程能力收敛为受控 API。当前只暴露 `win
 - `src/preload` 只做桥接和类型映射，不承载业务逻辑或持久化逻辑。
 - `src/renderer/src/shared` 只服务 renderer 内部，不能被 main/preload 反向依赖。
 - `src/shared/domain` 只放跨进程共享的纯领域类型、常量和默认值；不放 UI、Electron、数据库连接或业务编排。
-- `src/shadcn` 是本地 vendor 化 UI primitive，业务组合应放在 renderer 的 `shared/ui`、`features` 或 `widgets`。
+- `src/shadcn` 是本地 vendor 化 UI primitive，业务组合应放在 renderer 的 `shared/ui`、`features` 或 `layouts`。
 - `tests` 使用镜像源码结构集中组织测试；测试可以依赖 `@main`、`@preload`、`@renderer`、`@ipc` 和 `@tests` alias，但源码不应依赖 `@tests`。
 
 ## 5. IPC 契约与数据流
@@ -406,7 +405,7 @@ entities/settings/
   model/hooks.ts
 ```
 
-Provider 表单草稿保留在 `features/provider-settings/ProviderSettingsSection.tsx` 组件本地。每个 provider 可以有独立本地覆盖值：没有本地覆盖值的 provider 会跟随持久化设置同步，用户正在编辑但尚未保存的 provider 不会被其他 provider 的保存响应覆盖。
+Provider 表单草稿保留在 `features/ProviderSettings/ProviderSettingsSection.tsx` 组件本地。每个 provider 可以有独立本地覆盖值：没有本地覆盖值的 provider 会跟随持久化设置同步，用户正在编辑但尚未保存的 provider 不会被其他 provider 的保存响应覆盖。
 
 `AppRouterContextStore` 额外维护 `activeChatId`，用于路由上下文级别的轻量状态。
 
@@ -417,15 +416,15 @@ Renderer 采用接近 Feature-Sliced Design 的分层：
 ```text
 app
   -> pages
-     -> widgets
+     -> layouts
         -> features
            -> entities
               -> shared
 ```
 
-依赖方向应尽量从上层指向下层。`shared` 不依赖业务层，`entities` 不依赖 `features/widgets/pages`，`features` 组合实体和 shared UI，`widgets` 组合多个 feature/entity 形成较大界面块，`pages` 负责路由页面编排。
+依赖方向应尽量从上层指向下层。`shared` 不依赖业务层，`entities` 不依赖 `features/layouts/pages`，`features` 组合实体和 shared UI，`layouts` 组合页面内容和全局导航形成路由/窗口外壳，`pages` 负责路由页面编排。
 
-主工作区 widget：
+主工作区 layout：
 
 ```text
 +---------------------------------------------------------------+
@@ -437,7 +436,7 @@ app
 +---------------------------------------------------------------+
 ```
 
-设置窗口 widget 与页面组合：
+设置窗口 layout 与页面组合：
 
 ```text
 +----------------------------------------------------------------+
@@ -449,7 +448,7 @@ app
 +----------------------------------------------------------------+
 ```
 
-`WorkspaceShell` 挂载 `modal-root`、`popover-root`。设置窗口使用 `SettingsWindowShell` 提供独立窗口外框，`SettingsPage` 组合 `SettingsSidebar`、`SettingsChrome`、`SettingsContent` 和 footer。`SettingsContent` 位于 `widgets/settings-content`，根据 active section 分发到 `features/general-settings`、`features/provider-settings`、`features/user-interface` 或占位内容。
+`WorkspaceShell` 挂载 `modal-root`、`popover-root`。设置窗口使用 `SettingsWindowShell` 提供独立窗口外框，`SettingsPage` 组合 `SettingsSidebar`、`SettingsChrome`、`SettingsContent` 和 footer。`SettingsContent` 位于 `pages/settings`，根据 active section 分发到 `features/GeneralSettings`、`features/ProviderSettings`、`features/UserInterface` 或占位内容。
 
 ## 8. UI 与设计系统
 
@@ -467,7 +466,7 @@ app
 
 - 优先使用既有 `moon-*` token 和 `.moon-*` recipe，避免在 app UI 中加入零散 Tailwind 视觉尺度。
 - 组件优先使用 `@shadcn` 本地 primitive，而不是直接引入远端或重建一套组件。
-- 页面结构分为 `pages`、`widgets`、`features`、`entities`、`shared`，避免页面直接承载复杂领域状态。
+- 页面结构分为 `pages`、`layouts`、`features`、`entities`、`shared`，避免页面直接承载复杂领域状态。
 - `@renderer/shared` 仅存放 renderer-only 的 UI、样式、静态资源和无业务依赖工具；跨进程类型必须放在 `@ipc`。
 - 自定义窗口按钮必须通过 `window.api.windowControls`，不要在 renderer 中直接调用 Electron。
 
@@ -510,7 +509,7 @@ tests/
   helpers/renderer/              mock-window-api、render-with-providers、setup
   unit/main/                     main process mock 边界测试
   unit/preload/                  preload bridge 测试
-  unit/renderer/                 React 页面、widget、slice 测试
+  unit/renderer/                 React 页面、layout、slice 测试
   integration/main/              真实 PGlite/repository/bootstrap 测试
 ```
 
@@ -554,7 +553,7 @@ main/db/schema.ts
   provider_settings 不需要新增列，除非 provider 需要额外字段
 
 renderer settings UI
-  features/provider-settings/ProviderSettingsSection.tsx 表单渲染和必要校验
+  features/ProviderSettings/ProviderSettingsSection.tsx 表单渲染和必要校验
 ```
 
 需要注意：Provider 表单草稿按 provider 维度保留本地覆盖值。持久化设置刷新时，没有本地覆盖值的 provider 会直接显示最新设置；保存成功后移除对应覆盖值，避免覆盖其他卡片中尚未保存的输入。
@@ -606,7 +605,7 @@ resources/logo.png
 - 主进程拥有系统能力和持久化，renderer 通过 `window.api` 访问能力。
 - IPC channel、契约、schema 集中定义在 `src/ipc`，避免字符串散落。
 - 服务层负责校验和业务编排，仓储层只做数据读写。
-- renderer 以 `app -> pages -> widgets -> features -> entities -> shared` 分层组织。
+- renderer 以 `app -> pages -> layouts -> features -> entities -> shared` 分层组织。
 - 根级 `src/shared/domain` 只用于跨进程纯领域类型和常量；跨进程 IPC 契约放在 `src/ipc`，renderer 内共享 UI/样式/资源放在 `src/renderer/src/shared`。
 - UI 状态使用 Redux；跨进程状态以 IPC 和持久化结果为准。
 - 只暴露必要 preload API，避免扩大 Electron/Node 能力边界。

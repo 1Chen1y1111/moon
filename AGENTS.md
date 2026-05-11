@@ -1,162 +1,318 @@
-# Agent Operating Guidelines
+# Moon Development Guidelines
 
-Behavioral guidelines to reduce common LLM coding mistakes. Merge with
-project-specific instructions as needed.
+Guidelines for using AI coding agents in this Moon repository.
 
-**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use
-judgment.
+## Tech Stack
 
-## 1. Think Before Coding
+- Electron 39 + electron-vite 5 + Vite 7
+- React 19 + TypeScript 5
+- TanStack Router for renderer routing
+- Redux Toolkit + React Redux for renderer state
+- TanStack Query for async client state where needed
+- Tailwind CSS v4 + shadcn/radix-nova + Radix UI + lucide-react for UI
+- Drizzle ORM + PGlite for local persistence
+- Vitest + React Testing Library + jsdom for tests
 
-**Don't assume. Don't hide confusion. Surface tradeoffs.**
+## Agent Workflow
 
-Before implementing:
+Before implementing, state assumptions and success criteria when the task is not
+trivial. If multiple interpretations exist, name them instead of silently picking
+one. Prefer the simplest change that satisfies the request.
 
-- State assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them. Do not pick silently.
-- If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what's confusing. Ask.
+Avoid speculative scope:
 
-## 2. Simplicity First
-
-**Minimum code that solves the problem. Nothing speculative.**
-
-- No features beyond what was asked.
+- No features beyond what was requested.
 - No abstractions for single-use code.
-- No flexibility or configurability that was not requested.
-- No error handling for impossible scenarios.
-- If 200 lines could be 50, rewrite it.
+- No configurability that was not requested.
+- No broad cleanup unless it is required by the task.
 
-Ask: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+Keep changes surgical:
 
-## 3. Surgical Changes
+- Touch only files required by the task.
+- Match nearby style even when another style looks cleaner.
+- Do not refactor adjacent code unless the task requires it.
+- Remove only imports, variables, or files made unused by your own change.
+- Mention unrelated dead code or risks instead of fixing them opportunistically.
 
-**Touch only what is necessary. Clean up only your own changes.**
+For behavior changes, verify the result with focused tests. If a bug fix is
+requested, prefer a regression test that fails before the fix and passes after it.
+After two unsuccessful fix attempts on the same failing test, stop and ask for
+help with the current evidence.
 
-When editing existing code:
+## Collaboration
 
-- Do not improve adjacent code, comments, or formatting.
-- Do not refactor things that are not broken.
-- Match existing style, even if you would choose differently.
-- If unrelated dead code is noticed, mention it instead of deleting it.
+- Respond to the user in Chinese.
+- Address the user as "靓仔".
+- Keep the tone lively, logical, and professional.
+- When discussing UI/UX changes, include a small ASCII layout sketch.
 
-When your changes create orphans:
+## Project Structure
 
-- Remove imports, variables, and functions made unused by your changes.
-- Do not remove pre-existing dead code unless asked.
-
-Every changed line should trace directly to the user's request.
-
-## 4. Goal-Driven Execution
-
-**Define success criteria. Loop until verified.**
-
-Transform tasks into verifiable goals:
-
-- "Add validation" -> "Write tests for invalid inputs, then make them pass."
-- "Fix the bug" -> "Write a test that reproduces it, then make it pass."
-- "Refactor X" -> "Ensure tests pass before and after."
-
-For multi-step tasks, state a brief plan:
-
-```text
-1. [Step] -> verify: [check]
-2. [Step] -> verify: [check]
-3. [Step] -> verify: [check]
+```plaintext
+moon/
+|-- src/
+|   |-- main/               # Electron main process, app lifecycle, IPC handlers
+|   |-- preload/            # Typed bridge exposed as window.api
+|   |-- ipc/                # Cross-process channel names and IPC contracts
+|   |-- shared/             # Pure shared domain code and cross-process types
+|   |-- shadcn/             # Local shadcn primitives, hooks, and utilities
+|   `-- renderer/
+|       `-- src/
+|           |-- app/        # Providers, router, route context, Redux store setup
+|           |-- pages/      # Route-level composition surfaces
+|           |-- layouts/    # Shells and route-level layout surfaces
+|           |-- features/   # User-facing feature sections and workflows
+|           |-- entities/   # Domain state, slices, selectors, and hooks
+|           `-- shared/     # Renderer-only assets, styles, and shared UI helpers
+|-- tests/
+|   |-- unit/               # Main, preload, renderer, and boundary tests
+|   |-- integration/        # PGlite, repository, and database tests
+|   `-- helpers/            # Test setup and reusable helpers
+|-- docs/superpowers/       # Specs and implementation plans
+|-- drizzle/                # Drizzle migrations and metadata
+|-- build/                  # Build-time assets
+`-- resources/              # Packaged resources
 ```
 
-Strong success criteria allow independent iteration. Weak criteria require
-clarification.
+## Process Boundaries and IPC
 
-## 5. Collaboration Tone
+Moon is an Electron desktop app. Keep the process boundaries explicit.
 
-- Always respond in Chinese.
-- Address the user as "靓仔".
-- Be an experienced genius programmer and software architect with a lively, playful
-  tone while remaining professional.
-- When UI/UX changes are involved, illustrate the intended layout with ASCII UI
-  diagrams.
+- `src/main/` owns Electron APIs, app lifecycle, window creation, IPC handler
+  registration, PGlite/Drizzle persistence, repositories, services, and provider
+  proxy behavior.
+- `src/preload/` exposes a narrow typed bridge as `window.api`. Keep it limited
+  to IPC forwarding, bridge shape, and type mapping.
+- `src/ipc/` is the contract layer. Add channel constants and request/response
+  contracts here before wiring main/preload/renderer behavior.
+- `src/shared/` is for pure cross-process domain code. It must not depend on
+  Electron, React, Drizzle runtime code, or renderer-only modules.
+- `src/renderer/src/` owns React UI, renderer state, routes, and calls into main
+  only through `window.api`.
 
-# Repository Guidelines
+Typical write flow:
 
-## Project Structure & Module Organization
+```plaintext
+renderer feature -> window.api.* -> preload typed invoke -> ipcMain handler
+  -> service validation/orchestration -> repository -> PGlite/Drizzle
+  -> typed response -> optional broadcast back to renderer windows
+```
 
-This is an Electron + React + TypeScript app built with electron-vite.
-
-- `src/main/` contains the Electron main process, including window bootstrapping, IPC, database setup, repositories, and services.
-- `src/preload/` contains preload entry points and exposed bridge types.
-- `src/renderer/src/` contains the React renderer app: `app/` for providers, router, and store setup; `pages/` for route surfaces; `features/` for domain UI and state; `shell/` for app chrome; `shared/styles/` for global CSS; `shared/assets/` for static assets.
-- `src/shadcn/` contains local shadcn UI primitives and utilities.
-- `docs/superpowers/` stores specs and plans.
-- Build assets live in `build/`; packaged resources live in `resources/`.
-
-## Build, Test, and Development Commands
-
-Use `pnpm` for dependency management.
-
-- `pnpm install` installs dependencies.
-- `pnpm dev` starts the Electron development app.
-- `pnpm start` previews the built app through electron-vite.
-- `pnpm build` runs TypeScript checks and builds the app.
-- `pnpm build:mac`, `pnpm build:win`, and `pnpm build:linux` create platform packages.
-- `pnpm lint` runs ESLint with cache.
-- `pnpm format` formats the repository with Prettier.
-- `pnpm exec vitest run` runs the test suite. There is no dedicated `test` script currently.
-
-## Coding Style & Naming Conventions
-
-Follow `.editorconfig` and Prettier: 2-space indentation, LF endings, UTF-8, single quotes, no semicolons, `printWidth: 100`, and no trailing commas.
-
-Use TypeScript for source files. React components use `PascalCase.tsx`; tests live under `tests/` with source-mirroring folders. Keep slices named `*.slice.ts`, selectors as `*.selectors.ts`, and type modules as `*.types.ts`. Prefer aliases such as `@renderer`, `@shadcn`, `@ipc`, `@main`, and `@tests`.
-
-## Moon Design System
-
-The renderer styling system is shadcn-first, with Moon palette values feeding shadcn
-semantic CSS variables.
-
-Use `src/renderer/src/shared/styles/` as the source of truth for global styling:
-`main.css` is the Tailwind v4 entrypoint and imports `tailwindcss`,
-`tw-animate-css`, `shadcn/tailwind.css`, and the local theme/token/style layers.
-`components.json` points shadcn at this same CSS file with `cssVariables: true`.
-
-`theme.css` maps shadcn semantic slots into Tailwind theme colors, including
-`background`, `foreground`, `card`, `popover`, `primary`, `secondary`, `muted`,
-`accent`, `destructive`, `border`, `input`, `ring`, plus sidebar and chart slots.
-`tokens.css` and `tokens.dark.css` provide the Moon brand palette values behind
-those semantic variables. `recipes.css` currently contains only Electron window
-drag/no-drag component classes.
-
-For UI styling, prefer shadcn semantic color, background, border, and ring
-utilities such as `bg-background`, `bg-card`, `bg-secondary`, `bg-accent`,
-`text-foreground`, `text-muted-foreground`, `text-primary`, `border-border`,
-`border-input`, and `ring-ring`. Ordinary Tailwind layout, spacing, sizing,
-typography, radius, and shadow utilities are allowed when they match nearby code.
-
-Use local shadcn primitives from `src/shadcn/ui/*`. Do not hand-edit those files
-for app-specific styling; compose at call sites with `className`, `cn(...)`, or
-wrappers outside `src/shadcn/ui/*`. Regenerate primitives only with shadcn tooling.
-
-Do not assume general-purpose `.moon-*` recipes such as cards, tags, quotes, code
-blocks, or typography utilities exist unless they are present in the current CSS.
 Custom window controls must go through `window.api.windowControls`; do not call
 Electron directly from renderer code.
 
+## Renderer Routes and Features
+
+The renderer follows this dependency direction:
+
+```plaintext
+app -> pages -> layouts -> features -> entities -> shared
+```
+
+- `src/renderer/src/app/` wires global providers, router, route context, and the
+  Redux store.
+- `src/renderer/src/pages/` should stay thin. Use pages for route-level
+  composition and delegate shell surfaces to layouts or reusable behavior to
+  features and entities.
+- `src/renderer/src/layouts/` contains route/window shells such as workspace
+  shell and settings shell.
+- `src/renderer/src/features/` contains feature workflows such as provider
+  settings, general settings, and interface settings.
+- `src/renderer/src/entities/` contains domain model code, selectors, slices,
+  hooks, and entity-level types.
+- `src/renderer/src/shared/` is renderer-only. Do not import it from main,
+  preload, IPC contracts, or shared domain modules.
+
+When adding or changing renderer routes:
+
+1. Register the route in `src/renderer/src/app/router/index.tsx`.
+2. Put route host composition in `src/renderer/src/app/router/route-hosts.tsx`
+   when the route needs a shell boundary.
+3. Add or update the page under `src/renderer/src/pages/`.
+4. Move reusable chunks into `layouts/`, `features/`, or `entities/` instead of
+   growing route files.
+5. Update focused router/page tests under `tests/unit/renderer/`.
+
+Current route behavior: `/` and `/chat` render inside the workspace shell, while
+`/settings` renders inside the settings window shell. The settings window uses the
+same renderer bundle and is opened through the window-control IPC bridge.
+
+## Moon Design System
+
+The renderer styling system is shadcn-first, with Moon palette values feeding
+shadcn semantic CSS variables.
+
+Use `src/renderer/src/shared/styles/` as the source of truth for global styling:
+
+- `main.css` is the Tailwind v4 entrypoint and imports `tailwindcss`,
+  `tw-animate-css`, `shadcn/tailwind.css`, and local theme/token/style layers.
+- `theme.css` maps shadcn semantic slots into Tailwind theme colors such as
+  `background`, `foreground`, `card`, `popover`, `primary`, `secondary`,
+  `muted`, `accent`, `destructive`, `border`, `input`, `ring`, sidebar slots,
+  and chart slots.
+- `tokens.css` and `tokens.dark.css` provide the Moon brand palette behind those
+  semantic variables.
+- `recipes.css` currently contains Electron window drag/no-drag component
+  classes only.
+- `components.json` points shadcn at `src/renderer/src/shared/styles/main.css`
+  with `cssVariables: true` and `iconLibrary: lucide`.
+
+For UI styling, prefer shadcn semantic utilities such as `bg-background`,
+`bg-card`, `bg-secondary`, `bg-accent`, `text-foreground`,
+`text-muted-foreground`, `text-primary`, `border-border`, `border-input`, and
+`ring-ring`. Ordinary Tailwind layout, spacing, sizing, typography, radius, and
+shadow utilities are fine when they match nearby code.
+
+Use local shadcn primitives from `src/shadcn/ui/*`. Do not hand-edit those files
+for app-specific styling; compose at call sites with `className`, `cn(...)`, or
+wrappers outside `src/shadcn/ui/*`. Regenerate primitives only with shadcn
+tooling.
+
+Do not assume general-purpose `.moon-*` recipes such as cards, tags, quotes, code
+blocks, or typography utilities exist unless they are present in the current CSS.
+
 When a UI/UX change is requested, briefly sketch the intended layout with an ASCII
-diagram in the conversation or PR notes. For screenshots or visual comparisons, keep
+diagram in conversation or PR notes. For screenshots or visual comparisons, keep
 the logo unchanged unless the user explicitly asks to modify it.
 
-## Testing Guidelines
+## Development
 
-Vitest uses `jsdom`, globals, and `tests/helpers/renderer/setup.ts`. Test files are included from `tests/**/*.test.{ts,tsx}`, and `tsconfig.test.json` provides test-only TypeScript alias coverage. Put unit tests under `tests/unit/`, repository/database tests under `tests/integration/`, and shared test helpers under `tests/helpers/`.
+### Package Management
 
-Add focused regression tests for IPC contracts, repository behavior, shell/window behavior, and user-facing renderer changes. No coverage threshold is configured, so keep coverage proportional to change risk.
+Use `pnpm` for dependency management and scripts.
 
-## Commit & Pull Request Guidelines
+```bash
+pnpm install
+pnpm update-shadcn
+```
 
-Git history uses Conventional Commit-style prefixes such as `feat:`, `fix:`, `refactor:`, `test:`, `docs:`, and `chore:`. Keep subjects short, lower-case, and imperative, for example `fix: remove settings window outer scrolling`.
+### Starting the App
 
-Pull requests should include a summary, linked issue or plan, test results, and screenshots for UI changes. Note platform-specific Electron behavior, packaging impact, or database/schema implications.
+```bash
+# Electron development app
+pnpm dev
 
-## Security & Configuration Tips
+# Preview the built app through electron-vite
+pnpm start
+```
 
-Do not commit local secrets, provider API keys, generated packages, `out/`, or `dist/`. Keep IPC exposure narrow: define contracts in `src/main/ipc/`, expose only required preload APIs, and validate external input before it reaches repositories or services.
+### Build and Type Check
+
+```bash
+# Type-check both main/preload and renderer projects
+pnpm typecheck
+
+# Type-check Node/main side only
+pnpm typecheck:node
+
+# Type-check web/renderer side only
+pnpm typecheck:web
+
+# Build the app
+pnpm build
+
+# Platform packages
+pnpm build:win
+pnpm build:mac
+pnpm build:linux
+
+# Unpacked package
+pnpm build:unpack
+```
+
+`pnpm build` runs type checks before `electron-vite build`. Platform package
+commands build through Electron Builder.
+
+### Lint and Format
+
+```bash
+pnpm lint
+pnpm format
+```
+
+Follow `.editorconfig` and `.prettierrc.yaml`: 2-space indentation, LF endings,
+UTF-8, single quotes, no semicolons, `printWidth: 100`, and no trailing commas.
+
+Use TypeScript for source files. React components use `PascalCase.tsx`; tests live
+under `tests/` with source-mirroring folders. Keep slices named `*.slice.ts`,
+selectors as `*.selectors.ts`, and type modules as `*.types.ts`.
+
+Prefer configured aliases where available: `@main`, `@preload`, `@renderer`,
+`@shadcn`, `@ipc`, `@shared`, and `@tests`.
+
+### Testing
+
+There is no dedicated `test` script currently; call Vitest through `pnpm exec`.
+
+```bash
+# Full suite
+pnpm exec vitest run
+
+# Single file
+pnpm exec vitest run tests/unit/main/bootstrap/register-ipc.test.ts
+
+# Matching a test name
+pnpm exec vitest run -t "settings"
+```
+
+Vitest uses `jsdom`, globals, and `tests/helpers/renderer/setup.ts` by default.
+Node-only main-process tests use `// @vitest-environment node` in the test file.
+`tsconfig.test.json` and `vitest.config.ts` provide test-only alias coverage.
+
+Test placement:
+
+- `tests/unit/main/` for Electron main process, bootstrap, IPC, services,
+  repositories, and window behavior.
+- `tests/unit/preload/` for bridge behavior.
+- `tests/unit/renderer/` for React pages, layouts, entities, state, and router
+  behavior.
+- `tests/integration/main/` for PGlite, repository, and database bootstrap tests.
+- `tests/helpers/` for shared test setup and helpers.
+
+Add focused regression tests for new IPC contracts, repository behavior,
+provider logic, shell/window behavior, and user-facing renderer changes. Keep
+coverage proportional to risk.
+
+## Persistence and Provider Behavior
+
+Persistence uses PGlite with Drizzle. Schema lives in `src/main/db/schema.ts`,
+runtime connection/bootstrap code lives in `src/main/db/`, repositories live under
+`src/main/repositories/`, and migrations live in `drizzle/`.
+
+Provider defaults and validation belong in shared domain modules. Main-process
+services should validate and orchestrate provider operations before repositories
+persist them. Renderer code should treat provider and settings behavior as typed
+IPC capabilities exposed by `window.api`.
+
+Do not expose new database-backed IPC routes until the renderer use case and
+contract shape are clear.
+
+## Git and Pull Requests
+
+Git history uses Conventional Commit-style prefixes such as `feat:`, `fix:`,
+`refactor:`, `test:`, `docs:`, and `chore:`. Keep subjects short, lower-case, and
+imperative, for example:
+
+```plaintext
+fix: remove settings window outer scrolling
+```
+
+Pull requests should include a summary, linked issue or plan when applicable,
+test results, and screenshots for UI changes. Note platform-specific Electron
+behavior, packaging impact, IPC contract changes, and database/schema implications.
+
+## Security and Configuration
+
+Do not commit local secrets, provider API keys, generated packages, `out/`, or
+`dist/`.
+
+Keep IPC exposure narrow: define contracts in `src/ipc/`, expose only required
+preload APIs, and validate external input before it reaches repositories or
+services. Keep renderer imports free of Electron/main-process APIs.
+
+## Code Review
+
+For review requests, prioritize bugs, regressions, security issues, missing tests,
+and boundary violations. Lead with findings ordered by severity and include file
+and line references. If no issues are found, say so clearly and mention remaining
+test gaps or residual risk.

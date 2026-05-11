@@ -1,7 +1,7 @@
 import { ChatPage } from '@renderer/pages/chat'
 import { HomePage } from '@renderer/pages/home'
 import { SettingsPage } from '@renderer/pages/settings'
-import { WorkspaceShell } from '@renderer/widgets/workspace-shell'
+import { WorkspaceShell } from '@renderer/layouts/workspace-shell'
 
 export function WorkspaceLayout({ children }: { children: React.ReactNode }): React.JSX.Element {
   return <WorkspaceShell>{children}</WorkspaceShell>

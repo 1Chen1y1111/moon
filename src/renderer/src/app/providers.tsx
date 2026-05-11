@@ -1,40 +1,35 @@
 import { useEffect, useState } from 'react'
-import { Provider } from 'react-redux'
 
 import {
-  applyAppSettings,
-  loadAppSettings,
   selectAppSettings,
-  selectSettingsLoadStatus,
-  useSettingsDispatch,
-  useSettingsSelector
-} from '@renderer/entities/settings'
+  selectSettingsLoadStatus
+} from '@renderer/store/settings/selectors'
+import { useSettingsStore } from '@renderer/store/settings'
 import { Toaster } from '@shadcn/ui/sonner'
 import { TooltipProvider } from '@shadcn/ui/tooltip'
 import type { AppearanceTheme } from '@shared/domain/settings'
 
 import { AppRouterContextStore, type AppRouteState } from './router/router-context'
-import { store } from './store'
 
 function useLoadSettingsOnce(): void {
-  const dispatch = useSettingsDispatch()
-  const loadStatus = useSettingsSelector(selectSettingsLoadStatus)
+  const loadStatus = useSettingsStore(selectSettingsLoadStatus)
+  const loadAppSettingsAction = useSettingsStore((state) => state.loadAppSettings)
 
   useEffect(() => {
     if (loadStatus === 'idle') {
-      void dispatch(loadAppSettings())
+      void loadAppSettingsAction()
     }
-  }, [dispatch, loadStatus])
+  }, [loadAppSettingsAction, loadStatus])
 }
 
 function useSyncSettingsChanges(): void {
-  const dispatch = useSettingsDispatch()
+  const applyAppSettings = useSettingsStore((state) => state.applyAppSettings)
 
   useEffect(() => {
     return window.api.settings.onChange((settings) => {
-      dispatch(applyAppSettings(settings))
+      applyAppSettings(settings)
     })
-  }, [dispatch])
+  }, [applyAppSettings])
 }
 
 function useApplyTheme(theme: AppearanceTheme): void {
@@ -63,7 +58,7 @@ function useApplyTheme(theme: AppearanceTheme): void {
 }
 
 function ThemeController(): null {
-  const appSettings = useSettingsSelector(selectAppSettings)
+  const appSettings = useSettingsStore(selectAppSettings)
 
   useLoadSettingsOnce()
   useSyncSettingsChanges()
@@ -73,7 +68,7 @@ function ThemeController(): null {
 }
 
 function AppToaster(): React.JSX.Element {
-  const appSettings = useSettingsSelector(selectAppSettings)
+  const appSettings = useSettingsStore(selectAppSettings)
 
   return (
     <Toaster
@@ -89,12 +84,10 @@ export function AppProviders({ children }: { children: React.ReactNode }): React
   const [routeState, setRouteState] = useState<AppRouteState>({ activeChatId: null })
 
   return (
-    <Provider store={store}>
-      <AppRouterContextStore.Provider value={{ routeState, setRouteState }}>
-        <ThemeController />
-        <TooltipProvider>{children}</TooltipProvider>
-        <AppToaster />
-      </AppRouterContextStore.Provider>
-    </Provider>
+    <AppRouterContextStore.Provider value={{ routeState, setRouteState }}>
+      <ThemeController />
+      <TooltipProvider>{children}</TooltipProvider>
+      <AppToaster />
+    </AppRouterContextStore.Provider>
   )
 }

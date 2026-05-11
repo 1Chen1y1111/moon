@@ -1,7 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
 
-import type { AppSettings } from '@shared/domain/settings'
-
 export type SettingsSectionId =
   | 'general'
   | 'providers'
@@ -38,12 +36,4 @@ export type SettingsSection = {
   description: string
   icon: LucideIcon
   kind: SettingsSectionKind
-}
-
-export type SettingsState = {
-  activeSection: SettingsSectionId
-  appSettings: AppSettings
-  loadStatus: 'idle' | 'loading' | 'succeeded' | 'failed'
-  saveStatus: 'idle' | 'saving' | 'succeeded' | 'failed'
-  error: string | null
 }
