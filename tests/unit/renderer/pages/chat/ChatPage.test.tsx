@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { ChatPage } from '@renderer/pages/chat'
@@ -51,6 +51,8 @@ describe('ChatPage', () => {
     const { user } = renderWithProviders(<ChatPage />)
 
     expect(screen.getByText('准备开始聊天')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '记忆' })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('button', { name: '技能' })).toHaveAttribute('aria-disabled', 'true')
     expect(screen.getByRole('button', { name: '发送' })).toBeDisabled()
 
     await user.type(screen.getByRole('textbox', { name: '消息内容' }), 'hello')
@@ -71,6 +73,12 @@ describe('ChatPage', () => {
 
   it('renders the submitted message and streamed assistant text before send completes', async () => {
     let resolveSend: (result: Awaited<ReturnType<typeof api.chat.sendMessage>>) => void
+    const completedMessages = [
+      { ...userMessage, content: '流式测试' },
+      { ...assistantMessage, id: 'message-streaming', content: '正在回复完成' }
+    ]
+
+    api.chat.getMessages.mockResolvedValue(completedMessages)
     api.chat.sendMessage.mockReturnValue(
       new Promise((resolve) => {
         resolveSend = resolve
@@ -84,29 +92,31 @@ describe('ChatPage', () => {
     expect(screen.getByText('流式测试')).toBeInTheDocument()
 
     const streamListener = api.chat.onSendMessageEvent.mock.calls[0][0]
-    streamListener({
-      type: 'assistant-start',
-      message: {
-        ...assistantMessage,
-        id: 'message-streaming',
-        content: ''
-      }
-    })
-    streamListener({
-      type: 'assistant-delta',
-      messageId: 'message-streaming',
-      delta: '正在回复'
+    act(() => {
+      streamListener({
+        type: 'assistant-start',
+        message: {
+          ...assistantMessage,
+          id: 'message-streaming',
+          content: ''
+        }
+      })
+      streamListener({
+        type: 'assistant-delta',
+        messageId: 'message-streaming',
+        delta: '正在回复'
+      })
     })
 
     expect(await screen.findByText('正在回复')).toBeInTheDocument()
 
-    resolveSend!({
-      session,
-      messages: [
-        { ...userMessage, content: '流式测试' },
-        { ...assistantMessage, id: 'message-streaming', content: '正在回复完成' }
-      ]
+    await act(async () => {
+      resolveSend!({
+        session,
+        messages: completedMessages
+      })
     })
+
     expect(await screen.findByText('正在回复完成')).toBeInTheDocument()
   })
 

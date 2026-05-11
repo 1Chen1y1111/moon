@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { MessageSquareText, SendHorizontal } from 'lucide-react'
+import { useEffect, useMemo, useState } from 'react'
+import { MessageSquareText } from 'lucide-react'
 
 import { useAppRouterContext } from '@renderer/app/router/router-context'
+import { ChatInput } from '@renderer/features/ChatInput'
+import { ActionBar } from '@renderer/features/ChatInput/ActionBar'
 import {
   selectChatError,
   selectChatMessages,
@@ -13,9 +15,7 @@ import {
 import { useChatStore } from '@renderer/store/chat'
 import { selectAppSettings } from '@renderer/store/settings/selectors'
 import { useSettingsStore } from '@renderer/store/settings'
-import { Button } from '@shadcn/ui/button'
 import { cn } from '@shadcn/lib/utils'
-import { Textarea } from '@shadcn/ui/textarea'
 import type { ProviderSettings } from '@shared/domain/settings'
 
 function selectProviderModel(provider: ProviderSettings | undefined): string {
@@ -53,7 +53,6 @@ export function ChatPage(): React.JSX.Element {
   const activeProvider =
     activeSession === undefined ? undefined : appSettings.providers[activeSession.provider]
   const isSending = sendStatus === 'sending'
-  const canSend = content.trim().length > 0 && !isSending
 
   useEffect(() => {
     if (sessionsStatus === 'idle') {
@@ -76,9 +75,7 @@ export function ChatPage(): React.JSX.Element {
     void loadChatMessages(routeState.activeChatId)
   }, [clearChatMessages, loadChatMessages, routeState.activeChatId])
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>): Promise<void> => {
-    event.preventDefault()
-
+  const handleSend = async (): Promise<void> => {
     const trimmedContent = content.trim()
 
     if (trimmedContent.length === 0 || isSending) {
@@ -179,32 +176,23 @@ export function ChatPage(): React.JSX.Element {
           </div>
         )}
 
-        <form
-          aria-label="发送消息"
-          className="flex shrink-0 items-end gap-3 border-t border-border px-6 py-4"
-          onSubmit={(event) => {
-            void handleSubmit(event)
-          }}
-        >
-          <Textarea
-            aria-label="消息内容"
+        <div className="shrink-0 border-t border-border px-6 py-4">
+          <ChatInput
             value={content}
-            placeholder="输入消息..."
-            className="max-h-36 min-h-10 resize-none rounded-lg text-sm"
-            disabled={isSending}
-            onChange={(event) => setContent(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === 'Enter' && !event.shiftKey) {
-                event.preventDefault()
-                event.currentTarget.form?.requestSubmit()
-              }
+            isSending={isSending}
+            leftContent={<ActionBar />}
+            runtimeInfo={{
+              providerLabel: activeProvider?.name ?? '未选择提供商',
+              modelLabel: selectProviderModel(activeProvider),
+              shortcutLabel: 'Enter 发送，Shift+Enter 换行',
+              statusLabel: isSending ? '发送中' : undefined
+            }}
+            onChange={setContent}
+            onSend={() => {
+              void handleSend()
             }}
           />
-          <Button type="submit" size="lg" className="gap-2" disabled={!canSend}>
-            <SendHorizontal aria-hidden="true" className="size-4" />
-            {isSending ? '发送中' : '发送'}
-          </Button>
-        </form>
+        </div>
       </div>
     </section>
   )
