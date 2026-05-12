@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { ChatPage } from '@renderer/pages/chat'
 import { renderWithProviders } from '@tests/helpers/renderer/render-with-providers'
 import { installMockWindowApi, type MockMoonApi } from '@tests/helpers/renderer/mock-window-api'
+import { createDefaultAppSettings, type AppSettings } from '@shared/domain/settings'
 
 const session = {
   id: 'session-1',
@@ -32,6 +33,43 @@ const assistantMessage = {
   createdAt: '2026-05-09T00:00:01.000Z',
   updatedAt: '2026-05-09T00:00:01.000Z'
 } as const
+
+function createModelSwitchSettings(): AppSettings {
+  const settings = createDefaultAppSettings()
+
+  settings.providers.openai = {
+    ...settings.providers.openai,
+    enabled: true,
+    hasApiKey: true,
+    apiKey: 'openai-key',
+    model: 'gpt-5.4',
+    models: [
+      { id: 'gpt-5.4', name: 'GPT-5.4', enabled: true, isManual: false },
+      { id: 'gpt-5.2', name: 'GPT-5.2', enabled: true, isManual: false }
+    ],
+    availableModels: [
+      { id: 'gpt-5.4', name: 'GPT-5.4', enabled: true, isManual: false },
+      { id: 'gpt-5.2', name: 'GPT-5.2', enabled: true, isManual: false }
+    ]
+  }
+  settings.providers.deepseek = {
+    ...settings.providers.deepseek,
+    enabled: true,
+    hasApiKey: true,
+    apiKey: 'deepseek-key',
+    model: 'deepseek-chat',
+    models: [
+      { id: 'deepseek-chat', name: 'DeepSeek Chat', enabled: true, isManual: false },
+      { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner', enabled: true, isManual: false }
+    ],
+    availableModels: [
+      { id: 'deepseek-chat', name: 'DeepSeek Chat', enabled: true, isManual: false },
+      { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner', enabled: true, isManual: false }
+    ]
+  }
+
+  return settings
+}
 
 describe('ChatPage', () => {
   let api: MockMoonApi
@@ -69,6 +107,121 @@ describe('ChatPage', () => {
 
     await waitFor(() => expect(api.chat.sendMessage).toHaveBeenCalledWith({ content: '你好' }))
     expect(await screen.findByText('你好，我在。')).toBeInTheDocument()
+  })
+
+  it('switches the draft provider model from the action bar', async () => {
+    const appSettings = createModelSwitchSettings()
+    const savedSettings = {
+      ...appSettings,
+      providers: {
+        ...appSettings.providers,
+        deepseek: {
+          ...appSettings.providers.deepseek,
+          model: 'deepseek-reasoner'
+        }
+      }
+    }
+    api = installMockWindowApi({
+      appSettings,
+      savedSettings,
+      sentChatMessage: {
+        session: {
+          ...session,
+          provider: 'deepseek'
+        },
+        messages: [userMessage, assistantMessage]
+      }
+    })
+    const { user } = renderWithProviders(<ChatPage />, {
+      preloadedSettings: {
+        appSettings,
+        loadStatus: 'succeeded'
+      }
+    })
+
+    await user.click(screen.getByRole('button', { name: /切换模型/ }))
+    await user.click(await screen.findByRole('button', { name: '选择模型 DeepSeek Reasoner' }))
+
+    await waitFor(() =>
+      expect(api.settings.saveProvider).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: 'deepseek',
+          model: 'deepseek-reasoner'
+        })
+      )
+    )
+
+    await user.type(screen.getByRole('textbox', { name: '消息内容' }), 'hello')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+
+    await waitFor(() =>
+      expect(api.chat.sendMessage).toHaveBeenCalledWith({
+        provider: 'deepseek',
+        content: 'hello'
+      })
+    )
+  })
+
+  it('switches the active session provider model from the action bar', async () => {
+    const appSettings = createModelSwitchSettings()
+    const savedSettings = {
+      ...appSettings,
+      providers: {
+        ...appSettings.providers,
+        deepseek: {
+          ...appSettings.providers.deepseek,
+          model: 'deepseek-reasoner'
+        }
+      }
+    }
+    api = installMockWindowApi({
+      appSettings,
+      savedSettings,
+      chatMessages: [userMessage],
+      chatSessions: [session],
+      sentChatMessage: {
+        session: {
+          ...session,
+          provider: 'deepseek'
+        },
+        messages: [userMessage, assistantMessage]
+      }
+    })
+    const { user } = renderWithProviders(<ChatPage />, {
+      preloadedChat: {
+        sessions: [session],
+        messages: [userMessage],
+        sessionsStatus: 'succeeded'
+      },
+      preloadedSettings: {
+        appSettings,
+        loadStatus: 'succeeded'
+      },
+      routeState: { activeChatId: 'session-1' }
+    })
+
+    await user.click(screen.getByRole('button', { name: /切换模型/ }))
+    await user.click(await screen.findByRole('button', { name: '选择模型 DeepSeek Reasoner' }))
+
+    await waitFor(() =>
+      expect(api.settings.saveProvider).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: 'deepseek',
+          model: 'deepseek-reasoner'
+        })
+      )
+    )
+
+    await user.type(screen.getByRole('textbox', { name: '消息内容' }), 'hello')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+
+    await waitFor(() =>
+      expect(api.chat.sendMessage).toHaveBeenCalledWith({
+        sessionId: 'session-1',
+        provider: 'deepseek',
+        content: 'hello'
+      })
+    )
   })
 
   it('renders the submitted message and streamed assistant text before send completes', async () => {

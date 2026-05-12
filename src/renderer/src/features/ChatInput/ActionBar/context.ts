@@ -8,6 +8,8 @@ export type DropdownPlacement =
   | 'topLeft'
   | 'topRight'
 
+export type ActionPopupTrigger = 'both' | 'click' | 'hover'
+
 export interface ActionBarContextValue {
   actionSize?: {
     blockSize: number

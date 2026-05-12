@@ -342,6 +342,64 @@ describe('ChatService.sendMessage', () => {
     ])
   })
 
+  it('uses the requested provider for a new session', async () => {
+    const settings = createSettings([
+      createProviderSettings({
+        provider: 'openai',
+        type: 'openai',
+        model: 'gpt-5.4'
+      }),
+      createProviderSettings({
+        provider: 'deepseek',
+        model: 'deepseek-chat'
+      })
+    ])
+    const { service, sessionsRepository } = createService({
+      generateText: vi.fn(async () => ({ text: 'ok' })),
+      settings
+    })
+
+    await service.sendMessage({ provider: 'deepseek', content: 'hello' })
+
+    expect(sessionsRepository.sessions[0].provider).toBe('deepseek')
+  })
+
+  it('uses the requested provider for an existing session', async () => {
+    const session: SessionRecord = {
+      id: 'session-1',
+      projectId: null,
+      provider: 'openai',
+      title: 'Plan',
+      status: 'active',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:00.000Z'
+    }
+    const settings = createSettings([
+      createProviderSettings({
+        provider: 'openai',
+        type: 'openai',
+        model: 'gpt-5.4'
+      }),
+      createProviderSettings({
+        provider: 'deepseek',
+        model: 'deepseek-chat'
+      })
+    ])
+    const { service, sessionsRepository } = createService({
+      generateText: vi.fn(async () => ({ text: 'ok' })),
+      sessions: [session],
+      settings
+    })
+
+    await service.sendMessage({
+      sessionId: 'session-1',
+      provider: 'deepseek',
+      content: 'hello'
+    })
+
+    expect(sessionsRepository.sessions[0].provider).toBe('deepseek')
+  })
+
   it('keeps the user message but does not save an empty assistant response', async () => {
     const session: SessionRecord = {
       id: 'session-1',

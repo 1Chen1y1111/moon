@@ -34,6 +34,7 @@ export type GetChatMessagesInput = z.infer<typeof getChatMessagesInputSchema>
 
 export const sendChatMessageInputSchema = z.object({
   sessionId: z.string().trim().min(1, 'Session ID is required.').optional(),
+  provider: providerIdSchema.optional(),
   content: z.string().trim().min(1, 'Message is required.')
 })
 

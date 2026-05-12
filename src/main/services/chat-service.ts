@@ -18,7 +18,13 @@ import {
   type GetChatMessagesInput,
   type SendChatMessageInput
 } from '@shared/domain/chat-validation'
-import type { AppSettings, ProviderSettings } from '@shared/domain/settings'
+import {
+  isOpenAICompatibleProvider,
+  isSupportedChatProvider,
+  selectChatModel,
+  selectDefaultChatProvider
+} from '@shared/domain/chat-provider'
+import type { ProviderSettings } from '@shared/domain/settings'
 import type { MessagesRepository } from '../repositories/messages-repository'
 import type { SessionsRepository } from '../repositories/sessions-repository'
 import type { SettingsRepository } from '../repositories/settings-repository'
@@ -105,63 +111,11 @@ function createAiProviderOptions(provider: ProviderSettings): AiProviderOptions 
   }
 }
 
-function isOpenAICompatibleProvider(provider: ProviderSettings): boolean {
-  return (
-    provider.type === 'moonshot' ||
-    provider.type === 'aihubmix' ||
-    provider.type === 'deepseek' ||
-    provider.type === 'openrouter' ||
-    provider.type === 'volcengine' ||
-    provider.type === 'ollama' ||
-    provider.type === 'cloudflare-ai-gateway' ||
-    provider.type === 'custom'
-  )
-}
-
-export function isSupportedChatProvider(provider: ProviderSettings): boolean {
-  if (
-    provider.isACP ||
-    provider.isOAuth ||
-    provider.kind === 'coding-plan' ||
-    provider.type === 'azure'
-  ) {
-    return false
-  }
-
-  return (
-    provider.type === 'openai' ||
-    provider.type === 'anthropic' ||
-    provider.type === 'google' ||
-    provider.apiFormat === 'anthropic' ||
-    provider.apiFormat === 'openai-responses' ||
-    (provider.apiFormat === 'openai-chat' && isOpenAICompatibleProvider(provider))
-  )
-}
-
-export function selectDefaultChatProvider(settings: AppSettings): ProviderSettings {
-  const provider = Object.values(settings.providers).find(
-    (candidate) => candidate.enabled && isSupportedChatProvider(candidate)
-  )
-
-  if (provider === undefined) {
-    throw new Error('No enabled chat provider configured.')
-  }
-
-  return provider
-}
-
-export function selectChatModel(provider: ProviderSettings): string {
-  const model =
-    provider.model.trim() ||
-    provider.models.find((candidate) => candidate.enabled)?.id.trim() ||
-    provider.availableModels.find((candidate) => candidate.enabled)?.id.trim() ||
-    ''
-
-  if (model.length === 0) {
-    throw new Error(`No model selected for ${provider.name}.`)
-  }
-
-  return model
+export {
+  isOpenAICompatibleProvider,
+  isSupportedChatProvider,
+  selectChatModel,
+  selectDefaultChatProvider
 }
 
 export function createChatLanguageModel(
@@ -404,10 +358,11 @@ export class ChatService {
         throw new Error('Chat session not found.')
       }
 
-      const provider = settings.providers[session.provider]
+      const providerId = input.provider ?? session.provider
+      const provider = settings.providers[providerId]
 
       if (provider === undefined) {
-        throw new Error(`Unknown provider: ${session.provider}`)
+        throw new Error(`Unknown provider: ${providerId}`)
       }
 
       if (!provider.enabled) {
@@ -419,13 +374,28 @@ export class ChatService {
       }
 
       return {
-        session,
+        session: { ...session, provider: provider.provider },
         provider,
         existingMessages: await this.messagesRepository.listBySession(session.id)
       }
     }
 
-    const provider = selectDefaultChatProvider(settings)
+    const provider =
+      input.provider === undefined
+        ? selectDefaultChatProvider(settings)
+        : settings.providers[input.provider]
+
+    if (provider === undefined) {
+      throw new Error(`Unknown provider: ${input.provider}`)
+    }
+
+    if (!provider.enabled) {
+      throw new Error(`${provider.name} is disabled.`)
+    }
+
+    if (!isSupportedChatProvider(provider)) {
+      throw new Error(`${provider.name} is not supported for chat.`)
+    }
 
     return {
       session: null,

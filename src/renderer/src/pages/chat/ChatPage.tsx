@@ -16,19 +16,36 @@ import { useChatStore } from '@renderer/store/chat'
 import { selectAppSettings } from '@renderer/store/settings/selectors'
 import { useSettingsStore } from '@renderer/store/settings'
 import { cn } from '@shadcn/lib/utils'
+import {
+  isSupportedChatProvider,
+  selectChatModelLabel,
+  selectDefaultChatProvider
+} from '@shared/domain/chat-provider'
 import type { ProviderSettings } from '@shared/domain/settings'
 
-function selectProviderModel(provider: ProviderSettings | undefined): string {
-  if (provider === undefined) {
-    return '未选择模型'
+function selectPageProvider(
+  providers: Record<string, ProviderSettings>,
+  activeSessionProvider: string | undefined,
+  draftProviderId: string | null | undefined
+): ProviderSettings | undefined {
+  const draftProvider =
+    draftProviderId === undefined || draftProviderId === null
+      ? undefined
+      : providers[draftProviderId]
+
+  if (draftProvider?.enabled && isSupportedChatProvider(draftProvider)) {
+    return draftProvider
   }
 
-  return (
-    provider.model.trim() ||
-    provider.models.find((model) => model.enabled)?.id.trim() ||
-    provider.availableModels.find((model) => model.enabled)?.id.trim() ||
-    '未选择模型'
-  )
+  if (activeSessionProvider !== undefined) {
+    return providers[activeSessionProvider]
+  }
+
+  try {
+    return selectDefaultChatProvider({ appearance: { theme: 'system' }, providers })
+  } catch {
+    return undefined
+  }
 }
 
 export function ChatPage(): React.JSX.Element {
@@ -50,8 +67,11 @@ export function ChatPage(): React.JSX.Element {
     () => sessions.find((session) => session.id === routeState.activeChatId),
     [routeState.activeChatId, sessions]
   )
-  const activeProvider =
-    activeSession === undefined ? undefined : appSettings.providers[activeSession.provider]
+  const activeProvider = selectPageProvider(
+    appSettings.providers,
+    activeSession?.provider,
+    routeState.draftProviderId
+  )
   const isSending = sendStatus === 'sending'
 
   useEffect(() => {
@@ -87,12 +107,17 @@ export function ChatPage(): React.JSX.Element {
     try {
       const result = await sendChatMessage({
         ...(routeState.activeChatId === null ? {} : { sessionId: routeState.activeChatId }),
+        ...((routeState.activeChatId === null || routeState.draftProviderId != null) &&
+        activeProvider !== undefined
+          ? { provider: activeProvider.provider }
+          : {}),
         content: trimmedContent
       })
 
       setRouteState((state) => ({
         ...state,
-        activeChatId: result.session.id
+        activeChatId: result.session.id,
+        draftProviderId: null
       }))
     } catch {
       setContent(trimmedContent)
@@ -108,7 +133,7 @@ export function ChatPage(): React.JSX.Element {
             {activeSession?.title ?? '新聊天'}
           </h1>
           <div className="mt-0.5 truncate text-xs leading-4 text-muted-foreground">
-            {activeProvider?.name ?? '未选择提供商'} · {selectProviderModel(activeProvider)}
+            {activeProvider?.name ?? '未选择提供商'} · {selectChatModelLabel(activeProvider)}
           </div>
         </div>
       </header>
@@ -183,7 +208,7 @@ export function ChatPage(): React.JSX.Element {
             leftContent={<ActionBar />}
             runtimeInfo={{
               providerLabel: activeProvider?.name ?? '未选择提供商',
-              modelLabel: selectProviderModel(activeProvider),
+              modelLabel: selectChatModelLabel(activeProvider),
               shortcutLabel: 'Enter 发送，Shift+Enter 换行',
               statusLabel: isSending ? '发送中' : undefined
             }}
