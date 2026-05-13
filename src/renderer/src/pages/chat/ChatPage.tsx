@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { MessageSquareText } from 'lucide-react'
+import { FileText, ImageIcon, MessageSquareText, Paperclip } from 'lucide-react'
 
 import { useAppRouterContext } from '@renderer/app/router/router-context'
 import { ChatInput } from '@renderer/features/ChatInput'
 import { ActionBar } from '@renderer/features/ChatInput/ActionBar'
 import {
   selectChatError,
+  selectChatDraftAttachments,
   selectChatMessages,
   selectChatMessagesStatus,
   selectChatSendStatus,
@@ -22,6 +23,7 @@ import {
   selectDefaultChatProvider
 } from '@shared/domain/chat-provider'
 import type { ProviderSettings } from '@shared/domain/settings'
+import type { ChatAttachmentRecord } from '@shared/domain/chat'
 
 function selectPageProvider(
   providers: Record<string, ProviderSettings>,
@@ -48,11 +50,45 @@ function selectPageProvider(
   }
 }
 
+function MessageAttachmentList({
+  attachments
+}: {
+  attachments: ChatAttachmentRecord[]
+}): React.JSX.Element | null {
+  if (attachments.length === 0) {
+    return null
+  }
+
+  return (
+    <div className="mb-2 flex flex-wrap gap-1.5">
+      {attachments.map((attachment) => {
+        const Icon =
+          attachment.kind === 'image'
+            ? ImageIcon
+            : attachment.kind === 'file'
+              ? FileText
+              : Paperclip
+
+        return (
+          <span
+            key={attachment.id}
+            className="inline-flex min-w-0 max-w-48 items-center gap-1.5 rounded-md border border-current/15 bg-background/15 px-2 py-1 text-xs leading-4"
+          >
+            <Icon aria-hidden="true" className="size-3.5 shrink-0" />
+            <span className="truncate">{attachment.name}</span>
+          </span>
+        )
+      })}
+    </div>
+  )
+}
+
 export function ChatPage(): React.JSX.Element {
   const { routeState, setRouteState } = useAppRouterContext()
   const sessions = useChatStore(selectChatSessions)
   const sessionsStatus = useChatStore(selectChatSessionsStatus)
   const messages = useChatStore(selectChatMessages)
+  const draftAttachments = useChatStore(selectChatDraftAttachments)
   const messagesStatus = useChatStore(selectChatMessagesStatus)
   const sendStatus = useChatStore(selectChatSendStatus)
   const error = useChatStore(selectChatError)
@@ -61,6 +97,8 @@ export function ChatPage(): React.JSX.Element {
   const sendChatMessage = useChatStore((state) => state.sendChatMessage)
   const applySendMessageEvent = useChatStore((state) => state.applySendMessageEvent)
   const clearChatMessages = useChatStore((state) => state.clearChatMessages)
+  const clearChatDraftAttachments = useChatStore((state) => state.clearChatDraftAttachments)
+  const removeChatDraftAttachment = useChatStore((state) => state.removeChatDraftAttachment)
   const appSettings = useSettingsStore(selectAppSettings)
   const [content, setContent] = useState('')
   const activeSession = useMemo(
@@ -73,6 +111,23 @@ export function ChatPage(): React.JSX.Element {
     routeState.draftProviderId
   )
   const isSending = sendStatus === 'sending'
+  const readyDraftAttachments = useMemo(
+    () =>
+      draftAttachments
+        .filter((attachment) => attachment.status === 'success')
+        .map((attachment) => ({
+          id: attachment.id,
+          name: attachment.name,
+          mimeType: attachment.mimeType,
+          size: attachment.size,
+          kind: attachment.kind,
+          createdAt: attachment.createdAt
+        })),
+    [draftAttachments]
+  )
+  const hasUnreadyDraftAttachments = draftAttachments.some(
+    (attachment) => attachment.status !== 'success'
+  )
 
   useEffect(() => {
     if (sessionsStatus === 'idle') {
@@ -98,7 +153,11 @@ export function ChatPage(): React.JSX.Element {
   const handleSend = async (): Promise<void> => {
     const trimmedContent = content.trim()
 
-    if (trimmedContent.length === 0 || isSending) {
+    if (
+      (trimmedContent.length === 0 && readyDraftAttachments.length === 0) ||
+      hasUnreadyDraftAttachments ||
+      isSending
+    ) {
       return
     }
 
@@ -111,8 +170,11 @@ export function ChatPage(): React.JSX.Element {
         activeProvider !== undefined
           ? { provider: activeProvider.provider }
           : {}),
-        content: trimmedContent
+        content: trimmedContent,
+        ...(readyDraftAttachments.length === 0 ? {} : { attachments: readyDraftAttachments })
       })
+
+      clearChatDraftAttachments()
 
       setRouteState((state) => ({
         ...state,
@@ -188,7 +250,10 @@ export function ChatPage(): React.JSX.Element {
                   >
                     {isUser ? '你' : 'Moon'}
                   </div>
-                  <div className="whitespace-pre-wrap break-words">{message.content}</div>
+                  <MessageAttachmentList attachments={message.attachments ?? []} />
+                  {message.content.length > 0 ? (
+                    <div className="whitespace-pre-wrap break-words">{message.content}</div>
+                  ) : null}
                 </div>
               </article>
             )
@@ -203,6 +268,10 @@ export function ChatPage(): React.JSX.Element {
 
         <div className="shrink-0 border-t border-border px-6 py-4">
           <ChatInput
+            attachments={draftAttachments.map((attachment) => ({
+              ...attachment,
+              type: attachment.mimeType
+            }))}
             value={content}
             isSending={isSending}
             leftContent={<ActionBar />}
@@ -213,6 +282,7 @@ export function ChatPage(): React.JSX.Element {
               statusLabel: isSending ? '发送中' : undefined
             }}
             onChange={setContent}
+            onAttachmentRemove={removeChatDraftAttachment}
             onSend={() => {
               void handleSend()
             }}

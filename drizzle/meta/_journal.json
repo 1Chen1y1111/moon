@@ -15,6 +15,13 @@
       "when": 1777100000000,
       "tag": "0001_provider_management",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1777186400000,
+      "tag": "0002_chat_attachments",
+      "breakpoints": true
     }
   ]
 }

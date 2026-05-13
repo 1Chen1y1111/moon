@@ -80,6 +80,7 @@ app.whenReady().then(async () => {
 
   registerIpcHandlers({
     chatService: new ChatService({
+      attachmentsDirectory: join(app.getPath('userData'), 'attachments'),
       messagesRepository,
       sessionsRepository,
       settingsRepository

@@ -6,11 +6,15 @@ import type {
 } from '@shared/domain/chat'
 import type { SendChatMessageInput } from '@shared/domain/chat-validation'
 
-import type { ChatState } from './types'
+import type { ChatDraftAttachment, ChatState } from './types'
 
 export type ChatReducerAction =
   | { type: 'clearChatMessages' }
   | { type: 'clearChatError' }
+  | { type: 'addDraftAttachment'; attachment: ChatDraftAttachment }
+  | { type: 'clearDraftAttachments' }
+  | { type: 'removeDraftAttachment'; id: string }
+  | { type: 'updateDraftAttachment'; id: string; value: Partial<ChatDraftAttachment> }
   | { type: 'applySendMessageEvent'; event: SendMessageEvent }
   | { type: 'loadChatSessionsPending' }
   | { type: 'loadChatSessionsFulfilled'; sessions: SessionRecord[] }
@@ -187,6 +191,30 @@ export function chatReducer(state: ChatState, action: ChatReducerAction): ChatSt
 
   if (action.type === 'clearChatError') {
     return { ...state, error: null }
+  }
+
+  if (action.type === 'addDraftAttachment') {
+    return { ...state, draftAttachments: [...state.draftAttachments, action.attachment] }
+  }
+
+  if (action.type === 'clearDraftAttachments') {
+    return { ...state, draftAttachments: [] }
+  }
+
+  if (action.type === 'removeDraftAttachment') {
+    return {
+      ...state,
+      draftAttachments: state.draftAttachments.filter((attachment) => attachment.id !== action.id)
+    }
+  }
+
+  if (action.type === 'updateDraftAttachment') {
+    return {
+      ...state,
+      draftAttachments: state.draftAttachments.map((attachment) =>
+        attachment.id === action.id ? { ...attachment, ...action.value } : attachment
+      )
+    }
   }
 
   if (action.type === 'applySendMessageEvent') {

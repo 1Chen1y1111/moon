@@ -8,6 +8,19 @@ export const messageRoles = ['user', 'assistant', 'system', 'tool'] as const
 
 export type MessageRole = (typeof messageRoles)[number]
 
+export const chatAttachmentKinds = ['image', 'file'] as const
+
+export type ChatAttachmentKind = (typeof chatAttachmentKinds)[number]
+
+export type ChatAttachmentRecord = {
+  id: string
+  name: string
+  mimeType: string
+  size: number
+  kind: ChatAttachmentKind
+  createdAt: string
+}
+
 export type SessionRecord = {
   id: string
   projectId: string | null
@@ -23,6 +36,7 @@ export type MessageRecord = {
   sessionId: string
   role: MessageRole
   content: string
+  attachments?: ChatAttachmentRecord[]
   createdAt: string
   updatedAt: string
 }

@@ -28,21 +28,26 @@ export class MessagesRepository {
 
   async save(message: MessageRecord): Promise<MessageRecord> {
     const parsedMessage = messageRecordSchema.parse(message)
+    const messageValues = {
+      ...parsedMessage,
+      attachments: parsedMessage.attachments ?? []
+    }
 
     await this.database.db
       .insert(messages)
-      .values(parsedMessage)
+      .values(messageValues)
       .onConflictDoUpdate({
         target: messages.id,
         set: {
-          sessionId: parsedMessage.sessionId,
-          role: parsedMessage.role,
-          content: parsedMessage.content,
-          updatedAt: parsedMessage.updatedAt
+          sessionId: messageValues.sessionId,
+          role: messageValues.role,
+          content: messageValues.content,
+          attachments: messageValues.attachments,
+          updatedAt: messageValues.updatedAt
         }
       })
 
-    return parsedMessage
+    return toMessageRecord(messageValues)
   }
 
   async search(query: string, limit = 20): Promise<MessageSearchResult[]> {
@@ -70,8 +75,11 @@ export class MessagesRepository {
 }
 
 function toMessageRecord(message: typeof messages.$inferSelect): MessageRecord {
+  const attachments = message.attachments ?? []
+
   return {
     ...message,
+    ...(attachments.length === 0 ? {} : { attachments }),
     createdAt: toIsoTimestamp(message.createdAt),
     updatedAt: toIsoTimestamp(message.updatedAt)
   }

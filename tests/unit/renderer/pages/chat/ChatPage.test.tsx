@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { ChatPage } from '@renderer/pages/chat'
@@ -107,6 +107,80 @@ describe('ChatPage', () => {
 
     await waitFor(() => expect(api.chat.sendMessage).toHaveBeenCalledWith({ content: '你好' }))
     expect(await screen.findByText('你好，我在。')).toBeInTheDocument()
+  })
+
+  it('uploads a text attachment and sends it without message text', async () => {
+    const { container, user } = renderWithProviders(<ChatPage />)
+    const fileInput = container.querySelector('input[accept*=".txt"]') as HTMLInputElement | null
+
+    expect(fileInput).not.toBeNull()
+
+    fireEvent.change(fileInput!, {
+      target: {
+        files: [new File(['hello'], 'note.txt', { type: 'text/plain' })]
+      }
+    })
+
+    await waitFor(() => expect(api.chat.importAttachment).toHaveBeenCalled())
+    expect(await screen.findByText('note.txt')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /发送/ }))
+
+    await waitFor(() =>
+      expect(api.chat.sendMessage).toHaveBeenCalledWith({
+        content: '',
+        attachments: [
+          expect.objectContaining({
+            id: 'attachment-1',
+            name: 'note.txt',
+            mimeType: 'text/plain',
+            kind: 'file'
+          })
+        ]
+      })
+    )
+  })
+
+  it('uploads folder files with their relative paths', async () => {
+    const { container, user } = renderWithProviders(<ChatPage />)
+    const folderInput = container.querySelector(
+      'input[data-upload-kind="folder"]'
+    ) as HTMLInputElement | null
+    const file = new File(['hello'], 'note.md', { type: 'text/markdown' })
+
+    Object.defineProperty(file, 'webkitRelativePath', { value: 'docs/note.md' })
+
+    expect(folderInput).not.toBeNull()
+
+    fireEvent.change(folderInput!, {
+      target: {
+        files: [file]
+      }
+    })
+
+    await waitFor(() =>
+      expect(api.chat.importAttachment).toHaveBeenCalledWith(
+        expect.objectContaining({
+          name: 'docs/note.md'
+        })
+      )
+    )
+    expect(await screen.findByText('docs/note.md')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /发送/ }))
+
+    await waitFor(() =>
+      expect(api.chat.sendMessage).toHaveBeenCalledWith({
+        content: '',
+        attachments: [
+          expect.objectContaining({
+            name: 'docs/note.md',
+            mimeType: 'text/markdown',
+            kind: 'file'
+          })
+        ]
+      })
+    )
   })
 
   it('switches the draft provider model from the action bar', async () => {

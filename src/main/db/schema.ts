@@ -1,7 +1,7 @@
 import { sql } from 'drizzle-orm'
 import { boolean, index, jsonb, pgTable, text, timestamp } from 'drizzle-orm/pg-core'
 
-import type { MessageRole, SessionStatus } from '../../shared/domain/chat'
+import type { ChatAttachmentRecord, MessageRole, SessionStatus } from '../../shared/domain/chat'
 import type {
   ProviderId,
   ProviderApiFormat,
@@ -86,6 +86,10 @@ export const messages = pgTable(
       .references(() => sessions.id, { onDelete: 'cascade' }),
     role: text('role').notNull().$type<MessageRole>(),
     content: text('content').notNull(),
+    attachments: jsonb('attachments')
+      .notNull()
+      .default(sql`'[]'::jsonb`)
+      .$type<ChatAttachmentRecord[]>(),
     createdAt: timestamp('created_at', { mode: 'string', withTimezone: true }).notNull(),
     updatedAt: timestamp('updated_at', { mode: 'string', withTimezone: true }).notNull()
   },

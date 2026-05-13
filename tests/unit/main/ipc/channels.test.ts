@@ -9,6 +9,7 @@ describe('ipcChannels', () => {
     expect(ipcChannels.chat.listSessions).toBe('chat:listSessions')
     expect(ipcChannels.chat.getMessages).toBe('chat:getMessages')
     expect(ipcChannels.chat.createSession).toBe('chat:createSession')
+    expect(ipcChannels.chat.importAttachment).toBe('chat:importAttachment')
     expect(ipcChannels.chat.sendMessage).toBe('chat:sendMessage')
     expect(ipcChannels.chat.sendMessageEvent).toBe('chat:sendMessageEvent')
   })

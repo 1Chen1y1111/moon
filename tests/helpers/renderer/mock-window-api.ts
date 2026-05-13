@@ -3,12 +3,17 @@ import { vi } from 'vitest'
 import type { MoonApi } from '@ipc/contracts'
 import type { OpenSettingsInput, WindowState } from '@ipc/window-contracts'
 import type {
+  ChatAttachmentRecord,
   MessageRecord,
   SendMessageEvent,
   SendMessageResult,
   SessionRecord
 } from '@shared/domain/chat'
-import type { GetChatMessagesInput, SendChatMessageInput } from '@shared/domain/chat-validation'
+import type {
+  GetChatMessagesInput,
+  ImportChatAttachmentInput,
+  SendChatMessageInput
+} from '@shared/domain/chat-validation'
 import {
   createDefaultAppSettings,
   type AppSettings,
@@ -30,6 +35,7 @@ export type MockMoonApi = {
     listSessions: MockFn<() => Promise<SessionRecord[]>>
     getMessages: MockFn<(input: GetChatMessagesInput) => Promise<MessageRecord[]>>
     createSession: MockFn<() => Promise<SessionRecord>>
+    importAttachment: MockFn<(input: ImportChatAttachmentInput) => Promise<ChatAttachmentRecord>>
     sendMessage: MockFn<(input: SendChatMessageInput) => Promise<SendMessageResult>>
     onSendMessageEvent: MockFn<(listener: (event: SendMessageEvent) => void) => () => void>
   }
@@ -95,6 +101,16 @@ function createMockWindowApi(options: MockWindowApiOptions = {}): MockMoonApi {
         .fn<(input: GetChatMessagesInput) => Promise<MessageRecord[]>>()
         .mockResolvedValue(chatMessages),
       createSession: vi.fn<() => Promise<SessionRecord>>().mockResolvedValue(createdChatSession),
+      importAttachment: vi
+        .fn<(input: ImportChatAttachmentInput) => Promise<ChatAttachmentRecord>>()
+        .mockImplementation(async (input) => ({
+          id: 'attachment-1',
+          name: input.name,
+          mimeType: input.mimeType,
+          size: input.size,
+          kind: input.mimeType.startsWith('image/') ? 'image' : 'file',
+          createdAt: '2026-05-09T00:00:00.000Z'
+        })),
       sendMessage: vi
         .fn<(input: SendChatMessageInput) => Promise<SendMessageResult>>()
         .mockResolvedValue(sentChatMessage),

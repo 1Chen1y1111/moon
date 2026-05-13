@@ -5,6 +5,7 @@ export function createInitialChatState(): ChatState {
     activeSessionId: null,
     sessions: [],
     messages: [],
+    draftAttachments: [],
     sessionsStatus: 'idle',
     messagesStatus: 'idle',
     createStatus: 'idle',

@@ -1,9 +1,13 @@
 import type { ComponentType, ReactNode } from 'react'
 
 export interface ChatInputAttachment {
+  error?: string
   id: string
+  kind?: 'image' | 'file'
   name: string
+  previewUrl?: string
   size?: number
+  status?: 'importing' | 'success' | 'error'
   type?: string
 }
 

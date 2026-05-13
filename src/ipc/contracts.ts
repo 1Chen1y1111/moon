@@ -1,10 +1,15 @@
 import type {
+  ChatAttachmentRecord,
   MessageRecord,
   SendMessageEvent,
   SendMessageResult,
   SessionRecord
 } from '../shared/domain/chat'
-import type { GetChatMessagesInput, SendChatMessageInput } from '../shared/domain/chat-validation'
+import type {
+  GetChatMessagesInput,
+  ImportChatAttachmentInput,
+  SendChatMessageInput
+} from '../shared/domain/chat-validation'
 import type { AppSettings, ProviderTestResult } from '../shared/domain/settings'
 import type {
   CreateCustomAcpProviderInput,
@@ -29,6 +34,10 @@ export type AppIpcContractMap = {
   [ipcChannels.chat.createSession]: {
     request: undefined
     response: SessionRecord
+  }
+  [ipcChannels.chat.importAttachment]: {
+    request: ImportChatAttachmentInput
+    response: ChatAttachmentRecord
   }
   [ipcChannels.chat.sendMessage]: {
     request: SendChatMessageInput
@@ -93,6 +102,7 @@ export type MoonApi = {
     listSessions: () => Promise<SessionRecord[]>
     getMessages: (input: GetChatMessagesInput) => Promise<MessageRecord[]>
     createSession: () => Promise<SessionRecord>
+    importAttachment: (input: ImportChatAttachmentInput) => Promise<ChatAttachmentRecord>
     sendMessage: (input: SendChatMessageInput) => Promise<SendMessageResult>
     onSendMessageEvent: (listener: (event: SendMessageEvent) => void) => () => void
   }

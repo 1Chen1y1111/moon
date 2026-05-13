@@ -1,10 +1,20 @@
-import type { MessageRecord, SendMessageEvent, SendMessageResult } from '@shared/domain/chat'
-import type { SendChatMessageInput } from '@shared/domain/chat-validation'
+import type {
+  MessageRecord,
+  SendMessageEvent,
+  SendMessageResult,
+  SessionRecord
+} from '@shared/domain/chat'
+import {
+  maxChatAttachmentsPerMessage,
+  maxChatAttachmentSizeBytes,
+  type SendChatMessageInput
+} from '@shared/domain/chat-validation'
 
 import type { StoreSetter } from '@renderer/store/types'
 
 import { chatReducer, type ChatReducerAction } from './reducer'
 import type { ChatStore } from './store'
+import type { ChatDraftAttachment } from './types'
 
 type Setter = StoreSetter<ChatStore>
 
@@ -23,17 +33,79 @@ function createOptimisticMessage(input: SendChatMessageInput, requestId: string)
     sessionId: input.sessionId ?? `pending-session-${requestId}`,
     role: 'user',
     content: input.content.trim(),
+    ...(input.attachments === undefined || input.attachments.length === 0
+      ? {}
+      : { attachments: input.attachments }),
     createdAt: timestamp,
     updatedAt: timestamp
   }
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message
+  }
+
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    typeof error.message === 'string'
+  ) {
+    return error.message
+  }
+
+  return '上传失败'
+}
+
+function resolveFileMimeType(file: File): string {
+  return file.type || 'application/octet-stream'
+}
+
+function resolveFileAttachmentName(file: File): string {
+  const relativePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath?.trim()
+
+  return relativePath === undefined || relativePath.length === 0 ? file.name : relativePath
+}
+
+function createPreviewUrl(file: File): string | undefined {
+  if (typeof URL.createObjectURL !== 'function') {
+    return undefined
+  }
+
+  return URL.createObjectURL(file)
+}
+
+function createDraftAttachment(file: File, requestId: string): ChatDraftAttachment {
+  const mimeType = resolveFileMimeType(file)
+  const name = resolveFileAttachmentName(file)
+  const previewUrl = mimeType.startsWith('image/') ? createPreviewUrl(file) : undefined
+
+  return {
+    id: `pending-${requestId}`,
+    name,
+    mimeType,
+    size: file.size,
+    kind: mimeType.startsWith('image/') ? 'image' : 'file',
+    status: 'importing',
+    createdAt: new Date().toISOString(),
+    ...(previewUrl === undefined ? {} : { previewUrl })
+  }
+}
+
+function revokePreviewUrl(attachment: ChatDraftAttachment): void {
+  if (attachment.previewUrl !== undefined && typeof URL.revokeObjectURL === 'function') {
+    URL.revokeObjectURL(attachment.previewUrl)
+  }
+}
+
 export class ChatActionImpl {
+  readonly #get: () => ChatStore
   readonly #set: Setter
 
-  constructor(set: Setter, _get: () => ChatStore, _api?: unknown) {
-    void _get
+  constructor(set: Setter, get: () => ChatStore, _api?: unknown) {
     void _api
+    this.#get = get
     this.#set = set
   }
 
@@ -49,14 +121,41 @@ export class ChatActionImpl {
     this.internal_applySendMessageEvent(event)
   }
 
-  loadChatSessions = () => this.internal_loadChatSessions()
+  clearChatDraftAttachments = (): void => {
+    this.#get().draftAttachments.forEach(revokePreviewUrl)
+    this.internal_dispatchChat({ type: 'clearDraftAttachments' })
+  }
 
-  loadChatMessages = (sessionId: string) => this.internal_loadChatMessages(sessionId)
+  loadChatSessions = (): Promise<SessionRecord[]> => this.internal_loadChatSessions()
 
-  createChatSession = () => this.internal_createChatSession()
+  loadChatMessages = (sessionId: string): Promise<MessageRecord[]> =>
+    this.internal_loadChatMessages(sessionId)
+
+  createChatSession = (): Promise<SessionRecord> => this.internal_createChatSession()
 
   sendChatMessage = (input: SendChatMessageInput): Promise<SendMessageResult> =>
     this.internal_sendChatMessage(input)
+
+  removeChatDraftAttachment = (id: string): void => {
+    const attachment = this.#get().draftAttachments.find((candidate) => candidate.id === id)
+
+    if (attachment !== undefined) {
+      revokePreviewUrl(attachment)
+    }
+
+    this.internal_dispatchChat({ type: 'removeDraftAttachment', id })
+  }
+
+  uploadChatAttachments = async (files: File[]): Promise<void> => {
+    const remainingSlots = Math.max(
+      maxChatAttachmentsPerMessage - this.#get().draftAttachments.length,
+      0
+    )
+
+    await Promise.all(
+      files.slice(0, remainingSlots).map((file) => this.internal_uploadChatAttachment(file))
+    )
+  }
 
   internal_clearChatMessages = (): void => {
     this.internal_dispatchChat({ type: 'clearChatMessages' })
@@ -70,7 +169,7 @@ export class ChatActionImpl {
     this.internal_dispatchChat({ type: 'applySendMessageEvent', event })
   }
 
-  internal_loadChatSessions = async () => {
+  internal_loadChatSessions = async (): Promise<SessionRecord[]> => {
     this.internal_dispatchChat({ type: 'loadChatSessionsPending' })
 
     try {
@@ -83,7 +182,7 @@ export class ChatActionImpl {
     }
   }
 
-  internal_loadChatMessages = async (sessionId: string) => {
+  internal_loadChatMessages = async (sessionId: string): Promise<MessageRecord[]> => {
     const requestId = createRequestId('load-messages')
     this.internal_dispatchChat({ type: 'loadChatMessagesPending', sessionId, requestId })
 
@@ -107,7 +206,7 @@ export class ChatActionImpl {
     }
   }
 
-  internal_createChatSession = async () => {
+  internal_createChatSession = async (): Promise<SessionRecord> => {
     this.internal_dispatchChat({ type: 'createChatSessionPending' })
 
     try {
@@ -143,6 +242,51 @@ export class ChatActionImpl {
 
   internal_dispatchChat = (action: ChatReducerAction): void => {
     this.#set((state) => chatReducer(state, action))
+  }
+
+  internal_uploadChatAttachment = async (file: File): Promise<void> => {
+    const requestId = createRequestId('attachment')
+    const attachment = createDraftAttachment(file, requestId)
+
+    this.internal_dispatchChat({ type: 'addDraftAttachment', attachment })
+
+    if (file.size > maxChatAttachmentSizeBytes) {
+      this.internal_dispatchChat({
+        type: 'updateDraftAttachment',
+        id: attachment.id,
+        value: { status: 'error', error: '文件不能超过 10 MB' }
+      })
+      return
+    }
+
+    try {
+      const data = await file.arrayBuffer()
+      const importedAttachment = await window.api.chat.importAttachment({
+        name: attachment.name,
+        mimeType: attachment.mimeType,
+        size: file.size,
+        data
+      })
+
+      this.internal_dispatchChat({
+        type: 'updateDraftAttachment',
+        id: attachment.id,
+        value: {
+          ...importedAttachment,
+          status: 'success',
+          previewUrl: attachment.previewUrl
+        }
+      })
+    } catch (error) {
+      this.internal_dispatchChat({
+        type: 'updateDraftAttachment',
+        id: attachment.id,
+        value: {
+          status: 'error',
+          error: getErrorMessage(error)
+        }
+      })
+    }
   }
 }
 

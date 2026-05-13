@@ -21,7 +21,19 @@ export function ChatInput({
   onSend,
   onStop
 }: ChatInputProps): React.JSX.Element {
-  const canSend = !disabled && !isSending && value.trim().length > 0
+  const hasReadyAttachment =
+    attachments.length > 0 &&
+    attachments.every(
+      (attachment) => attachment.status === undefined || attachment.status === 'success'
+    )
+  const hasBusyAttachment = attachments.some((attachment) => attachment.status === 'importing')
+  const hasFailedAttachment = attachments.some((attachment) => attachment.status === 'error')
+  const canSend =
+    !disabled &&
+    !isSending &&
+    !hasBusyAttachment &&
+    !hasFailedAttachment &&
+    (value.trim().length > 0 || hasReadyAttachment)
 
   function handleSend(): void {
     if (!canSend) {

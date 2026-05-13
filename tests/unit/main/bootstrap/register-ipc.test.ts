@@ -26,6 +26,7 @@ describe('registerIpcHandlers', () => {
   const chatService = {
     createSession: vi.fn(),
     getMessages: vi.fn(),
+    importAttachment: vi.fn(),
     listSessions: vi.fn(),
     sendMessage: vi.fn()
   }
@@ -44,6 +45,7 @@ describe('registerIpcHandlers', () => {
     getAllWindowsMock.mockReturnValue([])
     chatService.createSession.mockReset()
     chatService.getMessages.mockReset()
+    chatService.importAttachment.mockReset()
     chatService.listSessions.mockReset()
     chatService.sendMessage.mockReset()
     settingsService.getSettings.mockReset()
@@ -108,10 +110,25 @@ describe('registerIpcHandlers', () => {
       createdAt: '2026-05-09T00:00:00.000Z',
       updatedAt: '2026-05-09T00:00:00.000Z'
     }
+    const attachment = {
+      id: 'attachment-1',
+      name: 'note.txt',
+      mimeType: 'text/plain',
+      size: 5,
+      kind: 'file',
+      createdAt: '2026-05-09T00:00:00.000Z'
+    }
+    const attachmentInput = {
+      name: 'note.txt',
+      mimeType: 'text/plain',
+      size: 5,
+      data: new ArrayBuffer(5)
+    }
 
     chatService.listSessions.mockResolvedValue([session])
     chatService.getMessages.mockResolvedValue([message])
     chatService.createSession.mockResolvedValue(session)
+    chatService.importAttachment.mockResolvedValue(attachment)
     chatService.sendMessage.mockResolvedValue({ session, messages: [message] })
 
     registerIpcHandlers({
@@ -132,6 +149,12 @@ describe('registerIpcHandlers', () => {
     expect(await getRegisteredHandler(ipcChannels.chat.createSession)?.({ sender: {} })).toBe(
       session
     )
+    expect(
+      await getRegisteredHandler(ipcChannels.chat.importAttachment)?.(
+        { sender: {} },
+        attachmentInput
+      )
+    ).toBe(attachment)
     const sender = { send: vi.fn() }
     expect(
       await getRegisteredHandler(ipcChannels.chat.sendMessage)?.({ sender }, { content: 'hello' })
@@ -140,6 +163,7 @@ describe('registerIpcHandlers', () => {
       messages: [message]
     })
     expect(chatService.getMessages).toHaveBeenCalledWith({ sessionId: 'session-1' })
+    expect(chatService.importAttachment).toHaveBeenCalledWith(attachmentInput)
     expect(chatService.sendMessage).toHaveBeenCalledWith({ content: 'hello' }, expect.any(Function))
 
     const eventListener = chatService.sendMessage.mock.calls[0][1]

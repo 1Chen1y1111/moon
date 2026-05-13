@@ -3,6 +3,7 @@ export const ipcChannels = {
     listSessions: 'chat:listSessions',
     getMessages: 'chat:getMessages',
     createSession: 'chat:createSession',
+    importAttachment: 'chat:importAttachment',
     sendMessage: 'chat:sendMessage',
     sendMessageEvent: 'chat:sendMessageEvent'
   },

@@ -1,5 +1,9 @@
 // @vitest-environment node
 
+import { mkdtemp, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ChatService } from '@main/services/chat-service'
@@ -125,6 +129,7 @@ type CreateServiceResult = {
 }
 
 function createService(input: {
+  attachmentsDirectory?: string
   generateText?: (input: never) => Promise<{ text: string }>
   messages?: MessageRecord[]
   sessions?: SessionRecord[]
@@ -143,6 +148,7 @@ function createService(input: {
   return {
     messagesRepository,
     service: new ChatService({
+      attachmentsDirectory: input.attachmentsDirectory,
       generateText: input.generateText as never,
       messagesRepository: messagesRepository as never,
       sessionsRepository: sessionsRepository as never,
@@ -463,6 +469,60 @@ describe('ChatService.sendMessage', () => {
       'assistant-delta',
       'assistant-finish'
     ])
+  })
+
+  it('sends stored attachments as model message parts', async () => {
+    const attachmentsDirectory = await mkdtemp(join(tmpdir(), 'moon-chat-attachments-'))
+    const settings = createSettings([
+      createProviderSettings({
+        provider: 'openai',
+        type: 'openai',
+        model: 'gpt-5.4'
+      })
+    ])
+    const streamText = vi.fn(() => ({
+      textStream: (async function* (): AsyncGenerator<string> {
+        yield 'ok'
+      })()
+    }))
+    const { messagesRepository, service } = createService({
+      attachmentsDirectory,
+      settings,
+      streamText: streamText as never
+    })
+
+    await writeFile(join(attachmentsDirectory, '11111111-1111-4111-8111-111111111111'), 'hello')
+
+    await service.sendMessage({
+      content: 'read this',
+      attachments: [
+        {
+          id: '11111111-1111-4111-8111-111111111111',
+          name: 'note.txt',
+          mimeType: 'text/plain',
+          size: 5,
+          kind: 'file',
+          createdAt: '2026-05-09T00:00:00.000Z'
+        }
+      ]
+    })
+
+    expect(messagesRepository.messages[0].attachments).toEqual([
+      expect.objectContaining({ name: 'note.txt', kind: 'file' })
+    ])
+    expect(streamText).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: [
+          expect.objectContaining({
+            role: 'user',
+            content: expect.arrayContaining([
+              { type: 'text', text: 'read this' },
+              { type: 'text', text: '\n\n[Attachment: note.txt]\nhello' }
+            ])
+          })
+        ]
+      })
+    )
   })
 
   it('does not create a session when provider setup is incomplete', async () => {

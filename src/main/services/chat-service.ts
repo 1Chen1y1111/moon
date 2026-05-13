@@ -1,12 +1,23 @@
 import { randomUUID } from 'node:crypto'
+import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { join } from 'node:path'
 
 import { createAnthropic } from '@ai-sdk/anthropic'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createOpenAI } from '@ai-sdk/openai'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import { streamText as streamGeneratedText, type LanguageModel, type ModelMessage } from 'ai'
+import {
+  streamText as streamGeneratedText,
+  type FilePart,
+  type ImagePart,
+  type LanguageModel,
+  type ModelMessage,
+  type TextPart
+} from 'ai'
 
 import type {
+  ChatAttachmentKind,
+  ChatAttachmentRecord,
   MessageRecord,
   SendMessageEvent,
   SendMessageResult,
@@ -14,8 +25,10 @@ import type {
 } from '@shared/domain/chat'
 import {
   getChatMessagesInputSchema,
+  importChatAttachmentInputSchema,
   sendChatMessageInputSchema,
   type GetChatMessagesInput,
+  type ImportChatAttachmentInput,
   type SendChatMessageInput
 } from '@shared/domain/chat-validation'
 import {
@@ -33,6 +46,7 @@ const newChatTitle = '新聊天'
 const titleMaxLength = 48
 
 type ChatServiceDependencies = {
+  attachmentsDirectory?: string
   settingsRepository: SettingsRepository
   sessionsRepository: SessionsRepository
   messagesRepository: MessagesRepository
@@ -65,6 +79,47 @@ type AiProviderOptions = {
 
 function createTimestamp(): string {
   return new Date().toISOString()
+}
+
+function resolveAttachmentKind(mimeType: string): ChatAttachmentKind {
+  return mimeType.startsWith('image/') ? 'image' : 'file'
+}
+
+function toBuffer(data: ArrayBuffer | ArrayBufferView): Buffer {
+  if (data instanceof ArrayBuffer) {
+    return Buffer.from(data)
+  }
+
+  return Buffer.from(data.buffer, data.byteOffset, data.byteLength)
+}
+
+function isTextAttachment(attachment: ChatAttachmentRecord): boolean {
+  if (attachment.mimeType.startsWith('text/') || attachment.mimeType === 'application/json') {
+    return true
+  }
+
+  const extension = attachment.name.split('.').at(-1)?.toLowerCase()
+
+  return (
+    extension !== undefined &&
+    [
+      'txt',
+      'md',
+      'markdown',
+      'json',
+      'csv',
+      'log',
+      'ts',
+      'tsx',
+      'js',
+      'jsx',
+      'css',
+      'html',
+      'xml',
+      'yml',
+      'yaml'
+    ].includes(extension)
+  )
 }
 
 function trimTrailingSlash(value: string): string {
@@ -172,8 +227,42 @@ export function createChatTitle(content: string): string {
   return `${normalizedContent.slice(0, titleMaxLength)}...`
 }
 
-function toModelMessage(message: MessageRecord): ModelMessage | null {
+async function toModelMessage(
+  message: MessageRecord,
+  attachmentsDirectory: string
+): Promise<ModelMessage | null> {
   if (message.role === 'user') {
+    if ((message.attachments?.length ?? 0) > 0) {
+      const content: Array<TextPart | ImagePart | FilePart> =
+        message.content.trim().length === 0 ? [] : [{ type: 'text', text: message.content }]
+
+      for (const attachment of message.attachments ?? []) {
+        const data = await readFile(join(attachmentsDirectory, attachment.id))
+
+        if (attachment.kind === 'image') {
+          content.push({
+            type: 'image',
+            image: data,
+            mediaType: attachment.mimeType
+          })
+        } else if (isTextAttachment(attachment)) {
+          content.push({
+            type: 'text',
+            text: `\n\n[Attachment: ${attachment.name}]\n${data.toString('utf8')}`
+          })
+        } else {
+          content.push({
+            type: 'file',
+            data,
+            filename: attachment.name,
+            mediaType: attachment.mimeType
+          })
+        }
+      }
+
+      return { role: 'user', content }
+    }
+
     return { role: 'user', content: message.content }
   }
 
@@ -189,18 +278,21 @@ function toModelMessage(message: MessageRecord): ModelMessage | null {
 }
 
 export class ChatService {
+  private readonly attachmentsDirectory: string
   private readonly settingsRepository: SettingsRepository
   private readonly sessionsRepository: SessionsRepository
   private readonly messagesRepository: MessagesRepository
   private readonly streamText: StreamTextFunction
 
   constructor({
+    attachmentsDirectory,
     generateText: generateTextFunction,
     messagesRepository,
     sessionsRepository,
     settingsRepository,
     streamText: streamTextFunction
   }: ChatServiceDependencies) {
+    this.attachmentsDirectory = attachmentsDirectory ?? join(process.cwd(), '.moon-attachments')
     this.messagesRepository = messagesRepository
     this.sessionsRepository = sessionsRepository
     this.settingsRepository = settingsRepository
@@ -244,6 +336,24 @@ export class ChatService {
     })
   }
 
+  async importAttachment(input: ImportChatAttachmentInput): Promise<ChatAttachmentRecord> {
+    const parsedInput = importChatAttachmentInputSchema.parse(input)
+    const id = randomUUID()
+    const createdAt = createTimestamp()
+
+    await mkdir(this.attachmentsDirectory, { recursive: true })
+    await writeFile(join(this.attachmentsDirectory, id), toBuffer(parsedInput.data))
+
+    return {
+      id,
+      name: parsedInput.name,
+      mimeType: parsedInput.mimeType,
+      size: parsedInput.size,
+      kind: resolveAttachmentKind(parsedInput.mimeType),
+      createdAt
+    }
+  }
+
   async sendMessage(
     input: SendChatMessageInput,
     onEvent?: SendMessageEventListener
@@ -254,13 +364,14 @@ export class ChatService {
     const modelId = selectChatModel(provider)
     const languageModel = createChatLanguageModel(provider, modelId)
     const userTimestamp = createTimestamp()
+    const attachments = parsedInput.attachments ?? []
     const session =
       resolved.session ??
       (await this.sessionsRepository.save({
         id: randomUUID(),
         projectId: null,
         provider: provider.provider,
-        title: createChatTitle(parsedInput.content),
+        title: createChatTitle(parsedInput.content || attachments[0]?.name || ''),
         status: 'active',
         createdAt: userTimestamp,
         updatedAt: userTimestamp
@@ -270,7 +381,9 @@ export class ChatService {
       !resolved.existingMessages.some((message) => message.role === 'user')
     const sessionAfterUser = await this.sessionsRepository.save({
       ...session,
-      title: shouldUpdateTitle ? createChatTitle(parsedInput.content) : session.title,
+      title: shouldUpdateTitle
+        ? createChatTitle(parsedInput.content || attachments[0]?.name || '')
+        : session.title,
       updatedAt: userTimestamp
     })
     const userMessage = await this.messagesRepository.save({
@@ -278,13 +391,18 @@ export class ChatService {
       sessionId: sessionAfterUser.id,
       role: 'user',
       content: parsedInput.content,
+      ...(attachments.length === 0 ? {} : { attachments }),
       createdAt: userTimestamp,
       updatedAt: userTimestamp
     })
     onEvent?.({ type: 'user-message', session: sessionAfterUser, message: userMessage })
-    const modelMessages = [...resolved.existingMessages, userMessage]
-      .map(toModelMessage)
-      .filter((message): message is ModelMessage => message !== null)
+    const modelMessages = (
+      await Promise.all(
+        [...resolved.existingMessages, userMessage].map((message) =>
+          toModelMessage(message, this.attachmentsDirectory)
+        )
+      )
+    ).filter((message): message is ModelMessage => message !== null)
     const assistantTimestamp = createTimestamp()
     const assistantMessageId = randomUUID()
     let assistantText = ''

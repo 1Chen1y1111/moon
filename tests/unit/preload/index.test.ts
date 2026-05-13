@@ -63,6 +63,12 @@ describe('preload api', () => {
     await api.chat.listSessions()
     await api.chat.getMessages({ sessionId: 'session-1' })
     await api.chat.createSession()
+    await api.chat.importAttachment({
+      name: 'note.txt',
+      mimeType: 'text/plain',
+      size: 5,
+      data: new ArrayBuffer(5)
+    })
     await api.chat.sendMessage({ content: 'hello' })
     await api.settings.saveAppearance({ theme: 'dark' })
     await api.settings.saveProvider(input)
@@ -74,6 +80,12 @@ describe('preload api', () => {
       sessionId: 'session-1'
     })
     expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.createSession)
+    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.importAttachment, {
+      name: 'note.txt',
+      mimeType: 'text/plain',
+      size: 5,
+      data: expect.any(ArrayBuffer)
+    })
     expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.sendMessage, { content: 'hello' })
     expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.settings.saveAppearance, {
       theme: 'dark'

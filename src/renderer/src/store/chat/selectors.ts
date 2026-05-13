@@ -1,3 +1,5 @@
+import type { ChatAttachmentRecord } from '@shared/domain/chat'
+
 import type { ChatState } from './types'
 
 export function selectChatSessions(state: ChatState): ChatState['sessions'] {
@@ -6,6 +8,23 @@ export function selectChatSessions(state: ChatState): ChatState['sessions'] {
 
 export function selectChatMessages(state: ChatState): ChatState['messages'] {
   return state.messages
+}
+
+export function selectChatDraftAttachments(state: ChatState): ChatState['draftAttachments'] {
+  return state.draftAttachments
+}
+
+export function selectReadyChatDraftAttachments(state: ChatState): ChatAttachmentRecord[] {
+  return state.draftAttachments
+    .filter((attachment) => attachment.status === 'success')
+    .map((attachment) => ({
+      id: attachment.id,
+      name: attachment.name,
+      mimeType: attachment.mimeType,
+      size: attachment.size,
+      kind: attachment.kind,
+      createdAt: attachment.createdAt
+    }))
 }
 
 export function selectChatSessionsStatus(state: ChatState): ChatState['sessionsStatus'] {

@@ -27,6 +27,34 @@ function renderControlledChatInput(options: { initialValue?: string; isSending?:
   }
 }
 
+function renderChatInputWithAttachment(): {
+  onSend: ReturnType<typeof vi.fn>
+  user: ReturnType<typeof userEvent.setup>
+} {
+  const onSend = vi.fn()
+
+  render(
+    <ChatInput
+      value=""
+      attachments={[
+        {
+          id: 'attachment-1',
+          name: 'note.txt',
+          kind: 'file',
+          status: 'success'
+        }
+      ]}
+      onChange={() => undefined}
+      onSend={onSend}
+    />
+  )
+
+  return {
+    onSend,
+    user: userEvent.setup()
+  }
+}
+
 describe('ChatInput', () => {
   it('sends with Enter', async () => {
     const { onSend, user } = renderControlledChatInput()
@@ -62,5 +90,12 @@ describe('ChatInput', () => {
     )
 
     expect(screen.getByRole('button', { name: '发送中' })).toBeDisabled()
+  })
+  it('allows sending a ready attachment without text', async () => {
+    const { onSend, user } = renderChatInputWithAttachment()
+
+    await user.click(screen.getByRole('button', { name: /发送/ }))
+
+    expect(onSend).toHaveBeenCalledTimes(1)
   })
 })
