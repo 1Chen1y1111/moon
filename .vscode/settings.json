@@ -7,7 +7,7 @@
   },
   "editor.colorDecorators": true,
   "tailwindCSS.colorDecorators": true,
-  "tailwindCSS.experimental.configFile": "src/renderer/src/shared/styles/main.css",
+  "tailwindCSS.experimental.configFile": "src/renderer/src/styles/main.css",
   "[typescript]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
@@ -22,5 +22,9 @@
   },
   "[json]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
-  }
+  },
+  "cSpell.words": [
+    "Aihubmix",
+    "azureai"
+  ]
 }

@@ -1,0 +1,1 @@
+export { ProviderCatalogIcon } from './ProviderCatalogIcon'

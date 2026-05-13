@@ -194,12 +194,13 @@ preload 的职责是把主进程能力收敛为受控 API。当前只暴露 `win
           model/                 selectors、types、hooks、slice 组织
             slices/              Redux slice
 
-      shared/                    renderer-only 共享基础设施
-        assets/                  renderer 静态资源，例如 logo
-        styles/                  renderer 全局样式、设计 token、暗色覆盖和 recipe
-        ui/                      无业务依赖的 renderer UI primitives
-          settings-panel/        设置面板共享样式
-          window-controls/       mac/windows 自定义窗口控制组件
+      components/                renderer-only 复用 UI 组件
+        ProviderCatalogIcon/     provider 品牌图标组件
+        SettingsPanel/           设置面板共享样式
+        WindowControls/          mac/windows 自定义窗口控制组件
+
+      assets/                    renderer 静态资源，例如 logo
+      styles/                    renderer 全局样式、设计 token、暗色覆盖和 recipe
 
       main.tsx                   renderer 入口
 
@@ -216,9 +217,10 @@ preload 的职责是把主进程能力收敛为受控 API。当前只暴露 `win
 - `src/ipc` 只放跨进程协议、类型和 schema；不依赖 main、preload 或 renderer 实现。
 - `src/main` 可以依赖 `@ipc`，不能依赖 `@renderer` 或 renderer-only 文件。
 - `src/preload` 只做桥接和类型映射，不承载业务逻辑或持久化逻辑。
-- `src/renderer/src/shared` 只服务 renderer 内部，不能被 main/preload 反向依赖。
+- `src/renderer/src/components` 只放 renderer 内部复用 UI 组件，组件目录使用 PascalCase。
+- `src/renderer/src/assets` 和 `src/renderer/src/styles` 只服务 renderer 内部，不能被 main/preload 反向依赖。
 - `src/shared/domain` 只放跨进程共享的纯领域类型、常量和默认值；不放 UI、Electron、数据库连接或业务编排。
-- `src/shadcn` 是本地 vendor 化 UI primitive，业务组合应放在 renderer 的 `shared/ui`、`features` 或 `layouts`。
+- `src/shadcn` 是本地 vendor 化 UI primitive，业务组合应放在 renderer 的 `components`、`features` 或 `layouts`。
 - `tests` 使用镜像源码结构集中组织测试；测试可以依赖 `@main`、`@preload`、`@renderer`、`@ipc` 和 `@tests` alias，但源码不应依赖 `@tests`。
 
 ## 5. IPC 契约与数据流
@@ -231,10 +233,12 @@ IPC channel 集中定义在 `src/ipc/channels.ts`，契约和 schema 集中定�
 @ipc/channels              IPC channel 常量
 @ipc/contracts             request/response 类型、Zod schema、跨进程 DTO
 src/shared/domain          provider、settings、chat 等纯领域类型和默认值，当前无专用 alias
-@renderer/shared/...       renderer 内部共享 UI、样式和静态资源
+@renderer/components/...   renderer 内部复用 UI 组件
+@renderer/assets/...       renderer 内部静态资源
+src/renderer/src/styles    renderer 全局样式入口
 ```
 
-`src/ipc` 是 app-wide 的跨进程协议层，不放 renderer 组件、样式或主进程实现。`src/shared/domain` 是更底层的纯领域模型层，不引入 Zod、Electron、Drizzle 或 React。`src/renderer/src/shared` 是 renderer bounded context 内的共享层，三者不要混用。
+`src/ipc` 是 app-wide 的跨进程协议层，不放 renderer 组件、样式或主进程实现。`src/shared/domain` 是更底层的纯领域模型层，不引入 Zod、Electron、Drizzle 或 React。`src/renderer/src/components`、`src/renderer/src/assets` 和 `src/renderer/src/styles` 是 renderer bounded context 内的复用层，三者不要和跨进程共享层混用。
 
 当前 channel：
 
@@ -452,7 +456,7 @@ app
 
 ## 8. UI 与设计系统
 
-全局样式入口：`src/renderer/src/shared/styles/main.css`。`components.json` 的 shadcn CSS 配置也指向这个路径，避免工具把样式写回旧目录。
+全局样式入口：`src/renderer/src/styles/main.css`。`components.json` 的 shadcn CSS 配置也指向这个路径，避免工具把样式写回旧目录。
 
 设计系统现状：
 
@@ -466,8 +470,8 @@ app
 
 - 优先使用既有 `moon-*` token 和 `.moon-*` recipe，避免在 app UI 中加入零散 Tailwind 视觉尺度。
 - 组件优先使用 `@shadcn` 本地 primitive，而不是直接引入远端或重建一套组件。
-- 页面结构分为 `pages`、`layouts`、`features`、`entities`、`shared`，避免页面直接承载复杂领域状态。
-- `@renderer/shared` 仅存放 renderer-only 的 UI、样式、静态资源和无业务依赖工具；跨进程类型必须放在 `@ipc`。
+- 页面结构分为 `pages`、`layouts`、`features`、`entities`、`components`、`assets` 和 `styles`，避免页面直接承载复杂领域状态。
+- `@renderer/components` 和 `@renderer/assets` 仅存放 renderer-only 的复用 UI 与静态资源；跨进程类型必须放在 `@ipc`。
 - 自定义窗口按钮必须通过 `window.api.windowControls`，不要在 renderer 中直接调用 Electron。
 
 ## 9. 当前实现状态与缺口
@@ -605,8 +609,8 @@ resources/logo.png
 - 主进程拥有系统能力和持久化，renderer 通过 `window.api` 访问能力。
 - IPC channel、契约、schema 集中定义在 `src/ipc`，避免字符串散落。
 - 服务层负责校验和业务编排，仓储层只做数据读写。
-- renderer 以 `app -> pages -> layouts -> features -> entities -> shared` 分层组织。
-- 根级 `src/shared/domain` 只用于跨进程纯领域类型和常量；跨进程 IPC 契约放在 `src/ipc`，renderer 内共享 UI/样式/资源放在 `src/renderer/src/shared`。
+- renderer 以 `app -> pages -> layouts -> features -> entities -> components/assets/styles` 分层组织。
+- 根级 `src/shared/domain` 只用于跨进程纯领域类型和常量；跨进程 IPC 契约放在 `src/ipc`，renderer 内复用 UI/样式/资源放在 `src/renderer/src/components`、`src/renderer/src/styles` 和 `src/renderer/src/assets`。
 - UI 状态使用 Redux；跨进程状态以 IPC 和持久化结果为准。
 - 只暴露必要 preload API，避免扩大 Electron/Node 能力边界。
 - 新能力先定义可验证目标，再补最小测试闭环。

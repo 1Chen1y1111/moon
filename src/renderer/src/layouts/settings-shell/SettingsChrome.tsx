@@ -1,4 +1,4 @@
-import { WindowsWindowControls } from '@renderer/shared/ui/window-controls'
+import { WindowsWindowControls } from '@renderer/components/WindowControls'
 
 type SettingsChromeProps = {
   title: string

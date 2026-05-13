@@ -63,7 +63,9 @@ moon/
 |           |-- layouts/    # Shells and route-level layout surfaces
 |           |-- features/   # User-facing feature sections and workflows
 |           |-- entities/   # Domain state, slices, selectors, and hooks
-|           `-- shared/     # Renderer-only assets, styles, and shared UI helpers
+|           |-- components/ # Renderer-only reusable UI components
+|           |-- assets/     # Renderer-only static assets
+|           `-- styles/     # Renderer global styles and Tailwind entrypoint
 |-- tests/
 |   |-- unit/               # Main, preload, renderer, and boundary tests
 |   |-- integration/        # PGlite, repository, and database tests
@@ -106,7 +108,7 @@ Electron directly from renderer code.
 The renderer follows this dependency direction:
 
 ```plaintext
-app -> pages -> layouts -> features -> entities -> shared
+app -> pages -> layouts -> features -> entities -> components/assets/styles
 ```
 
 - `src/renderer/src/app/` wires global providers, router, route context, and the
@@ -120,8 +122,12 @@ app -> pages -> layouts -> features -> entities -> shared
   settings, general settings, and interface settings.
 - `src/renderer/src/entities/` contains domain model code, selectors, slices,
   hooks, and entity-level types.
-- `src/renderer/src/shared/` is renderer-only. Do not import it from main,
-  preload, IPC contracts, or shared domain modules.
+- `src/renderer/src/components/` contains renderer-only reusable UI components.
+  Component folders use `PascalCase`, for example `ProviderCatalogIcon`.
+- `src/renderer/src/assets/` contains renderer-only static assets.
+- `src/renderer/src/styles/` contains renderer global styles and the Tailwind
+  entrypoint. Do not import renderer-only files from main, preload, IPC
+  contracts, or shared domain modules.
 
 When adding or changing renderer routes:
 
@@ -129,8 +135,8 @@ When adding or changing renderer routes:
 2. Put route host composition in `src/renderer/src/app/router/route-hosts.tsx`
    when the route needs a shell boundary.
 3. Add or update the page under `src/renderer/src/pages/`.
-4. Move reusable chunks into `layouts/`, `features/`, or `entities/` instead of
-   growing route files.
+4. Move reusable chunks into `layouts/`, `features/`, `entities/`, or
+   renderer-only `components/` instead of growing route files.
 5. Update focused router/page tests under `tests/unit/renderer/`.
 
 Current route behavior: `/` and `/chat` render inside the workspace shell, while
@@ -142,7 +148,7 @@ same renderer bundle and is opened through the window-control IPC bridge.
 The renderer styling system is shadcn-first, with Moon palette values feeding
 shadcn semantic CSS variables.
 
-Use `src/renderer/src/shared/styles/` as the source of truth for global styling:
+Use `src/renderer/src/styles/` as the source of truth for global styling:
 
 - `main.css` is the Tailwind v4 entrypoint and imports `tailwindcss`,
   `tw-animate-css`, `shadcn/tailwind.css`, and local theme/token/style layers.
@@ -154,7 +160,7 @@ Use `src/renderer/src/shared/styles/` as the source of truth for global styling:
   semantic variables.
 - `recipes.css` currently contains Electron window drag/no-drag component
   classes only.
-- `components.json` points shadcn at `src/renderer/src/shared/styles/main.css`
+- `components.json` points shadcn at `src/renderer/src/styles/main.css`
   with `cssVariables: true` and `iconLibrary: lucide`.
 
 For UI styling, prefer shadcn semantic utilities such as `bg-background`,

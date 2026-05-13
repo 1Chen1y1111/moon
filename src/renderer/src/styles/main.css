@@ -1,9 +1,9 @@
-@import 'tailwindcss' source('../../..');
+@import 'tailwindcss' source('../..');
 @import 'tw-animate-css';
 @import 'shadcn/tailwind.css';
 @import './scrollbar.css';
 
-@source '../../../../shadcn';
+@source '../../../shadcn';
 
 @custom-variant dark (&:is(.dark *));
 

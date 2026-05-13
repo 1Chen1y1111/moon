@@ -79,6 +79,46 @@ export type ProviderModel = {
   manualOverrides?: ProviderModelManualOverride[]
 }
 
+type AutoProviderModelCapability = Extract<
+  ProviderModelManualOverride,
+  'supportsVision' | 'supportsToolCalling' | 'supportsReasoning'
+>
+
+export function formatProviderModelContextWindow(model: ProviderModel): string {
+  if (model.contextWindow === undefined) {
+    return ''
+  }
+
+  if (model.contextWindow >= 1_000_000) {
+    const contextWindowInMillions = model.contextWindow / 1_000_000
+    const displayValue = Number.isInteger(contextWindowInMillions)
+      ? String(contextWindowInMillions)
+      : String(Number(contextWindowInMillions.toFixed(1)))
+
+    return `${displayValue}M`
+  }
+
+  if (model.contextWindow >= 1000) {
+    return `${Math.round(model.contextWindow / 1000)}K`
+  }
+
+  return String(model.contextWindow)
+}
+
+function hasProviderModelManualOverride(
+  model: ProviderModel,
+  field: ProviderModelManualOverride
+): boolean {
+  return model.manualOverrides?.includes(field) ?? false
+}
+
+export function resolveAutoProviderModelCapability(
+  model: ProviderModel,
+  field: AutoProviderModelCapability
+): boolean {
+  return hasProviderModelManualOverride(model, field) ? (model[field] ?? false) : true
+}
+
 export type ProviderMetadata = {
   provider: BuiltInProviderId
   label: string

@@ -1,5 +1,5 @@
 import type { SettingsSectionId } from '@renderer/entities/settings'
-import { MacWindowControls } from '@renderer/shared/ui/window-controls'
+import { MacWindowControls } from '@renderer/components/WindowControls'
 
 import { Button } from '@shadcn/ui/button'
 import { ScrollArea } from '@shadcn/ui/scroll-area'

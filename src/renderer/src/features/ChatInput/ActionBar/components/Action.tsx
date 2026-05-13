@@ -1,4 +1,4 @@
-import type { MouseEventHandler } from 'react'
+import type { MouseEventHandler, ReactNode } from 'react'
 import { useCallback, useState } from 'react'
 import type { LucideIcon } from 'lucide-react'
 import { LoaderCircle } from 'lucide-react'
@@ -20,6 +20,7 @@ interface ActionProps {
     'children' | 'defaultOpen' | 'disabled' | 'onOpenChange' | 'open' | 'trigger'
   >
   icon: LucideIcon
+  iconNode?: ReactNode
   loading?: boolean
   onOpenChange?: (open: boolean) => void
   open?: boolean
@@ -39,6 +40,7 @@ export default function Action({
   disabled,
   dropdown,
   icon: Icon,
+  iconNode,
   loading,
   onOpenChange,
   open,
@@ -67,7 +69,27 @@ export default function Action({
     [inactive, onOpenChange, open]
   )
 
-  const IconNode = loading ? LoaderCircle : Icon
+  const iconClassName = cn(
+    'transition-transform duration-150 group-active/button:scale-90',
+    loading && 'animate-spin'
+  )
+  const iconStyle = {
+    height: iconSize,
+    width: iconSize
+  }
+  const renderedIcon = loading ? (
+    <LoaderCircle aria-hidden="true" className={iconClassName} style={iconStyle} />
+  ) : iconNode ? (
+    <span
+      aria-hidden="true"
+      className={cn('flex shrink-0 items-center justify-center', iconClassName)}
+      style={iconStyle}
+    >
+      {iconNode}
+    </span>
+  ) : (
+    <Icon aria-hidden="true" className={iconClassName} style={iconStyle} />
+  )
   const buttonNode = (
     <Button
       type="button"
@@ -98,17 +120,7 @@ export default function Action({
         onClick?.(event)
       }}
     >
-      <IconNode
-        aria-hidden="true"
-        className={cn(
-          'transition-transform duration-150 group-active/button:scale-90',
-          loading && 'animate-spin'
-        )}
-        style={{
-          height: iconSize,
-          width: iconSize
-        }}
-      />
+      {renderedIcon}
     </Button>
   )
 

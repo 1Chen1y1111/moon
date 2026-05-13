@@ -2,7 +2,7 @@ import { ChevronDown, FlaskConical } from 'lucide-react'
 
 import { Button } from '@shadcn/ui/button'
 
-import { settingsPanelClassName } from '@renderer/shared/ui/settings-panel'
+import { settingsPanelClassName } from '@renderer/components/SettingsPanel'
 
 function FakeSelect({
   value,

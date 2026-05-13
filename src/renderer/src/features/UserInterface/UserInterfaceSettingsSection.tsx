@@ -3,7 +3,7 @@ import {
   selectSettingsSaveStatus
 } from '@renderer/store/settings/selectors'
 import { useSettingsStore } from '@renderer/store/settings'
-import { settingsPanelClassName } from '@renderer/shared/ui/settings-panel'
+import { settingsPanelClassName } from '@renderer/components/SettingsPanel'
 import type { AppearanceTheme } from '@shared/domain/settings'
 
 import DarkAppearance from './appearance/DarkAppearance'

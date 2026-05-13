@@ -6,7 +6,7 @@ import { cn } from '@shadcn/lib/utils'
 import type { ProviderId } from '@shared/domain/provider'
 import type { ProviderSettings } from '@shared/domain/settings'
 
-import { ProviderCatalogIcon } from './ProviderCatalogIcon'
+import { ProviderCatalogIcon } from '@renderer/components/ProviderCatalogIcon'
 import { getProviderStatus } from '../provider-settings.utils'
 
 type ProviderListItemProps = {

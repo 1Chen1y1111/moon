@@ -1,4 +1,4 @@
-import LogoIcon from '@renderer/shared/assets/logo.png'
+import LogoIcon from '@renderer/assets/logo.png'
 import { Button } from '@shadcn/ui/button'
 
 export function HomeEmptyState(): React.JSX.Element {

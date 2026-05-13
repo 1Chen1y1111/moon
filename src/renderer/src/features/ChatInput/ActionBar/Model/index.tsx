@@ -1,18 +1,10 @@
 import { useMemo, useState } from 'react'
-import {
-  Bot,
-  Brain,
-  Check,
-  Eye,
-  ImageIcon,
-  Search,
-  Settings2,
-  SlidersHorizontal,
-  Wrench
-} from 'lucide-react'
+import { Bot, Check, Search, Settings2, SlidersHorizontal } from 'lucide-react'
 import { toast } from 'sonner'
 
 import { useAppRouterContext } from '@renderer/app/router/router-context'
+import { ProviderCatalogIcon } from '@renderer/components/ProviderCatalogIcon'
+import { ProviderModelMeta } from '@renderer/components/ProviderModelMeta'
 import { selectChatSessions } from '@renderer/store/chat/selectors'
 import { useChatStore } from '@renderer/store/chat'
 import { selectAppSettings } from '@renderer/store/settings/selectors'
@@ -30,7 +22,7 @@ import {
   selectChatModelLabel,
   selectDefaultChatProvider
 } from '@shared/domain/chat-provider'
-import type { ProviderModel } from '@shared/domain/provider'
+import { formatProviderModelContextWindow, type ProviderModel } from '@shared/domain/provider'
 import type { ProviderSettings } from '@shared/domain/settings'
 import type { SaveProviderInput } from '@shared/domain/settings-validation'
 
@@ -47,24 +39,6 @@ function getErrorMessage(error: unknown): string {
   }
 
   return '请检查 Provider 配置后重试。'
-}
-
-function formatContextWindow(model: ProviderModel): string {
-  if (model.contextWindow === undefined) {
-    return ''
-  }
-
-  if (model.contextWindow >= 1_000_000) {
-    const value = model.contextWindow / 1_000_000
-
-    return `${Number.isInteger(value) ? value : value.toFixed(1)}M`
-  }
-
-  if (model.contextWindow >= 1000) {
-    return `${Math.round(model.contextWindow / 1000)}K`
-  }
-
-  return String(model.contextWindow)
 }
 
 function ensureSelectedModel(
@@ -163,66 +137,6 @@ function openProviderSettings(): void {
   void window.api.windowControls.openSettings({ section: 'providers' })
 }
 
-function CapabilityPill({
-  children,
-  label
-}: {
-  children: React.ReactNode
-  label: string
-}): React.JSX.Element {
-  return (
-    <span
-      aria-label={label}
-      title={label}
-      className="inline-flex size-5 items-center justify-center rounded-md text-muted-foreground"
-    >
-      {children}
-    </span>
-  )
-}
-
-function ModelMeta({ model }: { model: ProviderModel }): React.JSX.Element | null {
-  const contextWindow = formatContextWindow(model)
-  const hasMeta =
-    model.supportsVision ||
-    model.supportsToolCalling ||
-    model.supportsReasoning ||
-    model.supportsImageOutput ||
-    contextWindow.length > 0
-
-  if (!hasMeta) {
-    return null
-  }
-
-  return (
-    <div className="mt-1 flex min-w-0 items-center gap-1.5">
-      {model.supportsVision ? (
-        <CapabilityPill label="支持图像输入">
-          <Eye aria-hidden="true" className="size-3.5" />
-        </CapabilityPill>
-      ) : null}
-      {model.supportsToolCalling ? (
-        <CapabilityPill label="支持工具调用">
-          <Wrench aria-hidden="true" className="size-3.5" />
-        </CapabilityPill>
-      ) : null}
-      {model.supportsReasoning ? (
-        <CapabilityPill label="支持推理">
-          <Brain aria-hidden="true" className="size-3.5" />
-        </CapabilityPill>
-      ) : null}
-      {model.supportsImageOutput ? (
-        <CapabilityPill label="支持图像输出">
-          <ImageIcon aria-hidden="true" className="size-3.5" />
-        </CapabilityPill>
-      ) : null}
-      {contextWindow.length > 0 ? (
-        <span className="rounded-md text-xs leading-5 text-muted-foreground">{contextWindow}</span>
-      ) : null}
-    </div>
-  )
-}
-
 function EmptyModelPanel(): React.JSX.Element {
   return (
     <div className="flex min-h-40 flex-col items-center justify-center gap-3 px-6 py-8 text-center">
@@ -286,20 +200,17 @@ function ModelSwitchPanel({
       {visibleGroups.length === 0 ? (
         <EmptyModelPanel />
       ) : (
-        <ScrollArea className="max-h-80">
+        <ScrollArea className="h-80">
           <div className="space-y-2 p-2">
             {visibleGroups.map(({ provider, models }) => (
               <section key={provider.provider} className="min-w-0">
                 <div className="flex items-center justify-between gap-3 px-2 py-1.5">
-                  <div className="min-w-0">
+                  <div className="flex min-w-0 items-center gap-2">
+                    <ProviderCatalogIcon provider={provider.provider} size="sm" />
                     <p className="truncate text-xs font-medium leading-5 text-foreground">
                       {provider.name}
                     </p>
-                    <p className="truncate text-[11px] leading-4 text-muted-foreground">
-                      {provider.provider}
-                    </p>
                   </div>
-                  <Badge variant="secondary">{models.length}</Badge>
                 </div>
 
                 {models.length === 0 ? (
@@ -328,20 +239,11 @@ function ModelSwitchPanel({
                           )}
                           onClick={() => onModelSelect(provider, model)}
                         >
-                          <Bot
-                            aria-hidden="true"
-                            className="size-4 shrink-0 text-muted-foreground"
-                          />
-                          <span className="min-w-0 flex-1">
+                          <span className="min-w-0 flex-1 ml-6">
                             <span className="block truncate text-sm leading-5">
                               {model.name || model.id}
                             </span>
-                            {model.name !== model.id ? (
-                              <span className="block truncate text-xs leading-5 text-muted-foreground">
-                                {model.id}
-                              </span>
-                            ) : null}
-                            <ModelMeta model={model} />
+                            <ProviderModelMeta model={model} showImageOutput />
                           </span>
                           {selected || pending ? (
                             <Check
@@ -373,7 +275,7 @@ function ModelDetailPanel({
   model: ProviderModel
   provider: ProviderSettings
 }): React.JSX.Element {
-  const contextWindow = formatContextWindow(model)
+  const contextWindow = formatProviderModelContextWindow(model)
   const providerOptions = model.providerOptions?.trim()
 
   return (
@@ -490,6 +392,11 @@ export default function Model(): React.JSX.Element {
     >
       <Action
         icon={Bot}
+        iconNode={
+          selectedModel && activeProvider ? (
+            <ProviderCatalogIcon provider={activeProvider.provider} size="sm" />
+          ) : undefined
+        }
         loading={pendingModelKey !== null}
         open={switchOpen}
         pressed={switchOpen}

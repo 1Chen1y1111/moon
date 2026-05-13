@@ -1,4 +1,4 @@
-import { MacWindowControls } from '@renderer/shared/ui/window-controls'
+import { MacWindowControls } from '@renderer/components/WindowControls'
 
 import { WorkspaceUtilityActions } from './WorkspaceUtilityActions'
 

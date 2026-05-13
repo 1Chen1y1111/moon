@@ -1,16 +1,16 @@
 import type { ComponentProps, ComponentType } from 'react'
 import { Bot, Cloud, Github, Terminal, Workflow } from 'lucide-react'
 
-import AihubmixIconUrl from '@renderer/shared/assets/llm-icons/aihubmix.png'
-import AnthropicIcon from '@renderer/shared/assets/llm-icons/anthropic.svg?react'
-import AzureAiIcon from '@renderer/shared/assets/llm-icons/azureai.svg?react'
-import DeepSeekIcon from '@renderer/shared/assets/llm-icons/deepseek.svg?react'
-import GeminiIcon from '@renderer/shared/assets/llm-icons/gemini.svg?react'
-import KimiIcon from '@renderer/shared/assets/llm-icons/kimi.svg?react'
-import MoonshotIcon from '@renderer/shared/assets/llm-icons/moonshot.svg?react'
-import OpenAiIcon from '@renderer/shared/assets/llm-icons/openai.svg?react'
-import OpenRouterIcon from '@renderer/shared/assets/llm-icons/openrouter.svg?react'
-import ZhipuIcon from '@renderer/shared/assets/llm-icons/zhipu.svg?react'
+import AihubmixIconUrl from '@renderer/assets/llm-icons/aihubmix.png'
+import AnthropicIcon from '@renderer/assets/llm-icons/anthropic.svg?react'
+import AzureAiIcon from '@renderer/assets/llm-icons/azureai.svg?react'
+import DeepSeekIcon from '@renderer/assets/llm-icons/deepseek.svg?react'
+import GeminiIcon from '@renderer/assets/llm-icons/gemini.svg?react'
+import KimiIcon from '@renderer/assets/llm-icons/kimi.svg?react'
+import MoonshotIcon from '@renderer/assets/llm-icons/moonshot.svg?react'
+import OpenAiIcon from '@renderer/assets/llm-icons/openai.svg?react'
+import OpenRouterIcon from '@renderer/assets/llm-icons/openrouter.svg?react'
+import ZhipuIcon from '@renderer/assets/llm-icons/zhipu.svg?react'
 import { cn } from '@shadcn/lib/utils'
 import type { ProviderId } from '@shared/domain/provider'
 
@@ -78,9 +78,22 @@ const providerFallbackIcons = {
   'cloudflare-ai-gateway': Cloud
 } as const satisfies Partial<Record<ProviderId, ComponentType<{ className?: string }>>>
 
-export function ProviderCatalogIcon({ provider }: { provider: ProviderId }): React.JSX.Element {
+const providerIconSizeClassNames = {
+  sm: 'size-4',
+  md: 'size-5'
+} as const
+
+type ProviderCatalogIconProps = {
+  provider: ProviderId
+  size?: keyof typeof providerIconSizeClassNames
+}
+
+export function ProviderCatalogIcon({
+  provider,
+  size = 'md'
+}: ProviderCatalogIconProps): React.JSX.Element {
   const icon = providerIconAssets[provider]
-  const iconClassName = cn('size-5 shrink-0 text-muted-foreground')
+  const iconClassName = cn(providerIconSizeClassNames[size], 'shrink-0 text-muted-foreground')
 
   if (icon?.mode === 'component') {
     const Icon = icon.Icon

@@ -15,10 +15,13 @@ import { Input } from '@shadcn/ui/input'
 import { Label } from '@shadcn/ui/label'
 import { Switch } from '@shadcn/ui/switch'
 import { Textarea } from '@shadcn/ui/textarea'
-import type { ProviderModel, ProviderModelManualOverride } from '@shared/domain/provider'
+import {
+  resolveAutoProviderModelCapability,
+  type ProviderModel,
+  type ProviderModelManualOverride
+} from '@shared/domain/provider'
 
 import { FieldHint } from './ProviderField'
-import { resolveAutoModelCapability } from '../provider-model.utils'
 
 type ModelOptionsDraft = {
   supportsVision: boolean
@@ -33,10 +36,10 @@ type ModelOptionsDraft = {
 
 function createModelOptionsDraft(model: ProviderModel): ModelOptionsDraft {
   return {
-    supportsVision: resolveAutoModelCapability(model, 'supportsVision'),
+    supportsVision: resolveAutoProviderModelCapability(model, 'supportsVision'),
     supportsImageOutput: model.supportsImageOutput ?? false,
-    supportsToolCalling: resolveAutoModelCapability(model, 'supportsToolCalling'),
-    supportsReasoning: resolveAutoModelCapability(model, 'supportsReasoning'),
+    supportsToolCalling: resolveAutoProviderModelCapability(model, 'supportsToolCalling'),
+    supportsReasoning: resolveAutoProviderModelCapability(model, 'supportsReasoning'),
     supportsEmbedding: model.supportsEmbedding ?? false,
     contextWindow: model.contextWindow === undefined ? '' : String(model.contextWindow),
     maxOutputTokens: model.maxOutputTokens === undefined ? '' : String(model.maxOutputTokens),

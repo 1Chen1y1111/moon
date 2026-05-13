@@ -1,5 +1,5 @@
 import type { SettingsSection } from '@renderer/entities/settings'
-import { settingsPanelClassName } from '@renderer/shared/ui/settings-panel'
+import { settingsPanelClassName } from '@renderer/components/SettingsPanel'
 
 type PlaceholderSettingsSectionProps = {
   section: SettingsSection | undefined
