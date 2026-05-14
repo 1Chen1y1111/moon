@@ -89,13 +89,83 @@ describe('ChatPage', () => {
     const { user } = renderWithProviders(<ChatPage />)
 
     expect(screen.getByText('准备开始聊天')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '记忆' })).toHaveAttribute('aria-disabled', 'true')
-    expect(screen.getByRole('button', { name: '技能' })).toHaveAttribute('aria-disabled', 'true')
+    expect(screen.getByRole('button', { name: '记忆' })).not.toHaveAttribute(
+      'aria-disabled',
+      'true'
+    )
+    expect(screen.getByRole('button', { name: '技能' })).not.toHaveAttribute(
+      'aria-disabled',
+      'true'
+    )
     expect(screen.getByRole('button', { name: '发送' })).toBeDisabled()
 
     await user.type(screen.getByRole('textbox', { name: '消息内容' }), 'hello')
 
     expect(screen.getByRole('button', { name: '发送' })).toBeEnabled()
+  })
+
+  it('opens the web search action panel and toggles the search mode', async () => {
+    const { user } = renderWithProviders(<ChatPage />)
+
+    const searchButton = screen.getByRole('button', { name: '联网搜索' })
+
+    await user.click(searchButton)
+
+    expect(await screen.findByText('关闭搜索')).toBeInTheDocument()
+    expect(screen.getByText('智能联网')).toBeInTheDocument()
+    expect(screen.queryByText('使用模型内置的网络搜索。')).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /智能联网/ }))
+
+    expect(screen.getByText('使用模型内置的网络搜索。')).toBeInTheDocument()
+    expect(searchButton).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('opens the memory action panel and toggles memory effort', async () => {
+    const { user } = renderWithProviders(<ChatPage />)
+
+    const memoryButton = screen.getByRole('button', { name: '记忆' })
+
+    await user.click(memoryButton)
+
+    expect(await screen.findByText('关闭记忆')).toBeInTheDocument()
+    expect(screen.getByText('开启记忆')).toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: '记忆强度' })).not.toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: /开启记忆/ }))
+
+    expect(screen.getByRole('group', { name: '记忆强度' })).toBeInTheDocument()
+    expect(memoryButton).toHaveAttribute('aria-pressed', 'true')
+
+    await user.click(screen.getByRole('button', { name: '高' }))
+
+    expect(screen.getByRole('button', { name: '高' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('opens the skills action panel and toggles a skill', async () => {
+    const { user } = renderWithProviders(<ChatPage />)
+
+    const skillsButton = screen.getByRole('button', { name: '技能' })
+
+    await user.click(skillsButton)
+
+    expect(await screen.findByRole('textbox', { name: '搜索技能' })).toBeInTheDocument()
+    expect(screen.getByRole('group', { name: '技能启用模式' })).toBeInTheDocument()
+    expect(screen.getByText('上下文整理')).toBeInTheDocument()
+    expect(screen.getByText('代码助手')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '启用技能 代码助手' }))
+
+    expect(screen.getByRole('button', { name: '停用技能 代码助手' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+    expect(skillsButton).toHaveAttribute('aria-pressed', 'true')
+
+    await user.type(screen.getByRole('textbox', { name: '搜索技能' }), '文档')
+
+    expect(screen.getByText('文档阅读')).toBeInTheDocument()
+    expect(screen.queryByText('代码助手')).not.toBeInTheDocument()
   })
 
   it('sends a new chat message and renders the returned messages', async () => {
