@@ -2,7 +2,7 @@ import { FileText, ImageIcon, LoaderCircle, Paperclip, X } from 'lucide-react'
 
 import { Button } from '@shadcn/ui/button'
 
-import type { ChatInputAttachment } from '../ChatInput.types'
+import type { ChatInputAttachment } from '../types'
 
 export function AttachmentTray({
   attachments,

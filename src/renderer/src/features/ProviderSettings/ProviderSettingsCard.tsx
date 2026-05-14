@@ -13,9 +13,9 @@ import { ProviderHeader } from './components/ProviderHeader'
 import { ProviderModelList } from './components/ProviderModelList'
 import { ModelOptionsDialog } from './components/ProviderModelOptionsDialog'
 import { ProviderProxyEndpoints } from './components/ProviderProxyEndpoints'
-import type { ProviderDraft, ProviderFormErrors } from './provider-settings.types'
+import type { ProviderDraft, ProviderFormErrors } from './types'
 
-export type { ProviderDraft, ProviderFormErrors } from './provider-settings.types'
+export type { ProviderDraft, ProviderFormErrors } from './types'
 
 type ProviderSettingsCardProps = {
   provider: ProviderSettings

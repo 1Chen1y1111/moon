@@ -3,7 +3,7 @@ import { ChatInputFrame } from './components/ChatInputFrame'
 import { ChatInputToolbar } from './components/ChatInputToolbar'
 import { PlainTextComposer } from './components/PlainTextComposer'
 import { RuntimeBar } from './components/RuntimeBar'
-import type { ChatInputProps } from './ChatInput.types'
+import type { ChatInputProps } from './types'
 
 export function ChatInput({
   attachments = [],

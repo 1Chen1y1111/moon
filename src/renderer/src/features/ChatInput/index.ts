@@ -4,4 +4,4 @@ export type {
   ChatInputAttachment,
   ChatInputProps,
   ChatInputRuntimeInfo
-} from './ChatInput.types'
+} from './types'

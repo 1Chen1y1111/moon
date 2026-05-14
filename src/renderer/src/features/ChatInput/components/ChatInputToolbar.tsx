@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 
-import type { ChatInputAction } from '../ChatInput.types'
+import type { ChatInputAction } from '../types'
 import { ChatInputActionButton } from './ChatInputActionButton'
 import { SendControls } from './SendControls'
 

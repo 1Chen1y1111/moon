@@ -1,7 +1,7 @@
 import { Button } from '@shadcn/ui/button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@shadcn/ui/tooltip'
 
-import type { ChatInputAction } from '../ChatInput.types'
+import type { ChatInputAction } from '../types'
 
 export function ChatInputActionButton({ action }: { action: ChatInputAction }): React.JSX.Element {
   const Icon = action.icon

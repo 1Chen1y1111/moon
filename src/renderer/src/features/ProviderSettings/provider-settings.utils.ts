@@ -1,7 +1,7 @@
 import type { ProviderModel } from '@shared/domain/provider'
 import type { ProviderSettings } from '@shared/domain/settings'
 
-import type { ProviderDraft } from './provider-settings.types'
+import type { ProviderDraft } from './types'
 
 export function createDraftFromProvider(provider: ProviderSettings): ProviderDraft {
   return {

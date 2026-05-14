@@ -8,7 +8,7 @@ import type {
   SaveProviderInput
 } from '@shared/domain/settings-validation'
 
-import type { SettingsSectionId } from '@renderer/entities/settings/model/settings.types'
+import type { SettingsSectionId } from '@renderer/entities/settings/model/types'
 import type { StoreSetter } from '@renderer/store/types'
 
 import type { SettingsStore } from './store'

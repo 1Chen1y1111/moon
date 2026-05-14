@@ -20,7 +20,7 @@ import type {
   CustomProviderInput,
   ProviderDraft,
   ProviderFormErrors
-} from './provider-settings.types'
+} from './types'
 import {
   createDraftFromProvider,
   getErrorMessage,

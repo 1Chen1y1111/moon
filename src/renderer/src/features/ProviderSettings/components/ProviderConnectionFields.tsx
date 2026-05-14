@@ -6,7 +6,7 @@ import { cn } from '@shadcn/lib/utils'
 import type { ProviderSettings } from '@shared/domain/settings'
 
 import { FieldHint, FieldLabel } from './ProviderField'
-import type { ProviderDraft, ProviderFormErrors } from '../provider-settings.types'
+import type { ProviderDraft, ProviderFormErrors } from '../types'
 
 export function EnableOnlyProviderCard({
   description,

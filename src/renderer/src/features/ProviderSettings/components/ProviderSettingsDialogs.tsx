@@ -19,7 +19,7 @@ import { Textarea } from '@shadcn/ui/textarea'
 import { cn } from '@shadcn/lib/utils'
 import type { ProviderApiFormat } from '@shared/domain/provider'
 
-import type { CustomAcpProviderInput, CustomProviderInput } from '../provider-settings.types'
+import type { CustomAcpProviderInput, CustomProviderInput } from '../types'
 
 function DialogFieldLabel({
   children,

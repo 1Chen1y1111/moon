@@ -1,4 +1,4 @@
-import type { ChatInputRuntimeInfo } from '../ChatInput.types'
+import type { ChatInputRuntimeInfo } from '../types'
 
 export function RuntimeBar({
   runtimeInfo

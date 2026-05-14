@@ -1,6 +1,6 @@
 import type { AppSettings } from '@shared/domain/settings'
 
-import type { SettingsSectionId } from '@renderer/entities/settings/model/settings.types'
+import type { SettingsSectionId } from '@renderer/entities/settings/model/types'
 
 import type { SettingsState } from './types'
 

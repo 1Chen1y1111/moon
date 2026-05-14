@@ -25,7 +25,7 @@ import {
   Workflow
 } from 'lucide-react'
 
-import type { SettingsSection } from '../model/settings.types'
+import type { SettingsSection } from '../model/types'
 
 export const settingsSections: SettingsSection[] = [
   {
