@@ -24,10 +24,15 @@ function getRegisteredHandler(channel: string): ((...args: unknown[]) => unknown
 
 describe('registerIpcHandlers', () => {
   const chatService = {
+    approveToolCall: vi.fn(),
+    cancelOperation: vi.fn(),
     createSession: vi.fn(),
     getMessages: vi.fn(),
     importAttachment: vi.fn(),
+    listThreads: vi.fn(),
     listSessions: vi.fn(),
+    listTopics: vi.fn(),
+    rejectToolCall: vi.fn(),
     sendMessage: vi.fn()
   }
   const settingsService = {
@@ -43,10 +48,15 @@ describe('registerIpcHandlers', () => {
     fromWebContentsMock.mockReset()
     getAllWindowsMock.mockReset()
     getAllWindowsMock.mockReturnValue([])
+    chatService.approveToolCall.mockReset()
+    chatService.cancelOperation.mockReset()
     chatService.createSession.mockReset()
     chatService.getMessages.mockReset()
     chatService.importAttachment.mockReset()
+    chatService.listThreads.mockReset()
     chatService.listSessions.mockReset()
+    chatService.listTopics.mockReset()
+    chatService.rejectToolCall.mockReset()
     chatService.sendMessage.mockReset()
     settingsService.getSettings.mockReset()
     settingsService.saveAppearance.mockReset()
@@ -105,10 +115,49 @@ describe('registerIpcHandlers', () => {
     const message = {
       id: 'message-1',
       sessionId: 'session-1',
+      topicId: 'topic-1',
+      threadId: 'thread-1',
       role: 'user',
       content: 'hello',
+      status: 'complete',
       createdAt: '2026-05-09T00:00:00.000Z',
       updatedAt: '2026-05-09T00:00:00.000Z'
+    }
+    const topic = {
+      id: 'topic-1',
+      sessionId: 'session-1',
+      title: '默认话题',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:00.000Z'
+    }
+    const thread = {
+      id: 'thread-1',
+      topicId: 'topic-1',
+      title: '主线',
+      type: 'standalone',
+      status: 'active',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:00.000Z'
+    }
+    const operation = {
+      id: 'operation-1',
+      appContext: { sessionId: 'session-1' },
+      topicId: 'topic-1',
+      threadId: 'thread-1',
+      status: 'done',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:01.000Z',
+      completedAt: '2026-05-09T00:00:01.000Z'
+    }
+    const toolInvocation = {
+      id: 'tool-1',
+      operationId: 'operation-1',
+      messageId: 'message-1',
+      name: 'read_file',
+      arguments: {},
+      status: 'done',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:01.000Z'
     }
     const attachment = {
       id: 'attachment-1',
@@ -127,9 +176,20 @@ describe('registerIpcHandlers', () => {
 
     chatService.listSessions.mockResolvedValue([session])
     chatService.getMessages.mockResolvedValue([message])
+    chatService.listTopics.mockResolvedValue([topic])
+    chatService.listThreads.mockResolvedValue([thread])
     chatService.createSession.mockResolvedValue(session)
     chatService.importAttachment.mockResolvedValue(attachment)
-    chatService.sendMessage.mockResolvedValue({ session, messages: [message] })
+    chatService.sendMessage.mockResolvedValue({
+      session,
+      topic,
+      thread,
+      operation,
+      messages: [message]
+    })
+    chatService.cancelOperation.mockResolvedValue(operation)
+    chatService.approveToolCall.mockResolvedValue(toolInvocation)
+    chatService.rejectToolCall.mockResolvedValue({ ...toolInvocation, status: 'rejected' })
 
     registerIpcHandlers({
       chatService: chatService as never,
@@ -146,6 +206,18 @@ describe('registerIpcHandlers', () => {
         { sessionId: 'session-1' }
       )
     ).toEqual([message])
+    expect(
+      await getRegisteredHandler(ipcChannels.chat.listTopics)?.(
+        { sender: {} },
+        { sessionId: 'session-1' }
+      )
+    ).toEqual([topic])
+    expect(
+      await getRegisteredHandler(ipcChannels.chat.listThreads)?.(
+        { sender: {} },
+        { topicId: 'topic-1' }
+      )
+    ).toEqual([thread])
     expect(await getRegisteredHandler(ipcChannels.chat.createSession)?.({ sender: {} })).toBe(
       session
     )
@@ -160,18 +232,51 @@ describe('registerIpcHandlers', () => {
       await getRegisteredHandler(ipcChannels.chat.sendMessage)?.({ sender }, { content: 'hello' })
     ).toEqual({
       session,
+      topic,
+      thread,
+      operation,
       messages: [message]
     })
+    expect(
+      await getRegisteredHandler(ipcChannels.chat.cancelOperation)?.(
+        { sender: {} },
+        { operationId: 'operation-1' }
+      )
+    ).toBe(operation)
+    expect(
+      await getRegisteredHandler(ipcChannels.chat.approveToolCall)?.(
+        { sender: {} },
+        { toolInvocationId: 'tool-1' }
+      )
+    ).toBe(toolInvocation)
+    expect(
+      await getRegisteredHandler(ipcChannels.chat.rejectToolCall)?.(
+        { sender: {} },
+        { toolInvocationId: 'tool-1' }
+      )
+    ).toEqual({ ...toolInvocation, status: 'rejected' })
     expect(chatService.getMessages).toHaveBeenCalledWith({ sessionId: 'session-1' })
+    expect(chatService.listTopics).toHaveBeenCalledWith({ sessionId: 'session-1' })
+    expect(chatService.listThreads).toHaveBeenCalledWith({ topicId: 'topic-1' })
     expect(chatService.importAttachment).toHaveBeenCalledWith(attachmentInput)
     expect(chatService.sendMessage).toHaveBeenCalledWith({ content: 'hello' }, expect.any(Function))
 
     const eventListener = chatService.sendMessage.mock.calls[0][1]
-    eventListener({ type: 'user-message', session, message })
+    eventListener({
+      type: 'message-created',
+      operationId: 'operation-1',
+      session,
+      topic,
+      thread,
+      message
+    })
 
     expect(sender.send).toHaveBeenCalledWith(ipcChannels.chat.sendMessageEvent, {
-      type: 'user-message',
+      type: 'message-created',
+      operationId: 'operation-1',
       session,
+      topic,
+      thread,
       message
     })
   })

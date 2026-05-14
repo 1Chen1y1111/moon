@@ -1,12 +1,19 @@
 import type {
+  AgentOperationRecord,
   MessageRecord,
   SendMessageEvent,
   SendMessageResult,
-  SessionRecord
+  SessionRecord,
+  ThreadRecord,
+  ToolInvocationRecord,
+  TopicRecord
 } from '@shared/domain/chat'
 import {
   maxChatAttachmentsPerMessage,
   maxChatAttachmentSizeBytes,
+  type ApproveToolCallInput,
+  type CancelAgentOperationInput,
+  type RejectToolCallInput,
   type SendChatMessageInput
 } from '@shared/domain/chat-validation'
 
@@ -27,12 +34,18 @@ function createRequestId(prefix: string): string {
 
 function createOptimisticMessage(input: SendChatMessageInput, requestId: string): MessageRecord {
   const timestamp = new Date().toISOString()
+  const sessionId = input.sessionId ?? `pending-session-${requestId}`
+  const topicId = input.topicId ?? `pending-topic-${requestId}`
+  const threadId = input.threadId ?? `pending-thread-${requestId}`
 
   return {
     id: `pending-${requestId}`,
-    sessionId: input.sessionId ?? `pending-session-${requestId}`,
+    sessionId,
+    topicId,
+    threadId,
     role: 'user',
     content: input.content.trim(),
+    status: 'pending',
     ...(input.attachments === undefined || input.attachments.length === 0
       ? {}
       : { attachments: input.attachments }),
@@ -128,6 +141,12 @@ export class ChatActionImpl {
 
   loadChatSessions = (): Promise<SessionRecord[]> => this.internal_loadChatSessions()
 
+  loadChatTopics = (sessionId: string): Promise<TopicRecord[]> =>
+    this.internal_loadChatTopics(sessionId)
+
+  loadChatThreads = (topicId: string): Promise<ThreadRecord[]> =>
+    this.internal_loadChatThreads(topicId)
+
   loadChatMessages = (sessionId: string): Promise<MessageRecord[]> =>
     this.internal_loadChatMessages(sessionId)
 
@@ -135,6 +154,15 @@ export class ChatActionImpl {
 
   sendChatMessage = (input: SendChatMessageInput): Promise<SendMessageResult> =>
     this.internal_sendChatMessage(input)
+
+  cancelChatOperation = (input: CancelAgentOperationInput): Promise<AgentOperationRecord> =>
+    this.internal_cancelChatOperation(input)
+
+  approveChatToolCall = (input: ApproveToolCallInput): Promise<ToolInvocationRecord> =>
+    this.internal_approveChatToolCall(input)
+
+  rejectChatToolCall = (input: RejectToolCallInput): Promise<ToolInvocationRecord> =>
+    this.internal_rejectChatToolCall(input)
 
   removeChatDraftAttachment = (id: string): void => {
     const attachment = this.#get().draftAttachments.find((candidate) => candidate.id === id)
@@ -182,15 +210,47 @@ export class ChatActionImpl {
     }
   }
 
-  internal_loadChatMessages = async (sessionId: string): Promise<MessageRecord[]> => {
-    const requestId = createRequestId('load-messages')
-    this.internal_dispatchChat({ type: 'loadChatMessagesPending', sessionId, requestId })
+  internal_loadChatTopics = async (sessionId: string): Promise<TopicRecord[]> => {
+    this.internal_dispatchChat({ type: 'loadChatTopicsPending', sessionId })
 
     try {
-      const messages = await window.api.chat.getMessages({ sessionId })
+      const topics = await window.api.chat.listTopics({ sessionId })
+      this.internal_dispatchChat({ type: 'loadChatTopicsFulfilled', sessionId, topics })
+      return topics
+    } catch (error) {
+      this.internal_dispatchChat({ type: 'loadChatTopicsRejected', error, sessionId })
+      throw error
+    }
+  }
+
+  internal_loadChatThreads = async (topicId: string): Promise<ThreadRecord[]> => {
+    this.internal_dispatchChat({ type: 'loadChatThreadsPending', topicId })
+
+    try {
+      const threads = await window.api.chat.listThreads({ topicId })
+      this.internal_dispatchChat({ type: 'loadChatThreadsFulfilled', threads, topicId })
+      return threads
+    } catch (error) {
+      this.internal_dispatchChat({ type: 'loadChatThreadsRejected', error, topicId })
+      throw error
+    }
+  }
+
+  internal_loadChatMessages = async (sessionId: string): Promise<MessageRecord[]> => {
+    const requestId = createRequestId('load-messages')
+    const threadId = this.#get().activeThreadId ?? undefined
+
+    this.internal_dispatchChat({ type: 'loadChatMessagesPending', sessionId, threadId, requestId })
+
+    try {
+      const messages = await window.api.chat.getMessages({
+        sessionId,
+        ...(threadId === undefined ? {} : { threadId })
+      })
       this.internal_dispatchChat({
         type: 'loadChatMessagesFulfilled',
         sessionId,
+        threadId,
         requestId,
         messages
       })
@@ -199,6 +259,7 @@ export class ChatActionImpl {
       this.internal_dispatchChat({
         type: 'loadChatMessagesRejected',
         sessionId,
+        threadId,
         requestId,
         error
       })
@@ -242,6 +303,30 @@ export class ChatActionImpl {
 
   internal_dispatchChat = (action: ChatReducerAction): void => {
     this.#set((state) => chatReducer(state, action))
+  }
+
+  internal_cancelChatOperation = async (
+    input: CancelAgentOperationInput
+  ): Promise<AgentOperationRecord> => {
+    const operation = await window.api.chat.cancelOperation(input)
+    this.internal_dispatchChat({ type: 'cancelChatOperationFulfilled', operation })
+    return operation
+  }
+
+  internal_approveChatToolCall = async (
+    input: ApproveToolCallInput
+  ): Promise<ToolInvocationRecord> => {
+    const toolInvocation = await window.api.chat.approveToolCall(input)
+    this.internal_dispatchChat({ type: 'updateChatToolInvocation', toolInvocation })
+    return toolInvocation
+  }
+
+  internal_rejectChatToolCall = async (
+    input: RejectToolCallInput
+  ): Promise<ToolInvocationRecord> => {
+    const toolInvocation = await window.api.chat.rejectToolCall(input)
+    this.internal_dispatchChat({ type: 'updateChatToolInvocation', toolInvocation })
+    return toolInvocation
   }
 
   internal_uploadChatAttachment = async (file: File): Promise<void> => {

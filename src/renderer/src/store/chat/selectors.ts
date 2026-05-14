@@ -31,6 +31,28 @@ export function selectChatSessionsStatus(state: ChatState): ChatState['sessionsS
   return state.sessionsStatus
 }
 
+export function selectChatTopics(state: ChatState): ChatState['topics'] {
+  return state.topics
+}
+
+export function selectChatThreads(state: ChatState): ChatState['threads'] {
+  return state.threads
+}
+
+export function selectChatActiveThreadId(state: ChatState): string | null {
+  return state.activeThreadId
+}
+
+export function selectChatActiveOperationId(state: ChatState): string | null {
+  return state.activeOperationId
+}
+
+export function selectPendingToolInvocations(
+  state: ChatState
+): ChatState['pendingToolInvocations'] {
+  return state.pendingToolInvocations
+}
+
 export function selectChatMessagesStatus(state: ChatState): ChatState['messagesStatus'] {
   return state.messagesStatus
 }

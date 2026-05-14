@@ -18,9 +18,14 @@ const api: MoonApi = {
   chat: {
     listSessions: () => invokeIpcChannel(ipcChannels.chat.listSessions),
     getMessages: (input) => invokeIpcChannel(ipcChannels.chat.getMessages, input),
+    listTopics: (input) => invokeIpcChannel(ipcChannels.chat.listTopics, input),
+    listThreads: (input) => invokeIpcChannel(ipcChannels.chat.listThreads, input),
     createSession: () => invokeIpcChannel(ipcChannels.chat.createSession),
     importAttachment: (input) => invokeIpcChannel(ipcChannels.chat.importAttachment, input),
     sendMessage: (input) => invokeIpcChannel(ipcChannels.chat.sendMessage, input),
+    cancelOperation: (input) => invokeIpcChannel(ipcChannels.chat.cancelOperation, input),
+    approveToolCall: (input) => invokeIpcChannel(ipcChannels.chat.approveToolCall, input),
+    rejectToolCall: (input) => invokeIpcChannel(ipcChannels.chat.rejectToolCall, input),
     onSendMessageEvent: (listener) => {
       const channel = ipcChannels.chat.sendMessageEvent
       const handler = (_event: unknown, payload: Parameters<typeof listener>[0]): void =>
