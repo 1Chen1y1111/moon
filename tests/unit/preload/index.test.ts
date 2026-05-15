@@ -62,6 +62,8 @@ describe('preload api', () => {
     await api.settings.get()
     await api.chat.listSessions()
     await api.chat.getMessages({ sessionId: 'session-1' })
+    await api.chat.listTopics({ sessionId: 'session-1' })
+    await api.chat.listThreads({ topicId: 'topic-1' })
     await api.chat.createSession()
     await api.chat.importAttachment({
       name: 'note.txt',
@@ -70,6 +72,9 @@ describe('preload api', () => {
       data: new ArrayBuffer(5)
     })
     await api.chat.sendMessage({ content: 'hello' })
+    await api.chat.cancelOperation({ operationId: 'operation-1' })
+    await api.chat.approveToolCall({ toolInvocationId: 'tool-1' })
+    await api.chat.rejectToolCall({ toolInvocationId: 'tool-1' })
     await api.settings.saveAppearance({ theme: 'dark' })
     await api.settings.saveProvider(input)
     await api.windowControls.openSettings({ section: 'providers' })
@@ -79,6 +84,12 @@ describe('preload api', () => {
     expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.getMessages, {
       sessionId: 'session-1'
     })
+    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.listTopics, {
+      sessionId: 'session-1'
+    })
+    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.listThreads, {
+      topicId: 'topic-1'
+    })
     expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.createSession)
     expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.importAttachment, {
       name: 'note.txt',
@@ -87,6 +98,15 @@ describe('preload api', () => {
       data: expect.any(ArrayBuffer)
     })
     expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.sendMessage, { content: 'hello' })
+    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.cancelOperation, {
+      operationId: 'operation-1'
+    })
+    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.approveToolCall, {
+      toolInvocationId: 'tool-1'
+    })
+    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.rejectToolCall, {
+      toolInvocationId: 'tool-1'
+    })
     expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.settings.saveAppearance, {
       theme: 'dark'
     })
@@ -144,7 +164,11 @@ describe('preload api', () => {
     const api = getExposedApi()
     const listener = vi.fn()
     const event = {
-      type: 'assistant-delta',
+      type: 'message-delta',
+      operationId: 'operation-1',
+      sessionId: 'session-1',
+      topicId: 'topic-1',
+      threadId: 'thread-1',
       messageId: 'message-1',
       delta: 'hello'
     } as const

@@ -7,7 +7,14 @@ import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ChatService } from '@main/services/chat-service'
-import type { MessageRecord, SessionRecord } from '@shared/domain/chat'
+import type {
+  AgentOperationRecord,
+  MessageRecord,
+  ThreadRecord,
+  ToolInvocationRecord,
+  TopicRecord
+} from '@shared/domain/chat'
+import type { SessionRecord } from '@shared/domain/chat'
 import { createDefaultAppSettings, createDefaultProviderSettings } from '@shared/domain/settings'
 import type { AppSettings, ProviderSettings } from '@shared/domain/settings'
 
@@ -111,10 +118,121 @@ class MessagesRepositoryMock {
     return this.messages.filter((message) => message.sessionId === sessionId)
   }
 
+  async listByThread(threadId: string): Promise<MessageRecord[]> {
+    return this.messages.filter((message) => message.threadId === threadId)
+  }
+
   async save(message: MessageRecord): Promise<MessageRecord> {
-    this.messages.push(message)
+    const index = this.messages.findIndex((candidate) => candidate.id === message.id)
+
+    if (index === -1) {
+      this.messages.push(message)
+    } else {
+      this.messages[index] = message
+    }
 
     return message
+  }
+}
+
+class TopicsRepositoryMock {
+  readonly topics: TopicRecord[]
+
+  constructor(topics: TopicRecord[] = []) {
+    this.topics = topics
+  }
+
+  async listBySession(sessionId: string): Promise<TopicRecord[]> {
+    return this.topics.filter((topic) => topic.sessionId === sessionId)
+  }
+
+  async findById(id: string): Promise<TopicRecord | null> {
+    return this.topics.find((topic) => topic.id === id) ?? null
+  }
+
+  async save(topic: TopicRecord): Promise<TopicRecord> {
+    const index = this.topics.findIndex((candidate) => candidate.id === topic.id)
+
+    if (index === -1) {
+      this.topics.push(topic)
+    } else {
+      this.topics[index] = topic
+    }
+
+    return topic
+  }
+}
+
+class ThreadsRepositoryMock {
+  readonly threads: ThreadRecord[]
+
+  constructor(threads: ThreadRecord[] = []) {
+    this.threads = threads
+  }
+
+  async listBySession(_sessionId: string): Promise<ThreadRecord[]> {
+    void _sessionId
+    return this.threads
+  }
+
+  async listByTopic(topicId: string): Promise<ThreadRecord[]> {
+    return this.threads.filter((thread) => thread.topicId === topicId)
+  }
+
+  async findById(id: string): Promise<ThreadRecord | null> {
+    return this.threads.find((thread) => thread.id === id) ?? null
+  }
+
+  async save(thread: ThreadRecord): Promise<ThreadRecord> {
+    const index = this.threads.findIndex((candidate) => candidate.id === thread.id)
+
+    if (index === -1) {
+      this.threads.push(thread)
+    } else {
+      this.threads[index] = thread
+    }
+
+    return thread
+  }
+}
+
+class AgentOperationsRepositoryMock {
+  readonly operations: AgentOperationRecord[] = []
+
+  async findById(id: string): Promise<AgentOperationRecord | null> {
+    return this.operations.find((operation) => operation.id === id) ?? null
+  }
+
+  async save(operation: AgentOperationRecord): Promise<AgentOperationRecord> {
+    const index = this.operations.findIndex((candidate) => candidate.id === operation.id)
+
+    if (index === -1) {
+      this.operations.push(operation)
+    } else {
+      this.operations[index] = operation
+    }
+
+    return operation
+  }
+}
+
+class ToolInvocationsRepositoryMock {
+  readonly invocations: ToolInvocationRecord[] = []
+
+  async findById(id: string): Promise<ToolInvocationRecord | null> {
+    return this.invocations.find((invocation) => invocation.id === id) ?? null
+  }
+
+  async save(invocation: ToolInvocationRecord): Promise<ToolInvocationRecord> {
+    const index = this.invocations.findIndex((candidate) => candidate.id === invocation.id)
+
+    if (index === -1) {
+      this.invocations.push(invocation)
+    } else {
+      this.invocations[index] = invocation
+    }
+
+    return invocation
   }
 }
 
@@ -138,6 +256,28 @@ function createService(input: {
 }): CreateServiceResult {
   const sessionsRepository = new SessionsRepositoryMock(input.sessions)
   const messagesRepository = new MessagesRepositoryMock(input.messages)
+  const topicsRepository = new TopicsRepositoryMock(
+    input.sessions?.map((session) => ({
+      id: `topic-${session.id}`,
+      sessionId: session.id,
+      title: '默认话题',
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt
+    }))
+  )
+  const threadsRepository = new ThreadsRepositoryMock(
+    topicsRepository.topics.map((topic) => ({
+      id: `thread-${topic.sessionId}`,
+      topicId: topic.id,
+      title: '主线',
+      type: 'standalone',
+      status: 'active',
+      createdAt: topic.createdAt,
+      updatedAt: topic.updatedAt
+    }))
+  )
+  const agentOperationsRepository = new AgentOperationsRepositoryMock()
+  const toolInvocationsRepository = new ToolInvocationsRepositoryMock()
   const settingsRepository = {
     getProviderApiKey: vi.fn(
       async (provider: string) => input.settings.providers[provider]?.apiKey ?? ''
@@ -148,12 +288,21 @@ function createService(input: {
   return {
     messagesRepository,
     service: new ChatService({
+      agentOperationsRepository: agentOperationsRepository as never,
       attachmentsDirectory: input.attachmentsDirectory,
-      generateText: input.generateText as never,
       messagesRepository: messagesRepository as never,
       sessionsRepository: sessionsRepository as never,
       settingsRepository: settingsRepository as never,
-      streamText: input.streamText as never
+      streamText:
+        input.streamText ??
+        ((agentInput) => ({
+          textStream: (async function* (): AsyncGenerator<string> {
+            yield (await input.generateText?.(agentInput as never))?.text ?? ''
+          })()
+        })),
+      threadsRepository: threadsRepository as never,
+      toolInvocationsRepository: toolInvocationsRepository as never,
+      topicsRepository: topicsRepository as never
     }),
     sessionsRepository,
     settingsRepository
@@ -432,11 +581,16 @@ describe('ChatService.sendMessage', () => {
     await expect(service.sendMessage({ sessionId: 'session-1', content: '继续' })).rejects.toThrow(
       'Model returned an empty response.'
     )
-    expect(messagesRepository.messages).toHaveLength(1)
+    expect(messagesRepository.messages).toHaveLength(2)
     expect(messagesRepository.messages[0]).toMatchObject({
       content: '继续',
       role: 'user',
       sessionId: 'session-1'
+    })
+    expect(messagesRepository.messages[1]).toMatchObject({
+      role: 'assistant',
+      status: 'error',
+      error: 'Model returned an empty response.'
     })
   })
 
@@ -463,11 +617,11 @@ describe('ChatService.sendMessage', () => {
 
     expect(result.messages.map((message) => message.content)).toEqual(['测试', '你好，Moon'])
     expect(events.map((event) => (event as { type: string }).type)).toEqual([
-      'user-message',
-      'assistant-start',
-      'assistant-delta',
-      'assistant-delta',
-      'assistant-finish'
+      'message-created',
+      'message-created',
+      'message-delta',
+      'message-delta',
+      'operation-done'
     ])
   })
 

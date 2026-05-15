@@ -25,9 +25,14 @@ export function registerIpcHandlers({
 }: RegisterIpcDependencies): void {
   ipcMain.removeHandler(ipcChannels.chat.listSessions)
   ipcMain.removeHandler(ipcChannels.chat.getMessages)
+  ipcMain.removeHandler(ipcChannels.chat.listTopics)
+  ipcMain.removeHandler(ipcChannels.chat.listThreads)
   ipcMain.removeHandler(ipcChannels.chat.createSession)
   ipcMain.removeHandler(ipcChannels.chat.importAttachment)
   ipcMain.removeHandler(ipcChannels.chat.sendMessage)
+  ipcMain.removeHandler(ipcChannels.chat.cancelOperation)
+  ipcMain.removeHandler(ipcChannels.chat.approveToolCall)
+  ipcMain.removeHandler(ipcChannels.chat.rejectToolCall)
   ipcMain.removeHandler(ipcChannels.settings.get)
   ipcMain.removeHandler(ipcChannels.settings.createCustomProvider)
   ipcMain.removeHandler(ipcChannels.settings.createCustomAcpProvider)
@@ -44,6 +49,8 @@ export function registerIpcHandlers({
 
   ipcMain.handle(ipcChannels.chat.listSessions, () => chatService.listSessions())
   ipcMain.handle(ipcChannels.chat.getMessages, (_event, input) => chatService.getMessages(input))
+  ipcMain.handle(ipcChannels.chat.listTopics, (_event, input) => chatService.listTopics(input))
+  ipcMain.handle(ipcChannels.chat.listThreads, (_event, input) => chatService.listThreads(input))
   ipcMain.handle(ipcChannels.chat.createSession, () => chatService.createSession())
   ipcMain.handle(ipcChannels.chat.importAttachment, (_event, input) =>
     chatService.importAttachment(input)
@@ -52,6 +59,15 @@ export function registerIpcHandlers({
     chatService.sendMessage(input, (messageEvent) => {
       event.sender.send(ipcChannels.chat.sendMessageEvent, messageEvent)
     })
+  )
+  ipcMain.handle(ipcChannels.chat.cancelOperation, (_event, input) =>
+    chatService.cancelOperation(input)
+  )
+  ipcMain.handle(ipcChannels.chat.approveToolCall, (_event, input) =>
+    chatService.approveToolCall(input)
+  )
+  ipcMain.handle(ipcChannels.chat.rejectToolCall, (_event, input) =>
+    chatService.rejectToolCall(input)
   )
   ipcMain.handle(ipcChannels.settings.get, () => settingsService.getSettings())
   ipcMain.handle(ipcChannels.settings.createCustomProvider, async (_event, input) => {

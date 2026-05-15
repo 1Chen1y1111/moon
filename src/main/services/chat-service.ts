@@ -6,69 +6,85 @@ import { createAnthropic } from '@ai-sdk/anthropic'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createOpenAI } from '@ai-sdk/openai'
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
-import {
-  streamText as streamGeneratedText,
-  type FilePart,
-  type ImagePart,
-  type LanguageModel,
-  type ModelMessage,
-  type TextPart
-} from 'ai'
+import type { FilePart, ImagePart, LanguageModel, ModelMessage, TextPart } from 'ai'
 
+import { LocalAgentRuntime, type StreamTextFunction } from '../agent-runtime/local-agent-runtime'
+import type { AgentRuntime, AgentRuntimeEvent } from '../agent-runtime/types'
+import type { AgentOperationsRepository } from '../repositories/agent-operations-repository'
+import type { MessagesRepository } from '../repositories/messages-repository'
+import type { SessionsRepository } from '../repositories/sessions-repository'
+import type { ThreadsRepository } from '../repositories/threads-repository'
+import type { ToolInvocationsRepository } from '../repositories/tool-invocations-repository'
+import type { TopicsRepository } from '../repositories/topics-repository'
 import type {
+  AgentOperationRecord,
   ChatAttachmentKind,
   ChatAttachmentRecord,
   MessageRecord,
   SendMessageEvent,
   SendMessageResult,
-  SessionRecord
-} from '@shared/domain/chat'
+  SessionRecord,
+  ThreadRecord,
+  ToolInvocationRecord,
+  TopicRecord
+} from '../../shared/domain/chat'
+import { defaultChatUserId } from '../../shared/domain/chat'
 import {
+  approveToolCallInputSchema,
+  cancelAgentOperationInputSchema,
   getChatMessagesInputSchema,
   importChatAttachmentInputSchema,
+  listChatThreadsInputSchema,
+  listChatTopicsInputSchema,
+  rejectToolCallInputSchema,
   sendChatMessageInputSchema,
+  type ApproveToolCallInput,
+  type CancelAgentOperationInput,
   type GetChatMessagesInput,
   type ImportChatAttachmentInput,
+  type ListChatThreadsInput,
+  type ListChatTopicsInput,
+  type RejectToolCallInput,
   type SendChatMessageInput
-} from '@shared/domain/chat-validation'
+} from '../../shared/domain/chat-validation'
 import {
   isOpenAICompatibleProvider,
   isSupportedChatProvider,
   selectChatModel,
   selectDefaultChatProvider
-} from '@shared/domain/chat-provider'
-import type { ProviderSettings } from '@shared/domain/settings'
-import type { MessagesRepository } from '../repositories/messages-repository'
-import type { SessionsRepository } from '../repositories/sessions-repository'
+} from '../../shared/domain/chat-provider'
+import type { ProviderSettings } from '../../shared/domain/settings'
 import type { SettingsRepository } from '../repositories/settings-repository'
 
 const newChatTitle = '新聊天'
+const defaultTopicTitle = '默认话题'
+const defaultThreadTitle = '主线'
 const titleMaxLength = 48
 
 type ChatServiceDependencies = {
+  agentOperationsRepository: AgentOperationsRepository
+  agentRuntime?: AgentRuntime
   attachmentsDirectory?: string
-  settingsRepository: SettingsRepository
-  sessionsRepository: SessionsRepository
   messagesRepository: MessagesRepository
-  generateText?: GenerateTextFunction
+  sessionsRepository: SessionsRepository
+  settingsRepository: SettingsRepository
   streamText?: StreamTextFunction
-}
-
-type GenerateTextFunction = (input: {
-  model: LanguageModel
-  messages: ModelMessage[]
-}) => Promise<{ text: string }>
-
-type StreamTextFunction = (input: { model: LanguageModel; messages: ModelMessage[] }) => {
-  textStream: AsyncIterable<string>
+  threadsRepository: ThreadsRepository
+  toolInvocationsRepository: ToolInvocationsRepository
+  topicsRepository: TopicsRepository
 }
 
 type SendMessageEventListener = (event: SendMessageEvent) => void
 
-type ResolvedSessionProvider = {
-  session: SessionRecord | null
+type ResolvedProvider = {
   provider: ProviderSettings
-  existingMessages: MessageRecord[]
+  session: SessionRecord | null
+}
+
+type ConversationScope = {
+  session: SessionRecord
+  topic: TopicRecord
+  thread: ThreadRecord
 }
 
 type AiProviderOptions = {
@@ -166,6 +182,22 @@ function createAiProviderOptions(provider: ProviderSettings): AiProviderOptions 
   }
 }
 
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message
+  }
+
+  return String(error)
+}
+
+function normalizeToolResult(value: unknown): Record<string, unknown> {
+  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
+    return value as Record<string, unknown>
+  }
+
+  return { value }
+}
+
 export {
   isOpenAICompatibleProvider,
   isSupportedChatProvider,
@@ -231,6 +263,10 @@ async function toModelMessage(
   message: MessageRecord,
   attachmentsDirectory: string
 ): Promise<ModelMessage | null> {
+  if (message.status === 'error' || message.status === 'cancelled') {
+    return null
+  }
+
   if (message.role === 'user') {
     if ((message.attachments?.length ?? 0) > 0) {
       const content: Array<TextPart | ImagePart | FilePart> =
@@ -266,7 +302,7 @@ async function toModelMessage(
     return { role: 'user', content: message.content }
   }
 
-  if (message.role === 'assistant') {
+  if (message.role === 'assistant' && message.content.trim().length > 0) {
     return { role: 'assistant', content: message.content }
   }
 
@@ -278,62 +314,78 @@ async function toModelMessage(
 }
 
 export class ChatService {
+  private readonly activeOperations = new Map<string, AbortController>()
+  private readonly agentOperationsRepository: AgentOperationsRepository
+  private readonly agentRuntime: AgentRuntime
   private readonly attachmentsDirectory: string
-  private readonly settingsRepository: SettingsRepository
-  private readonly sessionsRepository: SessionsRepository
   private readonly messagesRepository: MessagesRepository
-  private readonly streamText: StreamTextFunction
+  private readonly sessionsRepository: SessionsRepository
+  private readonly settingsRepository: SettingsRepository
+  private readonly threadsRepository: ThreadsRepository
+  private readonly toolInvocationsRepository: ToolInvocationsRepository
+  private readonly topicsRepository: TopicsRepository
 
   constructor({
+    agentOperationsRepository,
+    agentRuntime,
     attachmentsDirectory,
-    generateText: generateTextFunction,
     messagesRepository,
     sessionsRepository,
     settingsRepository,
-    streamText: streamTextFunction
+    streamText,
+    threadsRepository,
+    toolInvocationsRepository,
+    topicsRepository
   }: ChatServiceDependencies) {
+    this.agentOperationsRepository = agentOperationsRepository
+    this.agentRuntime = agentRuntime ?? new LocalAgentRuntime(streamText)
     this.attachmentsDirectory = attachmentsDirectory ?? join(process.cwd(), '.moon-attachments')
     this.messagesRepository = messagesRepository
     this.sessionsRepository = sessionsRepository
     this.settingsRepository = settingsRepository
-    this.streamText =
-      streamTextFunction ??
-      (generateTextFunction === undefined
-        ? (input) => streamGeneratedText(input)
-        : (input) => ({
-            textStream: (async function* (): AsyncGenerator<string> {
-              yield (await generateTextFunction(input)).text
-            })()
-          }))
+    this.threadsRepository = threadsRepository
+    this.toolInvocationsRepository = toolInvocationsRepository
+    this.topicsRepository = topicsRepository
   }
 
   listSessions(): Promise<SessionRecord[]> {
     return this.sessionsRepository.list()
   }
 
-  getMessages(input: GetChatMessagesInput): Promise<MessageRecord[]> {
+  async listTopics(input: ListChatTopicsInput): Promise<TopicRecord[]> {
+    const parsedInput = listChatTopicsInputSchema.parse(input)
+
+    return this.topicsRepository.listBySession(parsedInput.sessionId)
+  }
+
+  async listThreads(input: ListChatThreadsInput): Promise<ThreadRecord[]> {
+    const parsedInput = listChatThreadsInputSchema.parse(input)
+
+    return this.threadsRepository.listByTopic(parsedInput.topicId)
+  }
+
+  async getMessages(input: GetChatMessagesInput): Promise<MessageRecord[]> {
     const parsedInput = getChatMessagesInputSchema.parse(input)
 
-    return this.messagesRepository.listBySession(parsedInput.sessionId)
+    if (parsedInput.threadId !== undefined) {
+      return this.messagesRepository.listByThread(parsedInput.threadId)
+    }
+
+    const thread = await this.getDefaultThread(parsedInput.sessionId)
+
+    return thread === null ? [] : this.messagesRepository.listByThread(thread.id)
   }
 
   async createSession(): Promise<SessionRecord> {
     const settings = await this.settingsRepository.getSettings()
     const provider = await this.withStoredApiKey(selectDefaultChatProvider(settings))
     const model = selectChatModel(provider)
-    const timestamp = createTimestamp()
 
     createChatLanguageModel(provider, model)
 
-    return this.sessionsRepository.save({
-      id: randomUUID(),
-      projectId: null,
-      provider: provider.provider,
-      title: newChatTitle,
-      status: 'active',
-      createdAt: timestamp,
-      updatedAt: timestamp
-    })
+    const scope = await this.createConversationScope(provider, newChatTitle)
+
+    return scope.session
   }
 
   async importAttachment(input: ImportChatAttachmentInput): Promise<ChatAttachmentRecord> {
@@ -359,114 +411,418 @@ export class ChatService {
     onEvent?: SendMessageEventListener
   ): Promise<SendMessageResult> {
     const parsedInput = sendChatMessageInputSchema.parse(input)
-    const resolved = await this.resolveSessionProvider(parsedInput)
-    const provider = await this.withStoredApiKey(resolved.provider)
+    const resolvedProvider = await this.resolveProvider(parsedInput)
+    const provider = await this.withStoredApiKey(resolvedProvider.provider)
     const modelId = selectChatModel(provider)
     const languageModel = createChatLanguageModel(provider, modelId)
-    const userTimestamp = createTimestamp()
-    const attachments = parsedInput.attachments ?? []
-    const session =
-      resolved.session ??
-      (await this.sessionsRepository.save({
-        id: randomUUID(),
-        projectId: null,
-        provider: provider.provider,
-        title: createChatTitle(parsedInput.content || attachments[0]?.name || ''),
-        status: 'active',
-        createdAt: userTimestamp,
-        updatedAt: userTimestamp
-      }))
-    const shouldUpdateTitle =
-      resolved.session !== null &&
-      !resolved.existingMessages.some((message) => message.role === 'user')
-    const sessionAfterUser = await this.sessionsRepository.save({
-      ...session,
-      title: shouldUpdateTitle
-        ? createChatTitle(parsedInput.content || attachments[0]?.name || '')
-        : session.title,
-      updatedAt: userTimestamp
+    const scope = await this.resolveConversationScope(
+      parsedInput,
+      resolvedProvider.session,
+      provider
+    )
+    const operation = await this.createOperation(scope, provider, modelId)
+    const abortController = new AbortController()
+
+    this.activeOperations.set(operation.id, abortController)
+
+    try {
+      const result = await this.runOperation({
+        abortController,
+        input: parsedInput,
+        languageModel,
+        modelId,
+        onEvent,
+        operation,
+        provider,
+        scope
+      })
+
+      return result
+    } finally {
+      this.activeOperations.delete(operation.id)
+    }
+  }
+
+  async cancelOperation(input: CancelAgentOperationInput): Promise<AgentOperationRecord> {
+    const parsedInput = cancelAgentOperationInputSchema.parse(input)
+    const abortController = this.activeOperations.get(parsedInput.operationId)
+    const timestamp = createTimestamp()
+
+    abortController?.abort('cancelled')
+
+    const operation = await this.agentOperationsRepository.findById(parsedInput.operationId)
+
+    if (operation === null) {
+      throw new Error('Agent operation not found.')
+    }
+
+    return this.agentOperationsRepository.save({
+      ...operation,
+      status: 'interrupted',
+      completionReason: 'interrupted',
+      error: null,
+      updatedAt: timestamp,
+      completedAt: timestamp
     })
+  }
+
+  async approveToolCall(input: ApproveToolCallInput): Promise<ToolInvocationRecord> {
+    const parsedInput = approveToolCallInputSchema.parse(input)
+    const toolInvocation = await this.toolInvocationsRepository.findById(
+      parsedInput.toolInvocationId
+    )
+
+    if (toolInvocation === null) {
+      throw new Error('Tool invocation not found.')
+    }
+
+    return this.toolInvocationsRepository.save({
+      ...toolInvocation,
+      status: 'done',
+      result: { approved: true },
+      error: null,
+      updatedAt: createTimestamp()
+    })
+  }
+
+  async rejectToolCall(input: RejectToolCallInput): Promise<ToolInvocationRecord> {
+    const parsedInput = rejectToolCallInputSchema.parse(input)
+    const toolInvocation = await this.toolInvocationsRepository.findById(
+      parsedInput.toolInvocationId
+    )
+
+    if (toolInvocation === null) {
+      throw new Error('Tool invocation not found.')
+    }
+
+    return this.toolInvocationsRepository.save({
+      ...toolInvocation,
+      status: 'rejected',
+      result: null,
+      error: parsedInput.reason ?? 'Rejected by user.',
+      updatedAt: createTimestamp()
+    })
+  }
+
+  private async runOperation({
+    abortController,
+    input,
+    languageModel,
+    modelId,
+    onEvent,
+    operation,
+    provider,
+    scope
+  }: {
+    abortController: AbortController
+    input: SendChatMessageInput
+    languageModel: LanguageModel
+    modelId: string
+    onEvent?: SendMessageEventListener
+    operation: AgentOperationRecord
+    provider: ProviderSettings
+    scope: ConversationScope
+  }): Promise<SendMessageResult> {
+    const attachments = input.attachments ?? []
+    const timestamp = createTimestamp()
+    const previousMessages = await this.messagesRepository.listByThread(scope.thread.id)
+    const parentMessage = [...previousMessages].reverse().find((message) => message.role !== 'tool')
     const userMessage = await this.messagesRepository.save({
       id: randomUUID(),
-      sessionId: sessionAfterUser.id,
+      sessionId: scope.session.id,
+      topicId: scope.topic.id,
+      threadId: scope.thread.id,
+      ...(parentMessage === undefined ? {} : { parentId: parentMessage.id }),
+      operationId: operation.id,
       role: 'user',
-      content: parsedInput.content,
+      content: input.content,
+      status: 'complete',
+      provider: provider.provider,
+      model: modelId,
       ...(attachments.length === 0 ? {} : { attachments }),
-      createdAt: userTimestamp,
-      updatedAt: userTimestamp
+      createdAt: timestamp,
+      updatedAt: timestamp
     })
-    onEvent?.({ type: 'user-message', session: sessionAfterUser, message: userMessage })
-    const modelMessages = (
-      await Promise.all(
-        [...resolved.existingMessages, userMessage].map((message) =>
-          toModelMessage(message, this.attachmentsDirectory)
-        )
-      )
-    ).filter((message): message is ModelMessage => message !== null)
-    const assistantTimestamp = createTimestamp()
-    const assistantMessageId = randomUUID()
-    let assistantText = ''
+    const sessionAfterUser = await this.touchSessionWithTitle(
+      scope.session,
+      createChatTitle(input.content || attachments[0]?.name || '')
+    )
+    const topicAfterUser = await this.touchTopicTitle(
+      scope.topic,
+      createChatTitle(input.content || attachments[0]?.name || '')
+    )
+    const threadAfterUser = await this.touchThreadTitle(
+      scope.thread,
+      createChatTitle(input.content || attachments[0]?.name || '')
+    )
+    const eventScope = {
+      session: sessionAfterUser,
+      topic: topicAfterUser,
+      thread: threadAfterUser
+    }
 
     onEvent?.({
-      type: 'assistant-start',
-      message: {
-        id: assistantMessageId,
-        sessionId: sessionAfterUser.id,
-        role: 'assistant',
-        content: '',
-        createdAt: assistantTimestamp,
-        updatedAt: assistantTimestamp
-      }
+      type: 'message-created',
+      operationId: operation.id,
+      ...eventScope,
+      message: userMessage
     })
 
-    const result = this.streamText({
-      model: languageModel,
-      messages: modelMessages
-    })
-
-    for await (const textPart of result.textStream) {
-      assistantText += textPart
-
-      if (textPart.length > 0) {
-        onEvent?.({ type: 'assistant-delta', messageId: assistantMessageId, delta: textPart })
-      }
-    }
-
-    const assistantTextContent = assistantText.trim()
-
-    if (assistantTextContent.length === 0) {
-      throw new Error('Model returned an empty response.')
-    }
-
-    const assistantMessage = await this.messagesRepository.save({
-      id: assistantMessageId,
-      sessionId: sessionAfterUser.id,
+    const assistantTimestamp = createTimestamp()
+    let assistantMessage = await this.messagesRepository.save({
+      id: randomUUID(),
+      sessionId: eventScope.session.id,
+      topicId: eventScope.topic.id,
+      threadId: eventScope.thread.id,
+      parentId: userMessage.id,
+      operationId: operation.id,
       role: 'assistant',
-      content: assistantTextContent,
+      content: '',
+      reasoning: '',
+      status: 'streaming',
+      provider: provider.provider,
+      model: modelId,
       createdAt: assistantTimestamp,
       updatedAt: assistantTimestamp
     })
 
-    const sessionAfterAssistant = await this.sessionsRepository.save({
-      ...sessionAfterUser,
-      updatedAt: assistantTimestamp
-    })
-
     onEvent?.({
-      type: 'assistant-finish',
-      session: sessionAfterAssistant,
+      type: 'message-created',
+      operationId: operation.id,
+      ...eventScope,
       message: assistantMessage
     })
 
-    return {
-      session: sessionAfterAssistant,
-      messages: await this.messagesRepository.listBySession(sessionAfterAssistant.id)
+    const modelMessages = (
+      await Promise.all(
+        [...previousMessages, userMessage].map((message) =>
+          toModelMessage(message, this.attachmentsDirectory)
+        )
+      )
+    ).filter((message): message is ModelMessage => message !== null)
+
+    try {
+      for await (const runtimeEvent of this.agentRuntime.run({
+        model: languageModel,
+        messages: modelMessages,
+        abortSignal: abortController.signal
+      })) {
+        assistantMessage = await this.applyRuntimeEvent({
+          event: runtimeEvent,
+          message: assistantMessage,
+          onEvent,
+          operation,
+          scope: eventScope
+        })
+      }
+
+      const completedTimestamp = createTimestamp()
+
+      if (assistantMessage.content.trim().length === 0 && !assistantMessage.reasoning) {
+        throw new Error('Model returned an empty response.')
+      }
+
+      assistantMessage = await this.messagesRepository.save({
+        ...assistantMessage,
+        content: assistantMessage.content.trim(),
+        status: 'complete',
+        updatedAt: completedTimestamp
+      })
+
+      const completedOperation = await this.agentOperationsRepository.save({
+        ...operation,
+        status: 'done',
+        completionReason: 'done',
+        updatedAt: completedTimestamp,
+        completedAt: completedTimestamp
+      })
+      const sessionAfterAssistant = await this.sessionsRepository.save({
+        ...eventScope.session,
+        updatedAt: completedTimestamp
+      })
+      const messages = await this.messagesRepository.listByThread(eventScope.thread.id)
+
+      onEvent?.({
+        type: 'operation-done',
+        operationId: operation.id,
+        session: sessionAfterAssistant,
+        topic: eventScope.topic,
+        thread: eventScope.thread,
+        operation: completedOperation,
+        messages
+      })
+
+      return {
+        session: sessionAfterAssistant,
+        topic: eventScope.topic,
+        thread: eventScope.thread,
+        operation: completedOperation,
+        messages
+      }
+    } catch (error) {
+      const errorMessage = getErrorMessage(error)
+      const failedTimestamp = createTimestamp()
+      const isCancelled = abortController.signal.aborted
+      const failedOperation = await this.agentOperationsRepository.save({
+        ...operation,
+        status: isCancelled ? 'interrupted' : 'error',
+        completionReason: isCancelled ? 'interrupted' : 'error',
+        error: isCancelled ? null : { message: errorMessage },
+        updatedAt: failedTimestamp,
+        completedAt: failedTimestamp
+      })
+
+      await this.messagesRepository.save({
+        ...assistantMessage,
+        status: isCancelled ? 'cancelled' : 'error',
+        error: isCancelled ? 'Cancelled by user.' : errorMessage,
+        updatedAt: failedTimestamp
+      })
+
+      onEvent?.({
+        type: 'operation-error',
+        operationId: operation.id,
+        sessionId: eventScope.session.id,
+        topicId: eventScope.topic.id,
+        threadId: eventScope.thread.id,
+        messageId: assistantMessage.id,
+        error: isCancelled ? 'Cancelled by user.' : errorMessage,
+        operation: failedOperation
+      })
+
+      throw error
     }
   }
 
-  private async resolveSessionProvider(
-    input: SendChatMessageInput
-  ): Promise<ResolvedSessionProvider> {
+  private async applyRuntimeEvent({
+    event,
+    message,
+    onEvent,
+    operation,
+    scope
+  }: {
+    event: AgentRuntimeEvent
+    message: MessageRecord
+    onEvent?: SendMessageEventListener
+    operation: AgentOperationRecord
+    scope: ConversationScope
+  }): Promise<MessageRecord> {
+    if (event.type === 'text-delta') {
+      const updatedMessage = await this.messagesRepository.save({
+        ...message,
+        content: `${message.content}${event.text}`,
+        updatedAt: createTimestamp()
+      })
+
+      onEvent?.({
+        type: 'message-delta',
+        operationId: operation.id,
+        sessionId: scope.session.id,
+        topicId: scope.topic.id,
+        threadId: scope.thread.id,
+        messageId: message.id,
+        delta: event.text
+      })
+
+      return updatedMessage
+    }
+
+    if (event.type === 'reasoning-delta') {
+      const updatedMessage = await this.messagesRepository.save({
+        ...message,
+        reasoning: `${message.reasoning ?? ''}${event.text}`,
+        updatedAt: createTimestamp()
+      })
+
+      onEvent?.({
+        type: 'reasoning-delta',
+        operationId: operation.id,
+        sessionId: scope.session.id,
+        topicId: scope.topic.id,
+        threadId: scope.thread.id,
+        messageId: message.id,
+        delta: event.text
+      })
+
+      return updatedMessage
+    }
+
+    if (event.type === 'tool-call' || event.type === 'tool-approval-request') {
+      const status = event.type === 'tool-approval-request' ? 'waiting_for_human' : 'running'
+      const timestamp = createTimestamp()
+      const toolInvocation = await this.toolInvocationsRepository.save({
+        id: event.tool.id,
+        toolCallId: event.tool.id,
+        operationId: operation.id,
+        messageId: message.id,
+        name: event.tool.name,
+        arguments: event.tool.input,
+        status,
+        createdAt: timestamp,
+        updatedAt: timestamp
+      })
+
+      if (status === 'waiting_for_human') {
+        await this.agentOperationsRepository.save({
+          ...operation,
+          status: 'waiting_for_human',
+          completionReason: 'waiting_for_human',
+          humanInterventions: (operation.humanInterventions ?? 0) + 1,
+          updatedAt: timestamp
+        })
+      }
+
+      onEvent?.({
+        type: status === 'waiting_for_human' ? 'tool-waiting-approval' : 'tool-start',
+        operationId: operation.id,
+        sessionId: scope.session.id,
+        topicId: scope.topic.id,
+        threadId: scope.thread.id,
+        messageId: message.id,
+        toolInvocation
+      })
+
+      return message
+    }
+
+    if (event.type === 'tool-result' || event.type === 'tool-error') {
+      const currentToolInvocation = await this.toolInvocationsRepository.findById(event.tool.id)
+      const timestamp = createTimestamp()
+      const toolInvocation = await this.toolInvocationsRepository.save({
+        id: event.tool.id,
+        operationId: operation.id,
+        messageId: message.id,
+        name: event.tool.name,
+        arguments: event.tool.input,
+        result:
+          event.type === 'tool-result' ? (event.tool.output ?? normalizeToolResult(null)) : null,
+        error: event.type === 'tool-error' ? (event.tool.error ?? 'Tool call failed.') : null,
+        status: event.type === 'tool-result' ? 'done' : 'error',
+        createdAt: currentToolInvocation?.createdAt ?? timestamp,
+        updatedAt: timestamp
+      })
+
+      onEvent?.({
+        type: 'tool-finish',
+        operationId: operation.id,
+        sessionId: scope.session.id,
+        topicId: scope.topic.id,
+        threadId: scope.thread.id,
+        messageId: message.id,
+        toolInvocation
+      })
+
+      return message
+    }
+
+    if (event.type === 'abort') {
+      throw new Error(event.reason ?? 'Cancelled by user.')
+    }
+
+    return message
+  }
+
+  private async resolveProvider(input: SendChatMessageInput): Promise<ResolvedProvider> {
     const settings = await this.settingsRepository.getSettings()
 
     if (input.sessionId !== undefined) {
@@ -493,8 +849,7 @@ export class ChatService {
 
       return {
         session: { ...session, provider: provider.provider },
-        provider,
-        existingMessages: await this.messagesRepository.listBySession(session.id)
+        provider
       }
     }
 
@@ -517,9 +872,190 @@ export class ChatService {
 
     return {
       session: null,
-      provider,
-      existingMessages: []
+      provider
     }
+  }
+
+  private async resolveConversationScope(
+    input: SendChatMessageInput,
+    session: SessionRecord | null,
+    provider: ProviderSettings
+  ): Promise<ConversationScope> {
+    if (session === null) {
+      return this.createConversationScope(
+        provider,
+        createChatTitle(input.content || input.attachments?.[0]?.name || '')
+      )
+    }
+
+    const thread =
+      input.threadId === undefined
+        ? await this.getDefaultThread(session.id)
+        : await this.threadsRepository.findById(input.threadId)
+
+    if (thread !== null) {
+      const topic = await this.topicsRepository.findById(thread.topicId)
+
+      if (topic === null) {
+        throw new Error('Chat topic not found.')
+      }
+
+      return { session, topic, thread }
+    }
+
+    const topic =
+      input.topicId === undefined
+        ? await this.getDefaultTopic(session.id)
+        : await this.topicsRepository.findById(input.topicId)
+
+    if (topic === null) {
+      return this.createTopicAndThread(session, defaultTopicTitle, defaultThreadTitle)
+    }
+
+    return {
+      session,
+      topic,
+      thread: await this.createThread(topic, defaultThreadTitle)
+    }
+  }
+
+  private async createConversationScope(
+    provider: ProviderSettings,
+    title: string
+  ): Promise<ConversationScope> {
+    const timestamp = createTimestamp()
+    const session = await this.sessionsRepository.save({
+      id: randomUUID(),
+      projectId: null,
+      provider: provider.provider,
+      title,
+      status: 'active',
+      userId: defaultChatUserId,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    })
+
+    return this.createTopicAndThread(session, title, defaultThreadTitle)
+  }
+
+  private async createTopicAndThread(
+    session: SessionRecord,
+    topicTitle: string,
+    threadTitle: string
+  ): Promise<ConversationScope> {
+    const timestamp = createTimestamp()
+    const topic = await this.topicsRepository.save({
+      id: randomUUID(),
+      sessionId: session.id,
+      title: topicTitle,
+      userId: defaultChatUserId,
+      trigger: 'chat',
+      mode: 'default',
+      status: 'active',
+      createdAt: timestamp,
+      updatedAt: timestamp
+    })
+    const thread = await this.threadsRepository.save({
+      id: randomUUID(),
+      topicId: topic.id,
+      title: threadTitle,
+      type: 'standalone',
+      status: 'active',
+      userId: defaultChatUserId,
+      lastActiveAt: timestamp,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    })
+
+    return { session, topic, thread }
+  }
+
+  private async createThread(topic: TopicRecord, title: string): Promise<ThreadRecord> {
+    const timestamp = createTimestamp()
+
+    return this.threadsRepository.save({
+      id: randomUUID(),
+      topicId: topic.id,
+      title,
+      type: 'continuation',
+      status: 'active',
+      userId: defaultChatUserId,
+      lastActiveAt: timestamp,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    })
+  }
+
+  private async createOperation(
+    scope: ConversationScope,
+    provider: ProviderSettings,
+    modelId: string
+  ): Promise<AgentOperationRecord> {
+    const timestamp = createTimestamp()
+
+    return this.agentOperationsRepository.save({
+      id: randomUUID(),
+      userId: defaultChatUserId,
+      topicId: scope.topic.id,
+      threadId: scope.thread.id,
+      status: 'running',
+      startedAt: timestamp,
+      model: modelId,
+      provider: provider.provider,
+      trigger: 'chat',
+      appContext: {
+        sessionId: scope.session.id
+      },
+      createdAt: timestamp,
+      updatedAt: timestamp
+    })
+  }
+
+  private async getDefaultTopic(sessionId: string): Promise<TopicRecord | null> {
+    const topics = await this.topicsRepository.listBySession(sessionId)
+
+    return topics[0] ?? null
+  }
+
+  private async getDefaultThread(sessionId: string): Promise<ThreadRecord | null> {
+    const threads = await this.threadsRepository.listBySession(sessionId)
+
+    return threads[0] ?? null
+  }
+
+  private async touchSessionWithTitle(
+    session: SessionRecord,
+    title: string
+  ): Promise<SessionRecord> {
+    const shouldUpdateTitle = session.title === newChatTitle || session.title === ''
+
+    return this.sessionsRepository.save({
+      ...session,
+      title: shouldUpdateTitle ? title : session.title,
+      updatedAt: createTimestamp()
+    })
+  }
+
+  private async touchTopicTitle(topic: TopicRecord, title: string): Promise<TopicRecord> {
+    const shouldUpdateTitle = topic.title === defaultTopicTitle || topic.title === newChatTitle
+
+    return this.topicsRepository.save({
+      ...topic,
+      title: shouldUpdateTitle ? title : topic.title,
+      updatedAt: createTimestamp()
+    })
+  }
+
+  private async touchThreadTitle(thread: ThreadRecord, title: string): Promise<ThreadRecord> {
+    const shouldUpdateTitle = thread.title === defaultThreadTitle || thread.title === newChatTitle
+    const timestamp = createTimestamp()
+
+    return this.threadsRepository.save({
+      ...thread,
+      title: shouldUpdateTitle ? title : thread.title,
+      lastActiveAt: timestamp,
+      updatedAt: timestamp
+    })
   }
 
   private async withStoredApiKey(provider: ProviderSettings): Promise<ProviderSettings> {

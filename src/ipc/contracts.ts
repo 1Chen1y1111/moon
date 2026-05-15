@@ -1,13 +1,22 @@
 import type {
+  AgentOperationRecord,
   ChatAttachmentRecord,
   MessageRecord,
   SendMessageEvent,
   SendMessageResult,
-  SessionRecord
+  SessionRecord,
+  ThreadRecord,
+  ToolInvocationRecord,
+  TopicRecord
 } from '../shared/domain/chat'
 import type {
+  ApproveToolCallInput,
+  CancelAgentOperationInput,
   GetChatMessagesInput,
   ImportChatAttachmentInput,
+  ListChatThreadsInput,
+  ListChatTopicsInput,
+  RejectToolCallInput,
   SendChatMessageInput
 } from '../shared/domain/chat-validation'
 import type { AppSettings, ProviderTestResult } from '../shared/domain/settings'
@@ -31,6 +40,14 @@ export type AppIpcContractMap = {
     request: GetChatMessagesInput
     response: MessageRecord[]
   }
+  [ipcChannels.chat.listTopics]: {
+    request: ListChatTopicsInput
+    response: TopicRecord[]
+  }
+  [ipcChannels.chat.listThreads]: {
+    request: ListChatThreadsInput
+    response: ThreadRecord[]
+  }
   [ipcChannels.chat.createSession]: {
     request: undefined
     response: SessionRecord
@@ -42,6 +59,18 @@ export type AppIpcContractMap = {
   [ipcChannels.chat.sendMessage]: {
     request: SendChatMessageInput
     response: SendMessageResult
+  }
+  [ipcChannels.chat.cancelOperation]: {
+    request: CancelAgentOperationInput
+    response: AgentOperationRecord
+  }
+  [ipcChannels.chat.approveToolCall]: {
+    request: ApproveToolCallInput
+    response: ToolInvocationRecord
+  }
+  [ipcChannels.chat.rejectToolCall]: {
+    request: RejectToolCallInput
+    response: ToolInvocationRecord
   }
   [ipcChannels.settings.get]: {
     request: undefined
@@ -101,9 +130,14 @@ export type MoonApi = {
   chat: {
     listSessions: () => Promise<SessionRecord[]>
     getMessages: (input: GetChatMessagesInput) => Promise<MessageRecord[]>
+    listTopics: (input: ListChatTopicsInput) => Promise<TopicRecord[]>
+    listThreads: (input: ListChatThreadsInput) => Promise<ThreadRecord[]>
     createSession: () => Promise<SessionRecord>
     importAttachment: (input: ImportChatAttachmentInput) => Promise<ChatAttachmentRecord>
     sendMessage: (input: SendChatMessageInput) => Promise<SendMessageResult>
+    cancelOperation: (input: CancelAgentOperationInput) => Promise<AgentOperationRecord>
+    approveToolCall: (input: ApproveToolCallInput) => Promise<ToolInvocationRecord>
+    rejectToolCall: (input: RejectToolCallInput) => Promise<ToolInvocationRecord>
     onSendMessageEvent: (listener: (event: SendMessageEvent) => void) => () => void
   }
   settings: {

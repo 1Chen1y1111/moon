@@ -10,6 +10,8 @@ import { bootstrapDatabase } from '@main/db/bootstrap'
 import { createDatabaseConnection, type AppDatabaseConnection } from '@main/db/connection'
 import { MessagesRepository } from '@main/repositories/messages-repository'
 import { SessionsRepository } from '@main/repositories/sessions-repository'
+import { ThreadsRepository } from '@main/repositories/threads-repository'
+import { TopicsRepository } from '@main/repositories/topics-repository'
 
 const pgliteTestTimeout = 30_000
 
@@ -19,6 +21,34 @@ async function createBootstrappedConnection(directoryPath: string): Promise<AppD
   await bootstrapDatabase(connection)
 
   return connection
+}
+
+async function createSessionScope(connection: AppDatabaseConnection): Promise<void> {
+  await new SessionsRepository(connection).save({
+    id: 'session-1',
+    projectId: null,
+    provider: 'claude',
+    title: 'Search Test',
+    status: 'active',
+    createdAt: '2026-04-21T00:00:00.000Z',
+    updatedAt: '2026-04-21T00:00:00.000Z'
+  })
+  await new TopicsRepository(connection).save({
+    id: 'topic-1',
+    sessionId: 'session-1',
+    title: '默认话题',
+    createdAt: '2026-04-21T00:00:00.000Z',
+    updatedAt: '2026-04-21T00:00:00.000Z'
+  })
+  await new ThreadsRepository(connection).save({
+    id: 'thread-1',
+    topicId: 'topic-1',
+    title: '主线',
+    type: 'standalone',
+    status: 'active',
+    createdAt: '2026-04-21T00:00:00.000Z',
+    updatedAt: '2026-04-21T00:00:00.000Z'
+  })
 }
 
 describe('MessagesRepository', () => {
@@ -37,26 +67,20 @@ describe('MessagesRepository', () => {
       tempDirectories.push(directoryPath)
       const connection = await createBootstrappedConnection(directoryPath)
 
-      await new SessionsRepository(connection).save({
-        id: 'session-1',
-        projectId: null,
-        provider: 'claude',
-        title: 'Search Test',
-        status: 'active',
-        createdAt: '2026-04-21T00:00:00.000Z',
-        updatedAt: '2026-04-21T00:00:00.000Z'
-      })
+      await createSessionScope(connection)
 
       expect(await new SessionsRepository(connection).list()).toEqual([
-        {
+        expect.objectContaining({
           id: 'session-1',
           projectId: null,
           provider: 'claude',
           title: 'Search Test',
           status: 'active',
+          type: 'agent',
+          userId: 'local-user',
           createdAt: '2026-04-21T00:00:00.000Z',
           updatedAt: '2026-04-21T00:00:00.000Z'
-        }
+        })
       ])
 
       const repository = new MessagesRepository(connection)
@@ -64,27 +88,34 @@ describe('MessagesRepository', () => {
       await repository.save({
         id: 'message-1',
         sessionId: 'session-1',
+        topicId: 'topic-1',
+        threadId: 'thread-1',
         role: 'assistant',
         content: 'Moon can search local conversation history.',
+        status: 'complete',
         createdAt: '2026-04-21T00:00:00.000Z',
         updatedAt: '2026-04-21T00:00:00.000Z'
       })
 
       expect(await repository.list()).toEqual([
-        {
+        expect.objectContaining({
           id: 'message-1',
           sessionId: 'session-1',
+          topicId: 'topic-1',
+          threadId: 'thread-1',
           role: 'assistant',
           content: 'Moon can search local conversation history.',
+          status: 'complete',
           createdAt: '2026-04-21T00:00:00.000Z',
           updatedAt: '2026-04-21T00:00:00.000Z'
-        }
+        })
       ])
 
       expect(await repository.search('conversation')).toEqual([
         {
           messageId: 'message-1',
           sessionId: 'session-1',
+          threadId: 'thread-1',
           content: 'Moon can search local conversation history.'
         }
       ])
@@ -128,15 +159,7 @@ describe('MessagesRepository', () => {
       tempDirectories.push(directoryPath)
       const connection = await createBootstrappedConnection(directoryPath)
 
-      await new SessionsRepository(connection).save({
-        id: 'session-1',
-        projectId: null,
-        provider: 'claude',
-        title: 'Invalid Role Test',
-        status: 'active',
-        createdAt: '2026-04-21T00:00:00.000Z',
-        updatedAt: '2026-04-21T00:00:00.000Z'
-      })
+      await createSessionScope(connection)
 
       const repository = new MessagesRepository(connection)
 
@@ -144,8 +167,11 @@ describe('MessagesRepository', () => {
         repository.save({
           id: 'message-1',
           sessionId: 'session-1',
+          topicId: 'topic-1',
+          threadId: 'thread-1',
           role: 'developer',
           content: 'This role is not part of the persisted chat domain.',
+          status: 'complete',
           createdAt: '2026-04-21T00:00:00.000Z',
           updatedAt: '2026-04-21T00:00:00.000Z'
         } as never)
@@ -165,23 +191,18 @@ describe('MessagesRepository', () => {
       tempDirectories.push(directoryPath)
       const connection = await createBootstrappedConnection(directoryPath)
 
-      await new SessionsRepository(connection).save({
-        id: 'session-1',
-        projectId: null,
-        provider: 'claude',
-        title: 'Cascade Test',
-        status: 'active',
-        createdAt: '2026-04-21T00:00:00.000Z',
-        updatedAt: '2026-04-21T00:00:00.000Z'
-      })
+      await createSessionScope(connection)
 
       const repository = new MessagesRepository(connection)
 
       await repository.save({
         id: 'message-1',
         sessionId: 'session-1',
+        topicId: 'topic-1',
+        threadId: 'thread-1',
         role: 'assistant',
         content: 'This message belongs to a session.',
+        status: 'complete',
         createdAt: '2026-04-21T00:00:00.000Z',
         updatedAt: '2026-04-21T00:00:00.000Z'
       })

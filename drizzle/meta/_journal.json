@@ -22,6 +22,13 @@
       "when": 1777186400000,
       "tag": "0002_chat_attachments",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1777272800000,
+      "tag": "0003_conversation_runtime",
+      "breakpoints": true
     }
   ]
 }

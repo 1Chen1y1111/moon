@@ -3,15 +3,24 @@ import { vi } from 'vitest'
 import type { MoonApi } from '@ipc/contracts'
 import type { OpenSettingsInput, WindowState } from '@ipc/window-contracts'
 import type {
+  AgentOperationRecord,
   ChatAttachmentRecord,
   MessageRecord,
   SendMessageEvent,
   SendMessageResult,
-  SessionRecord
+  SessionRecord,
+  ThreadRecord,
+  ToolInvocationRecord,
+  TopicRecord
 } from '@shared/domain/chat'
 import type {
+  ApproveToolCallInput,
+  CancelAgentOperationInput,
   GetChatMessagesInput,
   ImportChatAttachmentInput,
+  ListChatThreadsInput,
+  ListChatTopicsInput,
+  RejectToolCallInput,
   SendChatMessageInput
 } from '@shared/domain/chat-validation'
 import {
@@ -34,9 +43,14 @@ export type MockMoonApi = {
   chat: {
     listSessions: MockFn<() => Promise<SessionRecord[]>>
     getMessages: MockFn<(input: GetChatMessagesInput) => Promise<MessageRecord[]>>
+    listTopics: MockFn<(input: ListChatTopicsInput) => Promise<TopicRecord[]>>
+    listThreads: MockFn<(input: ListChatThreadsInput) => Promise<ThreadRecord[]>>
     createSession: MockFn<() => Promise<SessionRecord>>
     importAttachment: MockFn<(input: ImportChatAttachmentInput) => Promise<ChatAttachmentRecord>>
     sendMessage: MockFn<(input: SendChatMessageInput) => Promise<SendMessageResult>>
+    cancelOperation: MockFn<(input: CancelAgentOperationInput) => Promise<AgentOperationRecord>>
+    approveToolCall: MockFn<(input: ApproveToolCallInput) => Promise<ToolInvocationRecord>>
+    rejectToolCall: MockFn<(input: RejectToolCallInput) => Promise<ToolInvocationRecord>>
     onSendMessageEvent: MockFn<(listener: (event: SendMessageEvent) => void) => () => void>
   }
   settings: {
@@ -64,6 +78,8 @@ type MockWindowApiOptions = {
   appSettings?: AppSettings
   chatMessages?: MessageRecord[]
   chatSessions?: SessionRecord[]
+  chatThreads?: ThreadRecord[]
+  chatTopics?: TopicRecord[]
   createdChatSession?: SessionRecord
   sentChatMessage?: SendMessageResult
   savedSettings?: AppSettings
@@ -75,6 +91,34 @@ function createMockWindowApi(options: MockWindowApiOptions = {}): MockMoonApi {
   const savedSettings = options.savedSettings ?? appSettings
   const windowState = options.windowState ?? { isMaximized: false }
   const chatSessions = options.chatSessions ?? []
+  const chatTopics =
+    options.chatTopics ??
+    (chatSessions.length === 0
+      ? []
+      : [
+          {
+            id: 'topic-1',
+            sessionId: chatSessions[0].id,
+            title: '默认话题',
+            createdAt: '2026-05-09T00:00:00.000Z',
+            updatedAt: '2026-05-09T00:00:00.000Z'
+          } satisfies TopicRecord
+        ])
+  const chatThreads =
+    options.chatThreads ??
+    (chatTopics.length === 0
+      ? []
+      : [
+          {
+            id: 'thread-1',
+            sessionId: chatTopics[0].sessionId,
+            topicId: chatTopics[0].id,
+            title: '主线',
+            status: 'active',
+            createdAt: '2026-05-09T00:00:00.000Z',
+            updatedAt: '2026-05-09T00:00:00.000Z'
+          } satisfies ThreadRecord
+        ])
   const chatMessages = options.chatMessages ?? []
   const createdChatSession =
     options.createdChatSession ??
@@ -87,12 +131,46 @@ function createMockWindowApi(options: MockWindowApiOptions = {}): MockMoonApi {
       createdAt: '2026-05-09T00:00:00.000Z',
       updatedAt: '2026-05-09T00:00:00.000Z'
     } satisfies SessionRecord)
-  const sentChatMessage =
-    options.sentChatMessage ??
+  const sentChatMessageInput = options.sentChatMessage as Partial<SendMessageResult> | undefined
+  const resultSession = sentChatMessageInput?.session ?? createdChatSession
+  const resultTopic =
+    sentChatMessageInput?.topic ??
+    chatTopics[0] ??
     ({
-      session: createdChatSession,
-      messages: chatMessages
-    } satisfies SendMessageResult)
+      id: 'topic-1',
+      sessionId: resultSession.id,
+      title: '默认话题',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:00.000Z'
+    } satisfies TopicRecord)
+  const resultThread =
+    sentChatMessageInput?.thread ??
+    chatThreads[0] ??
+    ({
+      id: 'thread-1',
+      topicId: resultTopic.id,
+      title: '主线',
+      type: 'standalone',
+      status: 'active',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:00.000Z'
+    } satisfies ThreadRecord)
+  const sentChatMessage = {
+    session: resultSession,
+    topic: resultTopic,
+    thread: resultThread,
+    operation: sentChatMessageInput?.operation ?? {
+      id: 'operation-1',
+      appContext: { sessionId: resultSession.id },
+      topicId: resultTopic.id,
+      threadId: resultThread.id,
+      status: 'done',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:01.000Z',
+      completedAt: '2026-05-09T00:00:01.000Z'
+    },
+    messages: sentChatMessageInput?.messages ?? chatMessages
+  } satisfies SendMessageResult
 
   return {
     chat: {
@@ -100,6 +178,12 @@ function createMockWindowApi(options: MockWindowApiOptions = {}): MockMoonApi {
       getMessages: vi
         .fn<(input: GetChatMessagesInput) => Promise<MessageRecord[]>>()
         .mockResolvedValue(chatMessages),
+      listTopics: vi
+        .fn<(input: ListChatTopicsInput) => Promise<TopicRecord[]>>()
+        .mockResolvedValue(chatTopics),
+      listThreads: vi
+        .fn<(input: ListChatThreadsInput) => Promise<ThreadRecord[]>>()
+        .mockResolvedValue(chatThreads),
       createSession: vi.fn<() => Promise<SessionRecord>>().mockResolvedValue(createdChatSession),
       importAttachment: vi
         .fn<(input: ImportChatAttachmentInput) => Promise<ChatAttachmentRecord>>()
@@ -114,6 +198,35 @@ function createMockWindowApi(options: MockWindowApiOptions = {}): MockMoonApi {
       sendMessage: vi
         .fn<(input: SendChatMessageInput) => Promise<SendMessageResult>>()
         .mockResolvedValue(sentChatMessage),
+      cancelOperation: vi
+        .fn<(input: CancelAgentOperationInput) => Promise<AgentOperationRecord>>()
+        .mockResolvedValue(sentChatMessage.operation),
+      approveToolCall: vi
+        .fn<(input: ApproveToolCallInput) => Promise<ToolInvocationRecord>>()
+        .mockImplementation(async (input) => ({
+          id: input.toolInvocationId,
+          operationId: 'operation-1',
+          messageId: 'message-2',
+          name: 'mock-tool',
+          arguments: {},
+          result: { approved: true },
+          status: 'done',
+          createdAt: '2026-05-09T00:00:00.000Z',
+          updatedAt: '2026-05-09T00:00:01.000Z'
+        })),
+      rejectToolCall: vi
+        .fn<(input: RejectToolCallInput) => Promise<ToolInvocationRecord>>()
+        .mockImplementation(async (input) => ({
+          id: input.toolInvocationId,
+          operationId: 'operation-1',
+          messageId: 'message-2',
+          name: 'mock-tool',
+          arguments: {},
+          error: input.reason ?? 'Rejected by user.',
+          status: 'rejected',
+          createdAt: '2026-05-09T00:00:00.000Z',
+          updatedAt: '2026-05-09T00:00:01.000Z'
+        })),
       onSendMessageEvent: vi
         .fn<(listener: (event: SendMessageEvent) => void) => () => void>()
         .mockReturnValue(() => undefined)

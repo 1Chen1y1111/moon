@@ -1,7 +1,22 @@
 import LogoIcon from '@renderer/assets/logo.png'
+import { useAppRouterContext } from '@renderer/app/router/router-context'
+import { useChatStore } from '@renderer/store/chat'
 import { Button } from '@shadcn/ui/button'
 
 export function HomeEmptyState(): React.JSX.Element {
+  const { setRouteState } = useAppRouterContext()
+  const createChatSession = useChatStore((state) => state.createChatSession)
+
+  const handleCreateChat = async (): Promise<void> => {
+    const session = await createChatSession()
+
+    setRouteState((state) => ({
+      ...state,
+      activeChatId: session.id
+    }))
+    window.location.hash = '#/chat'
+  }
+
   const handleOpenProviderSettings = (): void => {
     void window.api.windowControls.openSettings({ section: 'providers' })
   }
@@ -30,6 +45,9 @@ export function HomeEmptyState(): React.JSX.Element {
             type="button"
             size="lg"
             className="h-12 w-full rounded-md bg-primary text-primary-foreground shadow-sm hover:bg-primary/90"
+            onClick={() => {
+              void handleCreateChat()
+            }}
           >
             新建聊天
           </Button>

@@ -16,11 +16,43 @@ const session = {
   updatedAt: '2026-05-09T00:00:00.000Z'
 } as const
 
+const topic = {
+  id: 'topic-1',
+  sessionId: 'session-1',
+  title: '默认话题',
+  createdAt: '2026-05-09T00:00:00.000Z',
+  updatedAt: '2026-05-09T00:00:00.000Z'
+} as const
+
+const thread = {
+  id: 'thread-1',
+  topicId: 'topic-1',
+  title: '主线',
+  type: 'standalone',
+  status: 'active',
+  createdAt: '2026-05-09T00:00:00.000Z',
+  updatedAt: '2026-05-09T00:00:00.000Z'
+} as const
+
+const operation = {
+  id: 'operation-1',
+  appContext: { sessionId: 'session-1' },
+  topicId: 'topic-1',
+  threadId: 'thread-1',
+  status: 'done',
+  createdAt: '2026-05-09T00:00:00.000Z',
+  updatedAt: '2026-05-09T00:00:01.000Z',
+  completedAt: '2026-05-09T00:00:01.000Z'
+} as const
+
 const userMessage = {
   id: 'message-1',
   sessionId: 'session-1',
+  topicId: 'topic-1',
+  threadId: 'thread-1',
   role: 'user',
   content: '你好',
+  status: 'complete',
   createdAt: '2026-05-09T00:00:00.000Z',
   updatedAt: '2026-05-09T00:00:00.000Z'
 } as const
@@ -28,8 +60,11 @@ const userMessage = {
 const assistantMessage = {
   id: 'message-2',
   sessionId: 'session-1',
+  topicId: 'topic-1',
+  threadId: 'thread-1',
   role: 'assistant',
   content: '你好，我在。',
+  status: 'complete',
   createdAt: '2026-05-09T00:00:01.000Z',
   updatedAt: '2026-05-09T00:00:01.000Z'
 } as const
@@ -362,6 +397,7 @@ describe('ChatPage', () => {
     await waitFor(() =>
       expect(api.chat.sendMessage).toHaveBeenCalledWith({
         sessionId: 'session-1',
+        threadId: 'thread-1',
         provider: 'deepseek',
         content: 'hello'
       })
@@ -391,15 +427,24 @@ describe('ChatPage', () => {
     const streamListener = api.chat.onSendMessageEvent.mock.calls[0][0]
     act(() => {
       streamListener({
-        type: 'assistant-start',
+        type: 'message-created',
+        operationId: 'operation-1',
+        session,
+        topic,
+        thread,
         message: {
           ...assistantMessage,
           id: 'message-streaming',
-          content: ''
+          content: '',
+          status: 'streaming'
         }
       })
       streamListener({
-        type: 'assistant-delta',
+        type: 'message-delta',
+        operationId: 'operation-1',
+        sessionId: 'session-1',
+        topicId: 'topic-1',
+        threadId: 'thread-1',
         messageId: 'message-streaming',
         delta: '正在回复'
       })
@@ -410,6 +455,9 @@ describe('ChatPage', () => {
     await act(async () => {
       resolveSend!({
         session,
+        topic,
+        thread,
+        operation,
         messages: completedMessages
       })
     })
@@ -428,7 +476,10 @@ describe('ChatPage', () => {
     })
 
     await waitFor(() =>
-      expect(api.chat.getMessages).toHaveBeenCalledWith({ sessionId: 'session-1' })
+      expect(api.chat.getMessages).toHaveBeenCalledWith({
+        sessionId: 'session-1',
+        threadId: 'thread-1'
+      })
     )
     await user.type(screen.getByRole('textbox', { name: '消息内容' }), '继续')
     await user.click(screen.getByRole('button', { name: '发送' }))
@@ -436,7 +487,8 @@ describe('ChatPage', () => {
     await waitFor(() =>
       expect(api.chat.sendMessage).toHaveBeenCalledWith({
         content: '继续',
-        sessionId: 'session-1'
+        sessionId: 'session-1',
+        threadId: 'thread-1'
       })
     )
     expect(await screen.findByText('你好，我在。')).toBeInTheDocument()
