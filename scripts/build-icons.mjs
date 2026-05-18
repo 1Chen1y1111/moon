@@ -17,7 +17,11 @@ import { fileURLToPath } from 'node:url'
 
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
-const projectRoot = join(__dirname, '..')
+const workspaceRoot = join(__dirname, '..')
+const cwd = process.cwd()
+const projectRoot = existsSync(join(cwd, 'resources', 'logo.png'))
+  ? cwd
+  : join(workspaceRoot, 'apps', 'desktop')
 
 const buildDir = join(projectRoot, 'build')
 const resourcesDir = join(projectRoot, 'resources')

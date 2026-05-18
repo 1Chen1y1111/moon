@@ -1,0 +1,11 @@
+import type { AppSettings } from '@moon/shared/domain/settings'
+
+import type { SettingsSectionId } from '@renderer/entities/settings/model/types'
+
+export type SettingsState = {
+  activeSection: SettingsSectionId
+  appSettings: AppSettings
+  loadStatus: 'idle' | 'loading' | 'succeeded' | 'failed'
+  saveStatus: 'idle' | 'saving' | 'succeeded' | 'failed'
+  error: string | null
+}

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { HomePage } from '@renderer/pages/home/HomePage'
@@ -22,7 +22,7 @@ describe('HomePage', () => {
   })
 
   it('renders the Moon landing hero content', () => {
-    render(<HomePage />)
+    renderWithProviders(<HomePage />)
     const section = screen.getByRole('region', { name: 'Moon landing view' })
     const scoped = within(section)
     const primaryCta = scoped.getByRole('button', { name: '新建聊天' })

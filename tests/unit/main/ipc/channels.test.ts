@@ -2,7 +2,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { ipcChannels } from '@ipc/channels'
+import { ipcChannels } from '@moon/ipc/channels'
 
 describe('ipcChannels', () => {
   it('defines chat IPC channels', () => {

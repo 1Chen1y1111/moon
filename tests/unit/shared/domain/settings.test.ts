@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { createDefaultProviderSettings } from '@shared/domain/settings'
+import { createDefaultProviderSettings } from '@moon/shared/domain/settings'
 
 describe('createDefaultProviderSettings', () => {
   it('uses a Custom badge for custom providers', () => {

@@ -2,7 +2,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 
-import { ipcChannels } from '@ipc/channels'
+import { ipcChannels } from '@moon/ipc/channels'
 import { registerWindowStateEvents } from '@main/bootstrap/window-state-events'
 
 type WindowEventName = 'maximize' | 'unmaximize' | 'restore'

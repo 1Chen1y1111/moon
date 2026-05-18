@@ -1,6 +1,8 @@
 # moon
 
-An Electron application with React and TypeScript
+Moon is a pnpm monorepo. The Electron desktop application lives in
+`apps/desktop`; shared domain code, IPC contracts, and local UI primitives live
+under `packages`.
 
 ## Recommended IDE Setup
 
@@ -20,6 +22,8 @@ $ pnpm install
 $ pnpm dev
 ```
 
+This delegates to the `@moon/desktop` workspace package.
+
 ### Build
 
 ```bash
@@ -36,7 +40,7 @@ $ pnpm build:linux
 ### Test
 
 ```bash
-$ pnpm exec vitest run
+$ pnpm test
 ```
 
 Tests live under `tests/`:

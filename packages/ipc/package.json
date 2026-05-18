@@ -1,0 +1,16 @@
+{
+  "name": "@moon/ipc",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit -p tsconfig.json --composite false"
+  },
+  "dependencies": {
+    "@moon/shared": "workspace:*",
+    "zod": "^4.1.12"
+  }
+}

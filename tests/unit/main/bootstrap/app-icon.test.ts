@@ -5,6 +5,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const dockSetIconMock = vi.fn()
 
 vi.mock('electron', () => ({
+  default: {
+    app: {
+      dock: {
+        setIcon: dockSetIconMock
+      }
+    }
+  },
   app: {
     dock: {
       setIcon: dockSetIconMock
@@ -12,7 +19,7 @@ vi.mock('electron', () => ({
   }
 }))
 
-vi.mock('../../../../resources/icon.png?asset', () => ({
+vi.mock('/apps/desktop/resources/icon.png?asset', () => ({
   default: 'icon.png'
 }))
 

@@ -2,8 +2,8 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { ipcChannels } from '@ipc/channels'
-import type { MoonApi } from '@ipc/contracts'
+import { ipcChannels } from '@moon/ipc/channels'
+import type { MoonApi } from '@moon/ipc/contracts'
 
 const exposeInMainWorldMock = vi.fn()
 const ipcInvokeMock = vi.fn()
@@ -137,7 +137,7 @@ describe('preload api', () => {
   })
 
   it('cleans up the settings change event subscription', async () => {
-    const { createDefaultAppSettings } = await import('@shared/domain/settings')
+    const { createDefaultAppSettings } = await import('@moon/shared/domain/settings')
     await import('@preload/index')
 
     const api = getExposedApi()

@@ -5,17 +5,17 @@
   "tsx": true,
   "tailwind": {
     "config": "",
-    "css": "src/renderer/src/styles/main.css",
+    "css": "apps/desktop/src/renderer/src/styles/main.css",
     "baseColor": "neutral",
     "cssVariables": true,
     "prefix": ""
   },
   "aliases": {
-    "components": "@shadcn",
-    "utils": "@shadcn/lib/utils",
-    "ui": "@shadcn/ui",
-    "lib": "@shadcn/lib",
-    "hooks": "@shadcn/hooks"
+    "components": "@moon/ui",
+    "utils": "@moon/ui/lib/utils",
+    "ui": "@moon/ui/ui",
+    "lib": "@moon/ui/lib",
+    "hooks": "@moon/ui/hooks"
   },
   "iconLibrary": "lucide"
 }

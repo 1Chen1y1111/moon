@@ -30,7 +30,7 @@ export default defineConfig(
   },
   eslintConfigPrettier,
   {
-    files: ['src/shadcn/ui/*.tsx'],
+    files: ['packages/ui/src/ui/*.tsx', 'packages/ui/src/hooks/*.ts'],
     rules: {
       '@typescript-eslint/explicit-function-return-type': 'off',
       'prettier/prettier': 'off',

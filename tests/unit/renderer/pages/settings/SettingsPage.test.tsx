@@ -2,9 +2,9 @@ import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { SettingsPage } from '@renderer/pages/settings/SettingsPage'
-import { Toaster } from '@shadcn/ui/sonner'
-import { createProviderProxyEndpoints } from '@shared/domain/provider-proxy'
-import { createDefaultAppSettings, type AppSettings } from '@shared/domain/settings'
+import { Toaster } from '@moon/ui/ui/sonner'
+import { createProviderProxyEndpoints } from '@moon/shared/domain/provider-proxy'
+import { createDefaultAppSettings, type AppSettings } from '@moon/shared/domain/settings'
 import { installMockWindowApi, type MockMoonApi } from '@tests/helpers/renderer/mock-window-api'
 import { renderWithProviders } from '@tests/helpers/renderer/render-with-providers'
 

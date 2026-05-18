@@ -15,6 +15,12 @@ class BrowserWindowMock {
 }
 
 vi.mock('electron', () => ({
+  default: {
+    BrowserWindow: BrowserWindowMock,
+    shell: {
+      openExternal: shellOpenExternalMock
+    }
+  },
   BrowserWindow: BrowserWindowMock,
   shell: {
     openExternal: shellOpenExternalMock
@@ -25,7 +31,7 @@ vi.mock('@electron-toolkit/utils', () => ({
   is: isMock
 }))
 
-vi.mock('../../../../resources/icon.png?asset', () => ({
+vi.mock('/apps/desktop/resources/icon.png?asset', () => ({
   default: 'icon.png'
 }))
 

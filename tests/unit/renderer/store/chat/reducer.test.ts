@@ -8,7 +8,7 @@ import type {
   SessionRecord,
   ThreadRecord,
   TopicRecord
-} from '@shared/domain/chat'
+} from '@moon/shared/domain/chat'
 
 const sessionOne: SessionRecord = {
   id: 'session-1',

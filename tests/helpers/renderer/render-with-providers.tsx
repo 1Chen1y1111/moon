@@ -5,7 +5,7 @@ import userEvent from '@testing-library/user-event'
 import { AppRouterContextStore, type AppRouteState } from '@renderer/app/router/router-context'
 import { resetChatStore, type ChatState } from '@renderer/store/chat'
 import { resetSettingsStore, type SettingsState } from '@renderer/store/settings'
-import { TooltipProvider } from '@shadcn/ui/tooltip'
+import { TooltipProvider } from '@moon/ui/ui/tooltip'
 
 type RenderWithProvidersOptions = Omit<RenderOptions, 'wrapper'> & {
   preloadedChat?: Partial<ChatState>

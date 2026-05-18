@@ -5,7 +5,7 @@ import { AppProviders } from '@renderer/app/providers'
 import { resetChatStore } from '@renderer/store/chat'
 import { selectActiveSettingsSection } from '@renderer/store/settings/selectors'
 import { resetSettingsStore, useSettingsStore } from '@renderer/store/settings'
-import { createDefaultAppSettings } from '@shared/domain/settings'
+import { createDefaultAppSettings } from '@moon/shared/domain/settings'
 import { installMockWindowApi } from '@tests/helpers/renderer/mock-window-api'
 
 function SettingsProbe(): React.JSX.Element {

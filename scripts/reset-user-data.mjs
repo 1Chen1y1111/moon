@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+/* eslint-disable @typescript-eslint/explicit-function-return-type */
 
 import { existsSync, mkdirSync, readFileSync, renameSync, statSync } from 'node:fs'
 import { homedir, platform } from 'node:os'
@@ -20,7 +21,13 @@ Options:
 const resetAll = args.has('--all')
 const dryRun = args.has('--dry-run')
 const scriptDirectory = dirname(fileURLToPath(import.meta.url))
-const projectRoot = join(scriptDirectory, '..')
+const workspaceRoot = join(scriptDirectory, '..')
+const cwd = process.cwd()
+const cwdPackageJson = join(cwd, 'package.json')
+const projectRoot =
+  existsSync(cwdPackageJson) && JSON.parse(readFileSync(cwdPackageJson, 'utf8')).productName
+    ? cwd
+    : join(workspaceRoot, 'apps', 'desktop')
 const packageJson = JSON.parse(readFileSync(join(projectRoot, 'package.json'), 'utf8'))
 const appNames = [...new Set([packageJson.productName, packageJson.name].filter(Boolean))]
 

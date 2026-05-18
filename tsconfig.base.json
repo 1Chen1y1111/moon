@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@renderer": ["apps/desktop/src/renderer/src"],
+      "@renderer/*": ["apps/desktop/src/renderer/src/*"],
+      "@moon/ipc": ["packages/ipc/src"],
+      "@moon/ipc/*": ["packages/ipc/src/*"],
+      "@moon/shared": ["packages/shared/src"],
+      "@moon/shared/*": ["packages/shared/src/*"],
+      "@moon/ui": ["packages/ui/src"],
+      "@moon/ui/*": ["packages/ui/src/*"],
+      "@main": ["apps/desktop/src/main"],
+      "@main/*": ["apps/desktop/src/main/*"],
+      "@preload": ["apps/desktop/src/preload"],
+      "@preload/*": ["apps/desktop/src/preload/*"],
+      "@tests": ["tests"],
+      "@tests/*": ["tests/*"]
+    }
+  }
+}

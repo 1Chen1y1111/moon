@@ -8,6 +8,11 @@ const isMock = { dev: false }
 type WindowOpenHandler = (details: { url: string }) => { action: 'deny' }
 
 vi.mock('electron', () => ({
+  default: {
+    shell: {
+      openExternal: shellOpenExternalMock
+    }
+  },
   shell: {
     openExternal: shellOpenExternalMock
   }

@@ -20,7 +20,7 @@ Moon 是一个基于 Electron、React、TypeScript 的桌面应用。当前产�
 +------------------------- Electron App -------------------------+
 |                                                                 |
 |  Main Process                                                   |
-|  src/main/index.ts                                              |
+|  apps/desktop/src/main/index.ts                                              |
 |  +-------------------+      +----------------------+             |
 |  | Window Bootstrap  |      | IPC Handlers          |             |
 |  | create-window     |<---->| register-ipc          |             |
@@ -46,15 +46,15 @@ Moon 是一个基于 Electron、React、TypeScript 的桌面应用。当前产�
 |                              +----------------------+             |
 |                                                                 |
 |  Cross-process Contracts + Domain Types                         |
-|  src/ipc + src/shared/domain                                     |
-|  @ipc/channels + @ipc/contracts + shared domain                  |
+|  packages/ipc/src + packages/shared/src/domain                                     |
+|  @moon/ipc/channels + @moon/ipc/contracts + shared domain                  |
 |                                                                 |
 |  Preload                                                        |
-|  src/preload/index.ts                                           |
+|  apps/desktop/src/preload/index.ts                                           |
 |  exposes window.api                                             |
 |                                                                 |
 |  Renderer                                                       |
-|  src/renderer/src                                               |
+|  apps/desktop/src/renderer/src                                               |
 |  +-------------------+      +----------------------+             |
 |  | Router            |      | Redux Store           |             |
 |  | / /chat /settings |      | settings              |             |
@@ -79,14 +79,14 @@ Moon 是一个基于 Electron、React、TypeScript 的桌面应用。当前产�
 
 ### 3.1 Main Process
 
-入口文件：`src/main/index.ts`
+入口文件：`apps/desktop/src/main/index.ts`
 
 主进程负责：
 
 - Electron 生命周期：`app.whenReady`、`activate`、`window-all-closed`、`will-quit`。
-- 应用图标和窗口创建：`src/main/bootstrap/app-icon.ts`、`create-window.ts`、`create-settings-window.ts`。
-- 数据库连接、Drizzle migration 和 schema 定义：`src/main/db/connection.ts`、`bootstrap.ts`、`schema.ts`。
-- IPC handler 注册：`src/main/bootstrap/register-ipc.ts`。
+- 应用图标和窗口创建：`apps/desktop/src/main/bootstrap/app-icon.ts`、`create-window.ts`、`create-settings-window.ts`。
+- 数据库连接、Drizzle migration 和 schema 定义：`apps/desktop/src/main/db/connection.ts`、`bootstrap.ts`、`schema.ts`。
+- IPC handler 注册：`apps/desktop/src/main/bootstrap/register-ipc.ts`。
 - 注入服务和仓储依赖：目前 settings 链路使用 `SettingsService + SettingsRepository`。
 
 启动流程：
@@ -105,7 +105,7 @@ app.whenReady
 
 ### 3.2 Preload
 
-入口文件：`src/preload/index.ts`
+入口文件：`apps/desktop/src/preload/index.ts`
 
 preload 的职责是把主进程能力收敛为受控 API。当前只暴露 `window.api`，类型为 `MoonApi`，不再把 `@electron-toolkit/preload` 的通用 `electronAPI` 暴露给 renderer。
 
@@ -118,7 +118,7 @@ preload 的职责是把主进程能力收敛为受控 API。当前只暴露 `win
 
 ### 3.3 Renderer
 
-入口文件：`src/renderer/src/main.tsx`
+入口文件：`apps/desktop/src/renderer/src/main.tsx`
 
 渲染层由 React 组成，主要职责是：
 
@@ -135,10 +135,11 @@ preload 的职责是把主进程能力收敛为受控 API。当前只暴露 `win
 
 ```text
 .
-  build/                         electron-builder 打包图标和平台构建资源
   docs/                          架构、规格、计划等工程文档
-  drizzle/                       Drizzle 生成的 PGlite/Postgres migration
-  resources/                     Electron 运行期资源、源 logo、生成图标和 tray 图标
+  packages/                      共享 workspace packages
+    shared/                      纯领域类型、默认值和校验 schema
+    ipc/                         IPC channel、契约和窗口控制类型
+    ui/                          本地 shadcn primitives、hooks 和工具函数
   screenshorts/                  UI 截图参考和视觉回归素材
   scripts/                       本地维护脚本，例如图标生成和 shadcn 组件更新
   tests/                         集中式测试目录
@@ -151,94 +152,45 @@ preload 的职责是把主进程能力收敛为受控 API。当前只暴露 `win
     integration/                 轻集成测试
       main/                      PGlite、repository、database bootstrap 测试
 
-  src/
-    ipc/                         app-wide 跨进程协议层
-      channels.ts                IPC channel 常量
-      contracts.ts               IPC request/response 契约、Zod schema、共享 DTO
-
-    main/                        Electron main process 源码
-      bootstrap/                 应用图标、窗口创建、IPC 注册、窗口状态事件
-      db/                        PGlite 连接、Drizzle schema、migration bootstrap
-      repositories/              按表/聚合组织的数据访问层
-      services/                  面向业务用例的服务层，编排校验和 repository
-      types/                     本地第三方类型补充
-      index.ts                   main process 入口和依赖装配
-
-    preload/                     Electron preload 源码
-      index.ts                   contextBridge 暴露受控 window.api
-      index.d.ts                 renderer 全局 Window 类型声明
-
-    renderer/src/                React renderer 源码
-      app/                       应用装配层
-        router/                  TanStack Router 路由定义、route host、路由上下文
-        store/                   Redux store 创建和 typed hooks
-
-      pages/                     路由页面层，只做页面级组合
-        chat/                    聊天路由页面
-        home/                    首页和空状态入口
-        settings/                设置页路由入口，组合 settings 窗口内容
-
-      layouts/                   路由/窗口外壳，组合页面内容和全局导航
-        settings-shell/          独立设置窗口外框、标题栏、窗口控制
-        workspace-shell/         主工作区外框、侧边栏、工作区窗口控制
-
-      features/                  用户可触发的功能片段
-        GeneralSettings/         通用设置展示和交互
-        ProviderSettings/        Provider 表单、本地草稿、保存校验
-        settingsNavigation/      设置分类侧边栏导航
-        UserInterface/           用户界面主题选择和外观保存
-
-      entities/                  业务实体模型和状态
-        settings/                settings 实体聚合
-          config/                设置 section 元数据
-          model/                 selectors、types、hooks、slice 组织
-            slices/              Redux slice
-
-      components/                renderer-only 复用 UI 组件
-        ProviderCatalogIcon/     provider 品牌图标组件
-        SettingsPanel/           设置面板共享样式
-        WindowControls/          mac/windows 自定义窗口控制组件
-
-      assets/                    renderer 静态资源，例如 logo
-      styles/                    renderer 全局样式、设计 token、暗色覆盖和 recipe
-
-      main.tsx                   renderer 入口
-
-    shared/                      跨 main/preload/renderer 的纯领域类型和常量
-      domain/                    provider、settings、chat 等无运行时副作用模型
-
-    shadcn/                      本地 shadcn 代码
-      ui/                        本地 shadcn UI primitives
-      lib/                       shadcn 工具函数
+  apps/
+    desktop/                     Electron 桌面应用 workspace package
+      build/                     electron-builder 打包图标和平台构建资源
+      drizzle/                   Drizzle 生成的 PGlite/Postgres migration
+      resources/                 Electron 运行期资源、源 logo、生成图标和 tray 图标
+      src/
+        main/                    Electron main process 源码
+        preload/                 Electron preload 源码
+        renderer/src/            React renderer 源码
 ```
 
 目录边界约束：
 
-- `src/ipc` 只放跨进程协议、类型和 schema；不依赖 main、preload 或 renderer 实现。
-- `src/main` 可以依赖 `@ipc`，不能依赖 `@renderer` 或 renderer-only 文件。
-- `src/preload` 只做桥接和类型映射，不承载业务逻辑或持久化逻辑。
-- `src/renderer/src/components` 只放 renderer 内部复用 UI 组件，组件目录使用 PascalCase。
-- `src/renderer/src/assets` 和 `src/renderer/src/styles` 只服务 renderer 内部，不能被 main/preload 反向依赖。
-- `src/shared/domain` 只放跨进程共享的纯领域类型、常量和默认值；不放 UI、Electron、数据库连接或业务编排。
-- `src/shadcn` 是本地 vendor 化 UI primitive，业务组合应放在 renderer 的 `components`、`features` 或 `layouts`。
-- `tests` 使用镜像源码结构集中组织测试；测试可以依赖 `@main`、`@preload`、`@renderer`、`@ipc` 和 `@tests` alias，但源码不应依赖 `@tests`。
+- `packages/ipc/src` 只放跨进程协议、类型和 schema；不依赖 main、preload 或 renderer 实现。
+- `apps/desktop/src/main` 可以依赖 `@moon/ipc`，不能依赖 `@renderer` 或 renderer-only 文件。
+- `apps/desktop/src/preload` 只做桥接和类型映射，不承载业务逻辑或持久化逻辑。
+- `apps/desktop/src/renderer/src/components` 只放 renderer 内部复用 UI 组件，组件目录使用 PascalCase。
+- `apps/desktop/src/renderer/src/assets` 和 `apps/desktop/src/renderer/src/styles` 只服务 renderer 内部，不能被 main/preload 反向依赖。
+- `packages/shared/src/domain` 只放跨进程共享的纯领域类型、常量和默认值；不放 UI、Electron、数据库连接或业务编排。
+- `packages/ui/src` 是本地 vendor 化 UI primitive，业务组合应放在 renderer 的 `components`、`features` 或 `layouts`。
+- `tests` 使用镜像源码结构集中组织测试；测试可以依赖 `@main`、`@preload`、`@renderer`、`@moon/ipc` 和 `@tests` alias，但源码不应依赖 `@tests`。
 
 ## 5. IPC 契约与数据流
 
-IPC channel 集中定义在 `src/ipc/channels.ts`，契约和 schema 集中定义在 `src/ipc/contracts.ts`。跨进程共享的纯领域类型放在 `src/shared/domain`，再由 `src/ipc/contracts.ts` 复用和必要时 re-export。`main`、`preload` 和 `renderer` 共同依赖这层协议，避免类型漂移。
+IPC channel 集中定义在 `packages/ipc/src/channels.ts`，契约和 schema 集中定义在 `packages/ipc/src/contracts.ts`。跨进程共享的纯领域类型放在 `packages/shared/src/domain`，再由 `packages/ipc/src/contracts.ts` 复用和必要时 re-export。`main`、`preload` 和 `renderer` 共同依赖这层协议，避免类型漂移。
 
 导入约定：
 
 ```text
-@ipc/channels              IPC channel 常量
-@ipc/contracts             request/response 类型、Zod schema、跨进程 DTO
-src/shared/domain          provider、settings、chat 等纯领域类型和默认值，当前无专用 alias
-@renderer/components/...   renderer 内部复用 UI 组件
-@renderer/assets/...       renderer 内部静态资源
-src/renderer/src/styles    renderer 全局样式入口
+@moon/ipc/channels        IPC channel 常量
+@moon/ipc/contracts       request/response 类型、Zod schema、跨进程 DTO
+@moon/shared/domain/...   provider、settings、chat 等纯领域类型和默认值
+@moon/ui/ui/...           本地 shadcn primitives
+@moon/ui/lib/utils        cn 等 UI 工具函数
+@renderer/components/...  renderer 内部复用 UI 组件
+@renderer/assets/...      renderer 内部静态资源
 ```
 
-`src/ipc` 是 app-wide 的跨进程协议层，不放 renderer 组件、样式或主进程实现。`src/shared/domain` 是更底层的纯领域模型层，不引入 Zod、Electron、Drizzle 或 React。`src/renderer/src/components`、`src/renderer/src/assets` 和 `src/renderer/src/styles` 是 renderer bounded context 内的复用层，三者不要和跨进程共享层混用。
+`packages/ipc/src` 是 app-wide 的跨进程协议层，不放 renderer 组件、样式或主进程实现。`packages/shared/src/domain` 是更底层的纯领域模型层，不引入 Zod、Electron、Drizzle 或 React。`apps/desktop/src/renderer/src/components`、`apps/desktop/src/renderer/src/assets` 和 `apps/desktop/src/renderer/src/styles` 是 renderer bounded context 内的复用层，三者不要和跨进程共享层混用。
 
 当前 channel：
 
@@ -310,16 +262,16 @@ BrowserWindow maximize/unmaximize/restore
 
 数据库目录位于 Electron `app.getPath('userData')` 下，当前目录名为 `moon-pglite`。开发期 Drizzle Kit 配置使用 `./.moon-pglite-dev` 作为本地数据库目录。
 
-连接抽象：`src/main/db/connection.ts`
+连接抽象：`apps/desktop/src/main/db/connection.ts`
 
 - 使用 `@electric-sql/pglite` 创建嵌入式 Postgres-compatible 数据库。
 - 使用 `drizzle-orm/pglite` 创建类型化 `db`，repository 统一通过 Drizzle 查询和写入。
 - 统一暴露 `AppDatabaseConnection`，包含 `db`、底层 PGlite `client` 和异步 `close()`。
 - `createDatabaseConnection('memory://')` 可用于测试；非内存路径会先确保目录存在。
-- `bootstrapDatabase` 使用 `drizzle-orm/pglite/migrator` 执行 `drizzle/` 下的 migration，migration 状态表为 `public.__drizzle_migrations`。
-- 打包时 `electron-builder.yml` 通过 `extraResources` 把 `drizzle/` 放入应用资源目录，运行期 `getMigrationsFolder()` 会在 packaged 与开发环境之间选择正确路径。
+- `bootstrapDatabase` 使用 `drizzle-orm/pglite/migrator` 执行 `apps/desktop/drizzle/` 下的 migration，migration 状态表为 `public.__drizzle_migrations`。
+- 打包时 `electron-builder.yml` 通过 `extraResources` 把 `apps/desktop/drizzle/` 放入应用资源目录，运行期 `getMigrationsFolder()` 会在 packaged 与开发环境之间选择正确路径。
 
-Schema：`src/main/db/schema.ts`
+Schema：`apps/desktop/src/main/db/schema.ts`
 
 ```text
 settings
@@ -368,7 +320,7 @@ messages
 
 ### 7.1 Provider 与路由
 
-`src/renderer/src/App.tsx` 组合：
+`apps/desktop/src/renderer/src/App.tsx` 组合：
 
 ```text
 App
@@ -378,7 +330,7 @@ App
   -> RouterProvider(appRouter)
 ```
 
-路由定义：`src/renderer/src/app/router/index.tsx`
+路由定义：`apps/desktop/src/renderer/src/app/router/index.tsx`
 
 ```text
 /          -> WorkspaceShell -> HomePage
@@ -390,7 +342,7 @@ App
 
 ### 7.2 Redux Store 与实体层
 
-Store 文件：`src/renderer/src/app/store/index.ts`
+Store 文件：`apps/desktop/src/renderer/src/app/store/index.ts`
 
 当前 slice：
 
@@ -398,7 +350,7 @@ Store 文件：`src/renderer/src/app/store/index.ts`
 
 `AppProviders` 内的 `ThemeController` 会在 renderer 启动后加载一次设置，订阅 `settings:on-change`，并根据 `light`、`dark`、`system` 写入根节点的 `.dark` class 和 `color-scheme`。
 
-settings 领域状态位于 `src/renderer/src/entities/settings`：
+settings 领域状态位于 `apps/desktop/src/renderer/src/entities/settings`：
 
 ```text
 entities/settings/
@@ -456,22 +408,22 @@ app
 
 ## 8. UI 与设计系统
 
-全局样式入口：`src/renderer/src/styles/main.css`。`components.json` 的 shadcn CSS 配置也指向这个路径，避免工具把样式写回旧目录。
+全局样式入口：`apps/desktop/src/renderer/src/styles/main.css`。`components.json` 的 shadcn CSS 配置也指向这个路径，避免工具把样式写回旧目录。
 
 设计系统现状：
 
 - Tailwind CSS v4 的 `@theme` 映射 Moon 语义 token；`tokens.css`、`tokens.dark.css` 和 `recipes.css` 分别维护视觉 token、暗色覆盖和 `.moon-*` 组件 recipe。
 - Light mode 使用 parchment、ivory、warm neutral gray 与稀疏 ink blue accent；dark mode 通过 `.dark` token overrides 保留独立暗色调。
-- 本地 shadcn primitives 位于 `src/shadcn/ui`，当前有 `Button` 和 `Tooltip`。
+- 本地 shadcn primitives 位于 `packages/ui/src/ui`，当前有 `Button` 和 `Tooltip`。
 - 图标主要来自 `lucide-react`。
 - Radix primitives 用于 Tooltip 和 Slot。
 
 重要约束：
 
 - 优先使用既有 `moon-*` token 和 `.moon-*` recipe，避免在 app UI 中加入零散 Tailwind 视觉尺度。
-- 组件优先使用 `@shadcn` 本地 primitive，而不是直接引入远端或重建一套组件。
+- 组件优先使用 `@moon/ui` 本地 primitive，而不是直接引入远端或重建一套组件。
 - 页面结构分为 `pages`、`layouts`、`features`、`entities`、`components`、`assets` 和 `styles`，避免页面直接承载复杂领域状态。
-- `@renderer/components` 和 `@renderer/assets` 仅存放 renderer-only 的复用 UI 与静态资源；跨进程类型必须放在 `@ipc`。
+- `@renderer/components` 和 `@renderer/assets` 仅存放 renderer-only 的复用 UI 与静态资源；跨进程类型必须放在 `@moon/ipc`。
 - 自定义窗口按钮必须通过 `window.api.windowControls`，不要在 renderer 中直接调用 Electron。
 
 ## 9. 当前实现状态与缺口
@@ -485,7 +437,7 @@ app
 - Provider 设置支持 Claude、OpenAI、Gemini、OpenAI Compatible，并在主进程加密保存 API Key。
 - 设置页 section 导航、通用设置展示、用户界面主题选择、Provider 表单和占位设置分类。
 - 主窗口的“配置提供商”和“设置”按钮会打开独立设置窗口。
-- 应用图标从 `resources/logo.png` 生成，运行时由 `app-icon.ts` 统一选择 macOS Dock 图标和非 macOS BrowserWindow 图标。
+- 应用图标从 `apps/desktop/resources/logo.png` 生成，运行时由 `app-icon.ts` 统一选择 macOS Dock 图标和非 macOS BrowserWindow 图标。
 - `sessions` 与 `messages` repository 基础能力，包括基于 Postgres full-text search 的消息搜索。
 - 主进程、仓储、窗口、renderer 关键 UI 的 Vitest 测试。
 
@@ -536,8 +488,8 @@ tests/
 建议遵循以下步骤：
 
 ```text
-1. 在 src/ipc/channels.ts 添加 channel 常量。
-2. 在 src/ipc/contracts.ts 添加 request/response 类型和必要 Zod schema。
+1. 在 packages/ipc/src/channels.ts 添加 channel 常量。
+2. 在 packages/ipc/src/contracts.ts 添加 request/response 类型和必要 Zod schema。
 3. 在 preload/index.ts 暴露最小 window.api 方法。
 4. 在 register-ipc.ts 注册 handler。
 5. 在 service 层做输入校验和业务编排。
@@ -550,7 +502,7 @@ tests/
 Provider 设置已经走完整 IPC 和持久化链路。新增 provider 时建议同步修改：
 
 ```text
-src/ipc/contracts.ts
+packages/ipc/src/contracts.ts
   providerIds / providerLabels / AppSettings schema
 
 main/db/schema.ts
@@ -589,28 +541,28 @@ pnpm exec vitest run
 
 - `electron-vite` 负责编译 main、preload、renderer。
 - `electron-builder` 负责平台打包。
-- `electron-builder.yml` 当前配置了 macOS、Windows、Linux 目标，把 `resources/**` 放入 `asarUnpack`，并通过 `extraResources` 携带 `drizzle/` migration。
+- `electron-builder.yml` 当前配置了 macOS、Windows、Linux 目标，把 `apps/desktop/resources/**` 放入 `asarUnpack`，并通过 `extraResources` 携带 `apps/desktop/drizzle/` migration。
 
 图标资源链路：
 
 ```text
-resources/logo.png
+apps/desktop/resources/logo.png
   -> pnpm build:icons
-  -> resources/icons/{size}x{size}.png
-  -> resources/icon.png
-  -> resources/tray_icon.png + resources/tray_icon@2x.png
-  -> build/icon.png + build/icon.icns + build/icon.ico
+  -> apps/desktop/resources/icons/{size}x{size}.png
+  -> apps/desktop/resources/icon.png
+  -> apps/desktop/resources/tray_icon.png + apps/desktop/resources/tray_icon@2x.png
+  -> apps/desktop/build/icon.png + apps/desktop/build/icon.icns + apps/desktop/build/icon.ico
 ```
 
-`scripts/build-icons.mjs` 依赖 macOS 自带的 `sips` 和 `iconutil`，要求源 logo 是至少 1024x1024 的正方形 PNG。运行时 `src/main/bootstrap/app-icon.ts` 在 macOS 设置 Dock 图标，在 Windows 使用 `build/icon.ico`，其他非 macOS 平台使用 `resources/icon.png` 作为 `BrowserWindow` 图标。
+`scripts/build-icons.mjs` 依赖 macOS 自带的 `sips` 和 `iconutil`，要求源 logo 是至少 1024x1024 的正方形 PNG。运行时 `apps/desktop/src/main/bootstrap/app-icon.ts` 在 macOS 设置 Dock 图标，在 Windows 使用 `apps/desktop/build/icon.ico`，其他非 macOS 平台使用 `apps/desktop/resources/icon.png` 作为 `BrowserWindow` 图标。
 
 ## 13. 架构原则
 
 - 主进程拥有系统能力和持久化，renderer 通过 `window.api` 访问能力。
-- IPC channel、契约、schema 集中定义在 `src/ipc`，避免字符串散落。
+- IPC channel、契约、schema 集中定义在 `packages/ipc/src`，避免字符串散落。
 - 服务层负责校验和业务编排，仓储层只做数据读写。
 - renderer 以 `app -> pages -> layouts -> features -> entities -> components/assets/styles` 分层组织。
-- 根级 `src/shared/domain` 只用于跨进程纯领域类型和常量；跨进程 IPC 契约放在 `src/ipc`，renderer 内复用 UI/样式/资源放在 `src/renderer/src/components`、`src/renderer/src/styles` 和 `src/renderer/src/assets`。
+- `packages/shared/src/domain` 只用于跨进程纯领域类型和常量；跨进程 IPC 契约放在 `packages/ipc/src`；基础 UI primitives 放在 `packages/ui/src`；renderer 内业务 UI、样式和资源放在 `apps/desktop/src/renderer/src/components`、`apps/desktop/src/renderer/src/styles` 和 `apps/desktop/src/renderer/src/assets`。
 - UI 状态使用 Redux；跨进程状态以 IPC 和持久化结果为准。
 - 只暴露必要 preload API，避免扩大 Electron/Node 能力边界。
 - 新能力先定义可验证目标，再补最小测试闭环。

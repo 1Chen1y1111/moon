@@ -65,9 +65,9 @@ describe('registerIpcHandlers', () => {
   })
 
   it('registers settings handlers that delegate through the settings service', async () => {
-    const { createDefaultAppSettings } = await import('@shared/domain/settings')
+    const { createDefaultAppSettings } = await import('@moon/shared/domain/settings')
     const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
-    const { ipcChannels } = await import('@ipc/channels')
+    const { ipcChannels } = await import('@moon/ipc/channels')
     const settings = createDefaultAppSettings()
     const input = {
       provider: 'claude',
@@ -102,7 +102,7 @@ describe('registerIpcHandlers', () => {
 
   it('registers chat handlers that delegate through the chat service', async () => {
     const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
-    const { ipcChannels } = await import('@ipc/channels')
+    const { ipcChannels } = await import('@moon/ipc/channels')
     const session = {
       id: 'session-1',
       projectId: null,
@@ -282,9 +282,9 @@ describe('registerIpcHandlers', () => {
   })
 
   it('broadcasts saved settings to open renderer windows', async () => {
-    const { createDefaultAppSettings } = await import('@shared/domain/settings')
+    const { createDefaultAppSettings } = await import('@moon/shared/domain/settings')
     const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
-    const { ipcChannels } = await import('@ipc/channels')
+    const { ipcChannels } = await import('@moon/ipc/channels')
     const settings = createDefaultAppSettings()
     const firstWebContents = { send: vi.fn() }
     const secondWebContents = { send: vi.fn() }
@@ -320,7 +320,7 @@ describe('registerIpcHandlers', () => {
     fromWebContentsMock.mockReturnValue(browserWindow)
 
     const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
-    const { ipcChannels } = await import('@ipc/channels')
+    const { ipcChannels } = await import('@moon/ipc/channels')
 
     registerIpcHandlers({
       chatService: chatService as never,
@@ -351,7 +351,7 @@ describe('registerIpcHandlers', () => {
 
   it('registers a handler that opens the dedicated settings window', async () => {
     const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
-    const { ipcChannels } = await import('@ipc/channels')
+    const { ipcChannels } = await import('@moon/ipc/channels')
 
     registerIpcHandlers({
       chatService: chatService as never,
@@ -373,7 +373,7 @@ describe('registerIpcHandlers', () => {
 
   it('rejects unsupported settings-window sections before opening a window', async () => {
     const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
-    const { ipcChannels } = await import('@ipc/channels')
+    const { ipcChannels } = await import('@moon/ipc/channels')
 
     registerIpcHandlers({
       chatService: chatService as never,
@@ -395,7 +395,7 @@ describe('registerIpcHandlers', () => {
     fromWebContentsMock.mockReturnValue(browserWindow)
 
     const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
-    const { ipcChannels } = await import('@ipc/channels')
+    const { ipcChannels } = await import('@moon/ipc/channels')
 
     registerIpcHandlers({
       chatService: chatService as never,

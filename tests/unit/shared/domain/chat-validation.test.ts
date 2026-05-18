@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   getChatMessagesInputSchema,
   sendChatMessageInputSchema
-} from '@shared/domain/chat-validation'
+} from '@moon/shared/domain/chat-validation'
 
 describe('chat input validation', () => {
   it('trims message input and rejects empty content', () => {

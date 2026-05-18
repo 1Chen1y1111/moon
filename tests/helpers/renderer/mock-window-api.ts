@@ -1,7 +1,7 @@
 import { vi } from 'vitest'
 
-import type { MoonApi } from '@ipc/contracts'
-import type { OpenSettingsInput, WindowState } from '@ipc/window-contracts'
+import type { MoonApi } from '@moon/ipc/contracts'
+import type { OpenSettingsInput, WindowState } from '@moon/ipc/window-contracts'
 import type {
   AgentOperationRecord,
   ChatAttachmentRecord,
@@ -12,7 +12,7 @@ import type {
   ThreadRecord,
   ToolInvocationRecord,
   TopicRecord
-} from '@shared/domain/chat'
+} from '@moon/shared/domain/chat'
 import type {
   ApproveToolCallInput,
   CancelAgentOperationInput,
@@ -22,12 +22,12 @@ import type {
   ListChatTopicsInput,
   RejectToolCallInput,
   SendChatMessageInput
-} from '@shared/domain/chat-validation'
+} from '@moon/shared/domain/chat-validation'
 import {
   createDefaultAppSettings,
   type AppSettings,
   type ProviderTestResult
-} from '@shared/domain/settings'
+} from '@moon/shared/domain/settings'
 import type {
   CreateCustomAcpProviderInput,
   CreateCustomProviderInput,
@@ -35,7 +35,7 @@ import type {
   ProviderConnectionInput,
   SaveAppearanceInput,
   SaveProviderInput
-} from '@shared/domain/settings-validation'
+} from '@moon/shared/domain/settings-validation'
 
 type MockFn<T extends (...args: never[]) => unknown> = ReturnType<typeof vi.fn<T>>
 

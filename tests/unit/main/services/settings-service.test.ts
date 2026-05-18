@@ -3,8 +3,8 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { SettingsService } from '@main/services/settings-service'
-import { createDefaultAppSettings } from '@shared/domain/settings'
-import type { ProviderConnectionInput } from '@shared/domain/settings-validation'
+import { createDefaultAppSettings } from '@moon/shared/domain/settings'
+import type { ProviderConnectionInput } from '@moon/shared/domain/settings-validation'
 
 function createJsonResponse(payload: unknown): Response {
   return {

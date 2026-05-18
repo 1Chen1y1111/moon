@@ -13,10 +13,13 @@ import type {
   ThreadRecord,
   ToolInvocationRecord,
   TopicRecord
-} from '@shared/domain/chat'
-import type { SessionRecord } from '@shared/domain/chat'
-import { createDefaultAppSettings, createDefaultProviderSettings } from '@shared/domain/settings'
-import type { AppSettings, ProviderSettings } from '@shared/domain/settings'
+} from '@moon/shared/domain/chat'
+import type { SessionRecord } from '@moon/shared/domain/chat'
+import {
+  createDefaultAppSettings,
+  createDefaultProviderSettings
+} from '@moon/shared/domain/settings'
+import type { AppSettings, ProviderSettings } from '@moon/shared/domain/settings'
 
 const aiProviderMocks = vi.hoisted(() => {
   const openaiChat = vi.fn((modelId: string) => ({ kind: 'openai-chat', modelId }))

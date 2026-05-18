@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { ChatPage } from '@renderer/pages/chat'
 import { renderWithProviders } from '@tests/helpers/renderer/render-with-providers'
 import { installMockWindowApi, type MockMoonApi } from '@tests/helpers/renderer/mock-window-api'
-import { createDefaultAppSettings, type AppSettings } from '@shared/domain/settings'
+import { createDefaultAppSettings, type AppSettings } from '@moon/shared/domain/settings'
 
 const session = {
   id: 'session-1',
