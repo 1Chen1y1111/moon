@@ -210,7 +210,9 @@ describe('ChatPage', () => {
     await user.type(screen.getByRole('textbox', { name: '消息内容' }), '你好')
     await user.click(screen.getByRole('button', { name: '发送' }))
 
-    await waitFor(() => expect(api.chat.sendMessage).toHaveBeenCalledWith({ content: '你好' }))
+    await waitFor(() =>
+      expect(api.chat.createMessageTurn).toHaveBeenCalledWith({ content: '你好' })
+    )
     expect(await screen.findByText('你好，我在。')).toBeInTheDocument()
   })
 
@@ -253,7 +255,7 @@ describe('ChatPage', () => {
     await user.click(screen.getByRole('button', { name: /发送/ }))
 
     await waitFor(() =>
-      expect(api.chat.sendMessage).toHaveBeenCalledWith({
+      expect(api.chat.createMessageTurn).toHaveBeenCalledWith({
         content: '',
         attachments: [
           expect.objectContaining({
@@ -296,7 +298,7 @@ describe('ChatPage', () => {
     await user.click(screen.getByRole('button', { name: /发送/ }))
 
     await waitFor(() =>
-      expect(api.chat.sendMessage).toHaveBeenCalledWith({
+      expect(api.chat.createMessageTurn).toHaveBeenCalledWith({
         content: '',
         attachments: [
           expect.objectContaining({
@@ -355,7 +357,7 @@ describe('ChatPage', () => {
     await user.click(screen.getByRole('button', { name: '发送' }))
 
     await waitFor(() =>
-      expect(api.chat.sendMessage).toHaveBeenCalledWith({
+      expect(api.chat.createMessageTurn).toHaveBeenCalledWith({
         provider: 'deepseek',
         content: 'hello'
       })
@@ -416,7 +418,7 @@ describe('ChatPage', () => {
     await user.click(screen.getByRole('button', { name: '发送' }))
 
     await waitFor(() =>
-      expect(api.chat.sendMessage).toHaveBeenCalledWith({
+      expect(api.chat.createMessageTurn).toHaveBeenCalledWith({
         sessionId: 'session-1',
         threadId: 'thread-1',
         provider: 'deepseek',
@@ -426,40 +428,53 @@ describe('ChatPage', () => {
   })
 
   it('renders the submitted message and streamed assistant text before send completes', async () => {
-    let resolveSend: (result: Awaited<ReturnType<typeof api.chat.sendMessage>>) => void
+    let resolveRun: (result: Awaited<ReturnType<typeof api.chat.runOperation>>) => void
     const completedMessages = [
       { ...userMessage, content: '流式测试' },
       { ...assistantMessage, id: 'message-streaming', content: '正在回复完成' }
     ]
 
-    api.chat.getMessages.mockResolvedValue(completedMessages)
-    api.chat.sendMessage.mockReturnValue(
+    api = installMockWindowApi({
+      chatMessages: [],
+      chatSessions: [session],
+      sentChatMessage: {
+        session,
+        topic,
+        thread,
+        operation,
+        messages: completedMessages
+      }
+    })
+    api.chat.getMessages.mockResolvedValue([])
+    api.chat.runOperation.mockReturnValue(
       new Promise((resolve) => {
-        resolveSend = resolve
+        resolveRun = resolve
       })
     )
-    const { user } = renderWithProviders(<ChatPage />)
+    const { user } = renderWithProviders(<ChatPage />, {
+      preloadedChat: {
+        activeSessionId: 'session-1',
+        activeTopicId: 'topic-1',
+        activeThreadId: 'thread-1',
+        sessions: [session],
+        topics: [topic],
+        threads: [thread],
+        sessionsStatus: 'succeeded',
+        topicsStatus: 'succeeded',
+        threadsStatus: 'succeeded'
+      },
+      routeState: { activeChatId: 'session-1' }
+    })
+
+    await waitFor(() => expect(api.chat.getMessages).toHaveBeenCalled())
 
     await user.type(screen.getByRole('textbox', { name: '消息内容' }), '流式测试')
     await user.click(screen.getByRole('button', { name: '发送' }))
 
     expect(screen.getByText('流式测试')).toBeInTheDocument()
 
-    const streamListener = api.chat.onSendMessageEvent.mock.calls[0][0]
+    const streamListener = api.chat.onOperationEvent.mock.calls[0][0]
     act(() => {
-      streamListener({
-        type: 'message-created',
-        operationId: 'operation-1',
-        session,
-        topic,
-        thread,
-        message: {
-          ...assistantMessage,
-          id: 'message-streaming',
-          content: '',
-          status: 'streaming'
-        }
-      })
       streamListener({
         type: 'message-delta',
         operationId: 'operation-1',
@@ -474,10 +489,7 @@ describe('ChatPage', () => {
     expect(await screen.findByText('正在回复')).toBeInTheDocument()
 
     await act(async () => {
-      resolveSend!({
-        session,
-        topic,
-        thread,
+      resolveRun!({
         operation,
         messages: completedMessages
       })
@@ -506,7 +518,7 @@ describe('ChatPage', () => {
     await user.click(screen.getByRole('button', { name: '发送' }))
 
     await waitFor(() =>
-      expect(api.chat.sendMessage).toHaveBeenCalledWith({
+      expect(api.chat.createMessageTurn).toHaveBeenCalledWith({
         content: '继续',
         sessionId: 'session-1',
         threadId: 'thread-1'
@@ -516,7 +528,7 @@ describe('ChatPage', () => {
   })
 
   it('shows send failures without clearing the draft', async () => {
-    api.chat.sendMessage.mockRejectedValueOnce(new Error('model down'))
+    api.chat.createMessageTurn.mockRejectedValueOnce(new Error('model down'))
     const { user } = renderWithProviders(<ChatPage />, {
       preloadedChat: {
         sessions: [session],

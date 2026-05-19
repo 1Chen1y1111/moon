@@ -128,7 +128,7 @@ describe('chat reducer message ownership', () => {
       threadId: 'thread-2'
     })
     state = chatReducer(state, {
-      type: 'applySendMessageEvent',
+      type: 'applyChatOperationEvent',
       event: {
         type: 'message-created',
         operationId: 'operation-1',
@@ -139,7 +139,7 @@ describe('chat reducer message ownership', () => {
       }
     })
     state = chatReducer(state, {
-      type: 'applySendMessageEvent',
+      type: 'applyChatOperationEvent',
       event: {
         type: 'message-created',
         operationId: 'operation-1',
@@ -195,7 +195,7 @@ describe('chat reducer message ownership', () => {
     expect(state.messages).toEqual([messageTwo])
   })
 
-  it('removes the streamed assistant draft when sending fails', () => {
+  it('removes the optimistic turn when creating a message turn fails', () => {
     let state = chatReducer(createInitialChatState(), {
       type: 'loadChatMessagesPending',
       requestId: 'load-request',
@@ -213,7 +213,7 @@ describe('chat reducer message ownership', () => {
     state = chatReducer(state, {
       type: 'sendChatMessagePending',
       input: { sessionId: 'session-1', content: 'continue' },
-      optimisticMessage: {
+      optimisticUserMessage: {
         id: 'pending-send-request',
         sessionId: 'session-1',
         topicId: 'topic-1',
@@ -224,58 +224,32 @@ describe('chat reducer message ownership', () => {
         createdAt: '2026-05-09T00:00:02.000Z',
         updatedAt: '2026-05-09T00:00:02.000Z'
       },
-      requestId: 'send-request'
-    })
-    state = chatReducer(state, {
-      type: 'applySendMessageEvent',
-      event: {
-        type: 'message-created',
-        operationId: 'operation-1',
-        session: sessionOne,
-        topic: topicOne,
-        thread: threadOne,
-        message: {
-          ...messageOne,
-          id: 'saved-user-message',
-          content: 'continue'
-        }
-      }
-    })
-    state = chatReducer(state, {
-      type: 'applySendMessageEvent',
-      event: {
-        type: 'message-created',
-        operationId: 'operation-1',
-        session: sessionOne,
-        topic: topicOne,
-        thread: threadOne,
-        message: {
-          id: 'assistant-streaming',
-          sessionId: 'session-1',
-          topicId: 'topic-1',
-          threadId: 'thread-1',
-          role: 'assistant',
-          content: '',
-          status: 'streaming',
-          createdAt: '2026-05-09T00:00:03.000Z',
-          updatedAt: '2026-05-09T00:00:03.000Z'
-        }
-      }
-    })
-    state = chatReducer(state, {
-      type: 'applySendMessageEvent',
-      event: {
-        type: 'message-delta',
-        operationId: 'operation-1',
+      optimisticAssistantMessage: {
+        id: 'pending-assistant-send-request',
         sessionId: 'session-1',
         topicId: 'topic-1',
         threadId: 'thread-1',
-        messageId: 'assistant-streaming',
-        delta: 'partial answer'
-      }
+        parentId: 'pending-send-request',
+        operationId: 'pending-operation-send-request',
+        role: 'assistant',
+        content: '',
+        status: 'pending',
+        createdAt: '2026-05-09T00:00:02.000Z',
+        updatedAt: '2026-05-09T00:00:02.000Z'
+      },
+      optimisticOperation: {
+        id: 'pending-operation-send-request',
+        appContext: { sessionId: 'session-1' },
+        topicId: 'topic-1',
+        threadId: 'thread-1',
+        status: 'idle',
+        createdAt: '2026-05-09T00:00:02.000Z',
+        updatedAt: '2026-05-09T00:00:02.000Z'
+      },
+      requestId: 'send-request'
     })
 
-    expect(state.messages.map((message) => message.content)).toEqual(['continue', 'partial answer'])
+    expect(state.messages.map((message) => message.content)).toEqual(['continue', ''])
 
     state = chatReducer(state, {
       type: 'sendChatMessageRejected',
@@ -283,7 +257,8 @@ describe('chat reducer message ownership', () => {
       requestId: 'send-request'
     })
 
-    expect(state.messages.map((message) => message.content)).toEqual(['continue'])
+    expect(state.messages).toEqual([])
     expect(state.streamingAssistantMessageId).toBeNull()
+    expect(state.operationsById['pending-operation-send-request']).toBeUndefined()
   })
 })

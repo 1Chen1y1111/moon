@@ -5,7 +5,10 @@ import type { OpenSettingsInput, WindowState } from '@ipc/window-contracts'
 import type {
   AgentOperationRecord,
   ChatAttachmentRecord,
+  ChatOperationEvent,
+  CreateMessageTurnResult,
   MessageRecord,
+  RunChatOperationResult,
   SendMessageEvent,
   SendMessageResult,
   SessionRecord,
@@ -16,11 +19,13 @@ import type {
 import type {
   ApproveToolCallInput,
   CancelAgentOperationInput,
+  CreateMessageTurnInput,
   GetChatMessagesInput,
   ImportChatAttachmentInput,
   ListChatThreadsInput,
   ListChatTopicsInput,
   RejectToolCallInput,
+  RunChatOperationInput,
   SendChatMessageInput
 } from '@shared/domain/chat-validation'
 import {
@@ -47,10 +52,13 @@ export type MockMoonApi = {
     listThreads: MockFn<(input: ListChatThreadsInput) => Promise<ThreadRecord[]>>
     createSession: MockFn<() => Promise<SessionRecord>>
     importAttachment: MockFn<(input: ImportChatAttachmentInput) => Promise<ChatAttachmentRecord>>
+    createMessageTurn: MockFn<(input: CreateMessageTurnInput) => Promise<CreateMessageTurnResult>>
+    runOperation: MockFn<(input: RunChatOperationInput) => Promise<RunChatOperationResult>>
     sendMessage: MockFn<(input: SendChatMessageInput) => Promise<SendMessageResult>>
     cancelOperation: MockFn<(input: CancelAgentOperationInput) => Promise<AgentOperationRecord>>
     approveToolCall: MockFn<(input: ApproveToolCallInput) => Promise<ToolInvocationRecord>>
     rejectToolCall: MockFn<(input: RejectToolCallInput) => Promise<ToolInvocationRecord>>
+    onOperationEvent: MockFn<(listener: (event: ChatOperationEvent) => void) => () => void>
     onSendMessageEvent: MockFn<(listener: (event: SendMessageEvent) => void) => () => void>
   }
   settings: {
@@ -171,6 +179,69 @@ function createMockWindowApi(options: MockWindowApiOptions = {}): MockMoonApi {
     },
     messages: sentChatMessageInput?.messages ?? chatMessages
   } satisfies SendMessageResult
+  const resultUserMessage = sentChatMessage.messages.find((message) => message.role === 'user')
+  const resultAssistantMessage = sentChatMessage.messages.find(
+    (message) => message.role === 'assistant'
+  )
+  const createMessageTurnResult = (input: CreateMessageTurnInput): CreateMessageTurnResult => {
+    const timestamp = '2026-05-09T00:00:00.000Z'
+    const createdOperation = {
+      ...sentChatMessage.operation,
+      status: 'idle',
+      completionReason: null,
+      completedAt: null,
+      updatedAt: timestamp
+    } satisfies AgentOperationRecord
+    const userMessage =
+      resultUserMessage ??
+      ({
+        id: 'message-1',
+        sessionId: resultSession.id,
+        topicId: resultTopic.id,
+        threadId: resultThread.id,
+        operationId: createdOperation.id,
+        role: 'user',
+        content: input.content.trim(),
+        status: 'complete',
+        ...(input.attachments === undefined || input.attachments.length === 0
+          ? {}
+          : { attachments: input.attachments }),
+        createdAt: timestamp,
+        updatedAt: timestamp
+      } satisfies MessageRecord)
+    const assistantMessage =
+      resultAssistantMessage === undefined
+        ? ({
+            id: 'message-2',
+            sessionId: resultSession.id,
+            topicId: resultTopic.id,
+            threadId: resultThread.id,
+            parentId: userMessage.id,
+            operationId: createdOperation.id,
+            role: 'assistant',
+            content: '',
+            reasoning: '',
+            status: 'pending',
+            createdAt: timestamp,
+            updatedAt: timestamp
+          } satisfies MessageRecord)
+        : ({
+            ...resultAssistantMessage,
+            content: '',
+            reasoning: resultAssistantMessage.reasoning ?? '',
+            status: 'pending',
+            error: null
+          } satisfies MessageRecord)
+
+    return {
+      session: resultSession,
+      topic: resultTopic,
+      thread: resultThread,
+      operation: createdOperation,
+      userMessage,
+      assistantMessage
+    }
+  }
 
   return {
     chat: {
@@ -195,6 +266,15 @@ function createMockWindowApi(options: MockWindowApiOptions = {}): MockMoonApi {
           kind: input.mimeType.startsWith('image/') ? 'image' : 'file',
           createdAt: '2026-05-09T00:00:00.000Z'
         })),
+      createMessageTurn: vi
+        .fn<(input: CreateMessageTurnInput) => Promise<CreateMessageTurnResult>>()
+        .mockImplementation(async (input) => createMessageTurnResult(input)),
+      runOperation: vi
+        .fn<(input: RunChatOperationInput) => Promise<RunChatOperationResult>>()
+        .mockResolvedValue({
+          operation: sentChatMessage.operation,
+          messages: sentChatMessage.messages
+        }),
       sendMessage: vi
         .fn<(input: SendChatMessageInput) => Promise<SendMessageResult>>()
         .mockResolvedValue(sentChatMessage),
@@ -227,6 +307,9 @@ function createMockWindowApi(options: MockWindowApiOptions = {}): MockMoonApi {
           createdAt: '2026-05-09T00:00:00.000Z',
           updatedAt: '2026-05-09T00:00:01.000Z'
         })),
+      onOperationEvent: vi
+        .fn<(listener: (event: ChatOperationEvent) => void) => () => void>()
+        .mockReturnValue(() => undefined),
       onSendMessageEvent: vi
         .fn<(listener: (event: SendMessageEvent) => void) => () => void>()
         .mockReturnValue(() => undefined)

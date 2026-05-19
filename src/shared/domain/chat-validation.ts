@@ -296,6 +296,16 @@ export const sendChatMessageInputSchema = z
 
 export type SendChatMessageInput = z.infer<typeof sendChatMessageInputSchema>
 
+export const createMessageTurnInputSchema = sendChatMessageInputSchema
+
+export type CreateMessageTurnInput = z.infer<typeof createMessageTurnInputSchema>
+
+export const runChatOperationInputSchema = z.object({
+  operationId: z.string().trim().min(1, 'Operation ID is required.')
+})
+
+export type RunChatOperationInput = z.infer<typeof runChatOperationInputSchema>
+
 export const cancelAgentOperationInputSchema = z.object({
   operationId: z.string().trim().min(1, 'Operation ID is required.')
 })

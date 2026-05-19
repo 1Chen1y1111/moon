@@ -12,10 +12,13 @@ describe('ipcChannels', () => {
     expect(ipcChannels.chat.listThreads).toBe('chat:listThreads')
     expect(ipcChannels.chat.createSession).toBe('chat:createSession')
     expect(ipcChannels.chat.importAttachment).toBe('chat:importAttachment')
+    expect(ipcChannels.chat.createMessageTurn).toBe('chat:createMessageTurn')
+    expect(ipcChannels.chat.runOperation).toBe('chat:runOperation')
     expect(ipcChannels.chat.sendMessage).toBe('chat:sendMessage')
     expect(ipcChannels.chat.cancelOperation).toBe('chat:cancelOperation')
     expect(ipcChannels.chat.approveToolCall).toBe('chat:approveToolCall')
     expect(ipcChannels.chat.rejectToolCall).toBe('chat:rejectToolCall')
+    expect(ipcChannels.chat.operationEvent).toBe('chat:operationEvent')
     expect(ipcChannels.chat.sendMessageEvent).toBe('chat:sendMessageEvent')
   })
 

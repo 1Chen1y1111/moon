@@ -122,6 +122,10 @@ class MessagesRepositoryMock {
     return this.messages.filter((message) => message.threadId === threadId)
   }
 
+  async listByOperation(operationId: string): Promise<MessageRecord[]> {
+    return this.messages.filter((message) => message.operationId === operationId)
+  }
+
   async save(message: MessageRecord): Promise<MessageRecord> {
     const index = this.messages.findIndex((candidate) => candidate.id === message.id)
 
@@ -619,6 +623,7 @@ describe('ChatService.sendMessage', () => {
     expect(events.map((event) => (event as { type: string }).type)).toEqual([
       'message-created',
       'message-created',
+      'operation-started',
       'message-delta',
       'message-delta',
       'operation-done'
@@ -692,5 +697,55 @@ describe('ChatService.sendMessage', () => {
 
     await expect(service.sendMessage({ content: 'hello' })).rejects.toThrow('API key is required')
     expect(sessionsRepository.sessions).toEqual([])
+  })
+})
+
+describe('ChatService two-stage runtime', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
+  it('creates a message turn without running the model', async () => {
+    const settings = createSettings([
+      createProviderSettings({
+        provider: 'openai',
+        type: 'openai',
+        model: 'gpt-5.4'
+      })
+    ])
+    const streamText = vi.fn(() => ({
+      textStream: (async function* (): AsyncGenerator<string> {
+        yield 'should not run'
+      })()
+    }))
+    const { messagesRepository, service } = createService({
+      settings,
+      streamText: streamText as never
+    })
+
+    const result = await service.createMessageTurn({ content: 'hello' })
+
+    expect(streamText).not.toHaveBeenCalled()
+    expect(result.operation.status).toBe('idle')
+    expect(result.assistantMessage.status).toBe('pending')
+    expect(messagesRepository.messages.map((message) => message.role)).toEqual([
+      'user',
+      'assistant'
+    ])
+  })
+
+  it('returns a clear error when running an unknown operation', async () => {
+    const settings = createSettings([
+      createProviderSettings({
+        provider: 'openai',
+        type: 'openai',
+        model: 'gpt-5.4'
+      })
+    ])
+    const { service } = createService({ settings })
+
+    await expect(service.runOperation({ operationId: 'missing-operation' })).rejects.toThrow(
+      'Agent operation not found.'
+    )
   })
 })

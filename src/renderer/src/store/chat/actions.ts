@@ -1,7 +1,8 @@
 import type {
   AgentOperationRecord,
+  ChatOperationEvent,
+  CreateMessageTurnResult,
   MessageRecord,
-  SendMessageEvent,
   SendMessageResult,
   SessionRecord,
   ThreadRecord,
@@ -51,6 +52,49 @@ function createOptimisticMessage(input: SendChatMessageInput, requestId: string)
       : { attachments: input.attachments }),
     createdAt: timestamp,
     updatedAt: timestamp
+  }
+}
+
+function createOptimisticTurn(
+  input: SendChatMessageInput,
+  requestId: string
+): {
+  assistantMessage: MessageRecord
+  operation: AgentOperationRecord
+  userMessage: MessageRecord
+} {
+  const timestamp = new Date().toISOString()
+  const sessionId = input.sessionId ?? `pending-session-${requestId}`
+  const topicId = input.topicId ?? `pending-topic-${requestId}`
+  const threadId = input.threadId ?? `pending-thread-${requestId}`
+  const operationId = `pending-operation-${requestId}`
+  const userMessage = createOptimisticMessage(input, requestId)
+  const assistantMessage: MessageRecord = {
+    id: `pending-assistant-${requestId}`,
+    sessionId,
+    topicId,
+    threadId,
+    parentId: userMessage.id,
+    operationId,
+    role: 'assistant',
+    content: '',
+    status: 'pending',
+    createdAt: timestamp,
+    updatedAt: timestamp
+  }
+
+  return {
+    userMessage,
+    assistantMessage,
+    operation: {
+      id: operationId,
+      appContext: { sessionId },
+      topicId,
+      threadId,
+      status: 'idle',
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }
   }
 }
 
@@ -130,8 +174,12 @@ export class ChatActionImpl {
     this.internal_clearChatError()
   }
 
-  applySendMessageEvent = (event: SendMessageEvent): void => {
-    this.internal_applySendMessageEvent(event)
+  applyChatOperationEvent = (event: ChatOperationEvent): void => {
+    this.internal_applyChatOperationEvent(event)
+  }
+
+  applySendMessageEvent = (event: ChatOperationEvent): void => {
+    this.internal_applyChatOperationEvent(event)
   }
 
   clearChatDraftAttachments = (): void => {
@@ -193,8 +241,8 @@ export class ChatActionImpl {
     this.internal_dispatchChat({ type: 'clearChatError' })
   }
 
-  internal_applySendMessageEvent = (event: SendMessageEvent): void => {
-    this.internal_dispatchChat({ type: 'applySendMessageEvent', event })
+  internal_applyChatOperationEvent = (event: ChatOperationEvent): void => {
+    this.internal_dispatchChat({ type: 'applyChatOperationEvent', event })
   }
 
   internal_loadChatSessions = async (): Promise<SessionRecord[]> => {
@@ -282,22 +330,46 @@ export class ChatActionImpl {
 
   internal_sendChatMessage = async (input: SendChatMessageInput): Promise<SendMessageResult> => {
     const requestId = createRequestId('send-message')
-    const optimisticMessage = createOptimisticMessage(input, requestId)
+    const optimisticTurn = createOptimisticTurn(input, requestId)
 
     this.internal_dispatchChat({
       type: 'sendChatMessagePending',
       input,
       requestId,
-      optimisticMessage
+      optimisticAssistantMessage: optimisticTurn.assistantMessage,
+      optimisticOperation: optimisticTurn.operation,
+      optimisticUserMessage: optimisticTurn.userMessage
     })
 
+    let turn: CreateMessageTurnResult
+
     try {
-      const result = await window.api.chat.sendMessage(input)
-      this.internal_dispatchChat({ type: 'sendChatMessageFulfilled', result })
-      return result
+      turn = await window.api.chat.createMessageTurn(input)
+      this.internal_dispatchChat({ type: 'createMessageTurnFulfilled', requestId, result: turn })
     } catch (error) {
       this.internal_dispatchChat({ type: 'sendChatMessageRejected', requestId, error })
       throw error
+    }
+
+    void this.internal_runChatOperation(turn.operation.id)
+
+    return {
+      session: turn.session,
+      topic: turn.topic,
+      thread: turn.thread,
+      operation: turn.operation,
+      messages: [turn.userMessage, turn.assistantMessage]
+    }
+  }
+
+  internal_runChatOperation = async (operationId: string): Promise<void> => {
+    this.internal_dispatchChat({ type: 'runChatOperationPending', operationId })
+
+    try {
+      const result = await window.api.chat.runOperation({ operationId })
+      this.internal_dispatchChat({ type: 'runChatOperationFulfilled', operationId, result })
+    } catch (error) {
+      this.internal_dispatchChat({ type: 'runChatOperationRejected', operationId, error })
     }
   }
 

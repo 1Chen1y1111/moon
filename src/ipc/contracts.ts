@@ -1,7 +1,10 @@
 import type {
   AgentOperationRecord,
+  ChatOperationEvent,
   ChatAttachmentRecord,
+  CreateMessageTurnResult,
   MessageRecord,
+  RunChatOperationResult,
   SendMessageEvent,
   SendMessageResult,
   SessionRecord,
@@ -12,11 +15,13 @@ import type {
 import type {
   ApproveToolCallInput,
   CancelAgentOperationInput,
+  CreateMessageTurnInput,
   GetChatMessagesInput,
   ImportChatAttachmentInput,
   ListChatThreadsInput,
   ListChatTopicsInput,
   RejectToolCallInput,
+  RunChatOperationInput,
   SendChatMessageInput
 } from '../shared/domain/chat-validation'
 import type { AppSettings, ProviderTestResult } from '../shared/domain/settings'
@@ -55,6 +60,14 @@ export type AppIpcContractMap = {
   [ipcChannels.chat.importAttachment]: {
     request: ImportChatAttachmentInput
     response: ChatAttachmentRecord
+  }
+  [ipcChannels.chat.createMessageTurn]: {
+    request: CreateMessageTurnInput
+    response: CreateMessageTurnResult
+  }
+  [ipcChannels.chat.runOperation]: {
+    request: RunChatOperationInput
+    response: RunChatOperationResult
   }
   [ipcChannels.chat.sendMessage]: {
     request: SendChatMessageInput
@@ -134,10 +147,13 @@ export type MoonApi = {
     listThreads: (input: ListChatThreadsInput) => Promise<ThreadRecord[]>
     createSession: () => Promise<SessionRecord>
     importAttachment: (input: ImportChatAttachmentInput) => Promise<ChatAttachmentRecord>
+    createMessageTurn: (input: CreateMessageTurnInput) => Promise<CreateMessageTurnResult>
+    runOperation: (input: RunChatOperationInput) => Promise<RunChatOperationResult>
     sendMessage: (input: SendChatMessageInput) => Promise<SendMessageResult>
     cancelOperation: (input: CancelAgentOperationInput) => Promise<AgentOperationRecord>
     approveToolCall: (input: ApproveToolCallInput) => Promise<ToolInvocationRecord>
     rejectToolCall: (input: RejectToolCallInput) => Promise<ToolInvocationRecord>
+    onOperationEvent: (listener: (event: ChatOperationEvent) => void) => () => void
     onSendMessageEvent: (listener: (event: SendMessageEvent) => void) => () => void
   }
   settings: {

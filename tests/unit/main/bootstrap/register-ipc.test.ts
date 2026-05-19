@@ -26,6 +26,7 @@ describe('registerIpcHandlers', () => {
   const chatService = {
     approveToolCall: vi.fn(),
     cancelOperation: vi.fn(),
+    createMessageTurn: vi.fn(),
     createSession: vi.fn(),
     getMessages: vi.fn(),
     importAttachment: vi.fn(),
@@ -33,6 +34,7 @@ describe('registerIpcHandlers', () => {
     listSessions: vi.fn(),
     listTopics: vi.fn(),
     rejectToolCall: vi.fn(),
+    runOperation: vi.fn(),
     sendMessage: vi.fn()
   }
   const settingsService = {
@@ -50,6 +52,7 @@ describe('registerIpcHandlers', () => {
     getAllWindowsMock.mockReturnValue([])
     chatService.approveToolCall.mockReset()
     chatService.cancelOperation.mockReset()
+    chatService.createMessageTurn.mockReset()
     chatService.createSession.mockReset()
     chatService.getMessages.mockReset()
     chatService.importAttachment.mockReset()
@@ -57,6 +60,7 @@ describe('registerIpcHandlers', () => {
     chatService.listSessions.mockReset()
     chatService.listTopics.mockReset()
     chatService.rejectToolCall.mockReset()
+    chatService.runOperation.mockReset()
     chatService.sendMessage.mockReset()
     settingsService.getSettings.mockReset()
     settingsService.saveAppearance.mockReset()
@@ -180,6 +184,18 @@ describe('registerIpcHandlers', () => {
     chatService.listThreads.mockResolvedValue([thread])
     chatService.createSession.mockResolvedValue(session)
     chatService.importAttachment.mockResolvedValue(attachment)
+    chatService.createMessageTurn.mockResolvedValue({
+      session,
+      topic,
+      thread,
+      operation,
+      userMessage: message,
+      assistantMessage: { ...message, id: 'message-2', role: 'assistant', content: '' }
+    })
+    chatService.runOperation.mockResolvedValue({
+      operation,
+      messages: [message]
+    })
     chatService.sendMessage.mockResolvedValue({
       session,
       topic,
@@ -229,6 +245,28 @@ describe('registerIpcHandlers', () => {
     ).toBe(attachment)
     const sender = { send: vi.fn() }
     expect(
+      await getRegisteredHandler(ipcChannels.chat.createMessageTurn)?.(
+        { sender: {} },
+        { content: 'hello' }
+      )
+    ).toEqual({
+      session,
+      topic,
+      thread,
+      operation,
+      userMessage: message,
+      assistantMessage: { ...message, id: 'message-2', role: 'assistant', content: '' }
+    })
+    expect(
+      await getRegisteredHandler(ipcChannels.chat.runOperation)?.(
+        { sender },
+        { operationId: 'operation-1' }
+      )
+    ).toEqual({
+      operation,
+      messages: [message]
+    })
+    expect(
       await getRegisteredHandler(ipcChannels.chat.sendMessage)?.({ sender }, { content: 'hello' })
     ).toEqual({
       session,
@@ -259,7 +297,31 @@ describe('registerIpcHandlers', () => {
     expect(chatService.listTopics).toHaveBeenCalledWith({ sessionId: 'session-1' })
     expect(chatService.listThreads).toHaveBeenCalledWith({ topicId: 'topic-1' })
     expect(chatService.importAttachment).toHaveBeenCalledWith(attachmentInput)
+    expect(chatService.createMessageTurn).toHaveBeenCalledWith({ content: 'hello' })
+    expect(chatService.runOperation).toHaveBeenCalledWith(
+      { operationId: 'operation-1' },
+      expect.any(Function)
+    )
     expect(chatService.sendMessage).toHaveBeenCalledWith({ content: 'hello' }, expect.any(Function))
+
+    const operationEventListener = chatService.runOperation.mock.calls[0][1]
+    operationEventListener({
+      type: 'message-created',
+      operationId: 'operation-1',
+      session,
+      topic,
+      thread,
+      message
+    })
+
+    expect(sender.send).toHaveBeenCalledWith(ipcChannels.chat.operationEvent, {
+      type: 'message-created',
+      operationId: 'operation-1',
+      session,
+      topic,
+      thread,
+      message
+    })
 
     const eventListener = chatService.sendMessage.mock.calls[0][1]
     eventListener({

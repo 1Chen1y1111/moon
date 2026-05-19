@@ -29,6 +29,8 @@ export function registerIpcHandlers({
   ipcMain.removeHandler(ipcChannels.chat.listThreads)
   ipcMain.removeHandler(ipcChannels.chat.createSession)
   ipcMain.removeHandler(ipcChannels.chat.importAttachment)
+  ipcMain.removeHandler(ipcChannels.chat.createMessageTurn)
+  ipcMain.removeHandler(ipcChannels.chat.runOperation)
   ipcMain.removeHandler(ipcChannels.chat.sendMessage)
   ipcMain.removeHandler(ipcChannels.chat.cancelOperation)
   ipcMain.removeHandler(ipcChannels.chat.approveToolCall)
@@ -54,6 +56,14 @@ export function registerIpcHandlers({
   ipcMain.handle(ipcChannels.chat.createSession, () => chatService.createSession())
   ipcMain.handle(ipcChannels.chat.importAttachment, (_event, input) =>
     chatService.importAttachment(input)
+  )
+  ipcMain.handle(ipcChannels.chat.createMessageTurn, (_event, input) =>
+    chatService.createMessageTurn(input)
+  )
+  ipcMain.handle(ipcChannels.chat.runOperation, (event, input) =>
+    chatService.runOperation(input, (operationEvent) => {
+      event.sender.send(ipcChannels.chat.operationEvent, operationEvent)
+    })
   )
   ipcMain.handle(ipcChannels.chat.sendMessage, (event, input) =>
     chatService.sendMessage(input, (messageEvent) => {

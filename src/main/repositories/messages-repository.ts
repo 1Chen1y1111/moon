@@ -47,6 +47,16 @@ export class MessagesRepository {
     return this.withToolInvocations(rows.map(toMessageRecord))
   }
 
+  async listByOperation(operationId: string): Promise<MessageRecord[]> {
+    const rows = await this.database.db
+      .select()
+      .from(messages)
+      .where(and(eq(messages.operationId, operationId), ne(messages.role, 'tool')))
+      .orderBy(asc(messages.createdAt))
+
+    return this.withToolInvocations(rows.map(toMessageRecord))
+  }
+
   async save(message: MessageRecord): Promise<MessageRecord> {
     const parsedMessage = messageRecordSchema.parse(message)
     const { toolInvocations: _toolInvocations, ...messageWithoutTools } = parsedMessage

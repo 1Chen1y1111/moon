@@ -6,15 +6,20 @@ import {
 import { cn } from '@shadcn/lib/utils'
 
 import { MessageBubble } from '../../Messages'
-import type { ConversationProps } from '../../types'
+import { conversationSelectors, useConversationStore } from '../../store'
+import type { ChatListProps } from '../../types'
 import { InboxWelcome } from '../InboxWelcome'
 
-export function ChatList({
+type ChatListViewProps = ChatListProps & {
+  messages: NonNullable<ChatListProps['messages']>
+}
+
+function ChatListView({
   className,
   isLoading = false,
   messages,
   showWelcome = false
-}: ConversationProps): React.JSX.Element {
+}: ChatListViewProps): React.JSX.Element {
   return (
     <AiConversation aria-label="聊天消息" className={cn('min-h-0', className)}>
       <ConversationContent className="min-h-full gap-4 px-6 py-6">
@@ -31,4 +36,18 @@ export function ChatList({
       <ConversationScrollButton className="bottom-6" />
     </AiConversation>
   )
+}
+
+function ConnectedChatList(props: ChatListProps): React.JSX.Element {
+  const messages = useConversationStore(conversationSelectors.messages)
+
+  return <ChatListView {...props} messages={messages} />
+}
+
+export function ChatList(props: ChatListProps): React.JSX.Element {
+  if (props.messages !== undefined) {
+    return <ChatListView {...props} messages={props.messages} />
+  }
+
+  return <ConnectedChatList {...props} />
 }

@@ -22,10 +22,23 @@ const api: MoonApi = {
     listThreads: (input) => invokeIpcChannel(ipcChannels.chat.listThreads, input),
     createSession: () => invokeIpcChannel(ipcChannels.chat.createSession),
     importAttachment: (input) => invokeIpcChannel(ipcChannels.chat.importAttachment, input),
+    createMessageTurn: (input) => invokeIpcChannel(ipcChannels.chat.createMessageTurn, input),
+    runOperation: (input) => invokeIpcChannel(ipcChannels.chat.runOperation, input),
     sendMessage: (input) => invokeIpcChannel(ipcChannels.chat.sendMessage, input),
     cancelOperation: (input) => invokeIpcChannel(ipcChannels.chat.cancelOperation, input),
     approveToolCall: (input) => invokeIpcChannel(ipcChannels.chat.approveToolCall, input),
     rejectToolCall: (input) => invokeIpcChannel(ipcChannels.chat.rejectToolCall, input),
+    onOperationEvent: (listener) => {
+      const channel = ipcChannels.chat.operationEvent
+      const handler = (_event: unknown, payload: Parameters<typeof listener>[0]): void =>
+        listener(payload)
+
+      ipcRenderer.on(channel, handler)
+
+      return () => {
+        ipcRenderer.off(channel, handler)
+      }
+    },
     onSendMessageEvent: (listener) => {
       const channel = ipcChannels.chat.sendMessageEvent
       const handler = (_event: unknown, payload: Parameters<typeof listener>[0]): void =>

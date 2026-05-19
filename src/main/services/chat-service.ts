@@ -20,8 +20,10 @@ import type {
   AgentOperationRecord,
   ChatAttachmentKind,
   ChatAttachmentRecord,
+  ChatOperationEvent,
+  CreateMessageTurnResult,
   MessageRecord,
-  SendMessageEvent,
+  RunChatOperationResult,
   SendMessageResult,
   SessionRecord,
   ThreadRecord,
@@ -32,19 +34,23 @@ import { defaultChatUserId } from '../../shared/domain/chat'
 import {
   approveToolCallInputSchema,
   cancelAgentOperationInputSchema,
+  createMessageTurnInputSchema,
   getChatMessagesInputSchema,
   importChatAttachmentInputSchema,
   listChatThreadsInputSchema,
   listChatTopicsInputSchema,
   rejectToolCallInputSchema,
+  runChatOperationInputSchema,
   sendChatMessageInputSchema,
   type ApproveToolCallInput,
   type CancelAgentOperationInput,
+  type CreateMessageTurnInput,
   type GetChatMessagesInput,
   type ImportChatAttachmentInput,
   type ListChatThreadsInput,
   type ListChatTopicsInput,
   type RejectToolCallInput,
+  type RunChatOperationInput,
   type SendChatMessageInput
 } from '../../shared/domain/chat-validation'
 import {
@@ -74,7 +80,7 @@ type ChatServiceDependencies = {
   topicsRepository: TopicsRepository
 }
 
-type SendMessageEventListener = (event: SendMessageEvent) => void
+type ChatOperationEventListener = (event: ChatOperationEvent) => void
 
 type ResolvedProvider = {
   provider: ProviderSettings
@@ -406,40 +412,171 @@ export class ChatService {
     }
   }
 
-  async sendMessage(
-    input: SendChatMessageInput,
-    onEvent?: SendMessageEventListener
-  ): Promise<SendMessageResult> {
-    const parsedInput = sendChatMessageInputSchema.parse(input)
+  async createMessageTurn(input: CreateMessageTurnInput): Promise<CreateMessageTurnResult> {
+    const parsedInput = createMessageTurnInputSchema.parse(input)
     const resolvedProvider = await this.resolveProvider(parsedInput)
     const provider = await this.withStoredApiKey(resolvedProvider.provider)
     const modelId = selectChatModel(provider)
-    const languageModel = createChatLanguageModel(provider, modelId)
+
+    createChatLanguageModel(provider, modelId)
+
     const scope = await this.resolveConversationScope(
       parsedInput,
       resolvedProvider.session,
       provider
     )
-    const operation = await this.createOperation(scope, provider, modelId)
+    const operation = await this.createOperation(scope, provider, modelId, 'idle')
+    const attachments = parsedInput.attachments ?? []
+    const timestamp = createTimestamp()
+    const previousMessages = await this.messagesRepository.listByThread(scope.thread.id)
+    const parentMessage = [...previousMessages].reverse().find((message) => message.role !== 'tool')
+    const userMessage = await this.messagesRepository.save({
+      id: randomUUID(),
+      sessionId: scope.session.id,
+      topicId: scope.topic.id,
+      threadId: scope.thread.id,
+      ...(parentMessage === undefined ? {} : { parentId: parentMessage.id }),
+      operationId: operation.id,
+      role: 'user',
+      content: parsedInput.content,
+      status: 'complete',
+      provider: provider.provider,
+      model: modelId,
+      ...(attachments.length === 0 ? {} : { attachments }),
+      createdAt: timestamp,
+      updatedAt: timestamp
+    })
+    const title = createChatTitle(parsedInput.content || attachments[0]?.name || '')
+    const sessionAfterUser = await this.touchSessionWithTitle(scope.session, title)
+    const topicAfterUser = await this.touchTopicTitle(scope.topic, title)
+    const threadAfterUser = await this.touchThreadTitle(scope.thread, title)
+    const assistantTimestamp = createTimestamp()
+    const assistantMessage = await this.messagesRepository.save({
+      id: randomUUID(),
+      sessionId: sessionAfterUser.id,
+      topicId: topicAfterUser.id,
+      threadId: threadAfterUser.id,
+      parentId: userMessage.id,
+      operationId: operation.id,
+      role: 'assistant',
+      content: '',
+      reasoning: '',
+      status: 'pending',
+      provider: provider.provider,
+      model: modelId,
+      createdAt: assistantTimestamp,
+      updatedAt: assistantTimestamp
+    })
+
+    return {
+      session: sessionAfterUser,
+      topic: topicAfterUser,
+      thread: threadAfterUser,
+      operation,
+      userMessage,
+      assistantMessage
+    }
+  }
+
+  async runOperation(
+    input: RunChatOperationInput,
+    onEvent?: ChatOperationEventListener
+  ): Promise<RunChatOperationResult> {
+    const parsedInput = runChatOperationInputSchema.parse(input)
+    const operation = await this.agentOperationsRepository.findById(parsedInput.operationId)
+
+    if (operation === null) {
+      throw new Error('Agent operation not found.')
+    }
+
+    const scope = await this.resolveOperationScope(operation)
+    const provider = await this.resolveOperationProvider(operation, scope.session)
+    const modelId = operation.model ?? selectChatModel(provider)
+    const languageModel = createChatLanguageModel(provider, modelId)
+    const operationMessages = await this.messagesRepository.listByOperation(operation.id)
+    const userMessage = operationMessages.find((message) => message.role === 'user')
+    const assistantMessage = operationMessages.find((message) => message.role === 'assistant')
+
+    if (userMessage === undefined || assistantMessage === undefined) {
+      throw new Error('Agent operation messages not found.')
+    }
+
+    const startedAt = createTimestamp()
+    const runningOperation = await this.agentOperationsRepository.save({
+      ...operation,
+      status: 'running',
+      completionReason: null,
+      error: null,
+      startedAt: operation.startedAt ?? startedAt,
+      updatedAt: startedAt
+    })
+    const streamingAssistantMessage = await this.messagesRepository.save({
+      ...assistantMessage,
+      status: 'streaming',
+      error: null,
+      updatedAt: startedAt
+    })
     const abortController = new AbortController()
 
-    this.activeOperations.set(operation.id, abortController)
+    onEvent?.({
+      type: 'operation-started',
+      operationId: runningOperation.id,
+      operation: runningOperation
+    })
+
+    this.activeOperations.set(runningOperation.id, abortController)
 
     try {
-      const result = await this.runOperation({
+      const result = await this.executeOperation({
         abortController,
-        input: parsedInput,
+        assistantMessage: streamingAssistantMessage,
         languageModel,
-        modelId,
         onEvent,
-        operation,
-        provider,
+        operation: runningOperation,
         scope
       })
 
-      return result
+      return {
+        operation: result.operation,
+        messages: result.messages
+      }
     } finally {
-      this.activeOperations.delete(operation.id)
+      this.activeOperations.delete(runningOperation.id)
+    }
+  }
+
+  async sendMessage(
+    input: SendChatMessageInput,
+    onEvent?: ChatOperationEventListener
+  ): Promise<SendMessageResult> {
+    const parsedInput = sendChatMessageInputSchema.parse(input)
+    const turn = await this.createMessageTurn(parsedInput)
+
+    onEvent?.({
+      type: 'message-created',
+      operationId: turn.operation.id,
+      session: turn.session,
+      topic: turn.topic,
+      thread: turn.thread,
+      message: turn.userMessage
+    })
+    onEvent?.({
+      type: 'message-created',
+      operationId: turn.operation.id,
+      session: turn.session,
+      topic: turn.topic,
+      thread: turn.thread,
+      message: turn.assistantMessage
+    })
+
+    const runResult = await this.runOperation({ operationId: turn.operation.id }, onEvent)
+
+    return {
+      session: turn.session,
+      topic: turn.topic,
+      thread: turn.thread,
+      operation: runResult.operation,
+      messages: runResult.messages
     }
   }
 
@@ -456,7 +593,7 @@ export class ChatService {
       throw new Error('Agent operation not found.')
     }
 
-    return this.agentOperationsRepository.save({
+    const cancelledOperation = await this.agentOperationsRepository.save({
       ...operation,
       status: 'interrupted',
       completionReason: 'interrupted',
@@ -464,6 +601,20 @@ export class ChatService {
       updatedAt: timestamp,
       completedAt: timestamp
     })
+
+    const operationMessages = await this.messagesRepository.listByOperation(operation.id)
+    const assistantMessage = operationMessages.find((message) => message.role === 'assistant')
+
+    if (assistantMessage !== undefined) {
+      await this.messagesRepository.save({
+        ...assistantMessage,
+        status: 'cancelled',
+        error: 'Cancelled by user.',
+        updatedAt: timestamp
+      })
+    }
+
+    return cancelledOperation
   }
 
   async approveToolCall(input: ApproveToolCallInput): Promise<ToolInvocationRecord> {
@@ -504,100 +655,34 @@ export class ChatService {
     })
   }
 
-  private async runOperation({
+  private async executeOperation({
     abortController,
-    input,
+    assistantMessage: initialAssistantMessage,
     languageModel,
-    modelId,
     onEvent,
     operation,
-    provider,
     scope
   }: {
     abortController: AbortController
-    input: SendChatMessageInput
+    assistantMessage: MessageRecord
     languageModel: LanguageModel
-    modelId: string
-    onEvent?: SendMessageEventListener
+    onEvent?: ChatOperationEventListener
     operation: AgentOperationRecord
-    provider: ProviderSettings
     scope: ConversationScope
   }): Promise<SendMessageResult> {
-    const attachments = input.attachments ?? []
-    const timestamp = createTimestamp()
-    const previousMessages = await this.messagesRepository.listByThread(scope.thread.id)
-    const parentMessage = [...previousMessages].reverse().find((message) => message.role !== 'tool')
-    const userMessage = await this.messagesRepository.save({
-      id: randomUUID(),
-      sessionId: scope.session.id,
-      topicId: scope.topic.id,
-      threadId: scope.thread.id,
-      ...(parentMessage === undefined ? {} : { parentId: parentMessage.id }),
-      operationId: operation.id,
-      role: 'user',
-      content: input.content,
-      status: 'complete',
-      provider: provider.provider,
-      model: modelId,
-      ...(attachments.length === 0 ? {} : { attachments }),
-      createdAt: timestamp,
-      updatedAt: timestamp
-    })
-    const sessionAfterUser = await this.touchSessionWithTitle(
-      scope.session,
-      createChatTitle(input.content || attachments[0]?.name || '')
-    )
-    const topicAfterUser = await this.touchTopicTitle(
-      scope.topic,
-      createChatTitle(input.content || attachments[0]?.name || '')
-    )
-    const threadAfterUser = await this.touchThreadTitle(
-      scope.thread,
-      createChatTitle(input.content || attachments[0]?.name || '')
-    )
     const eventScope = {
-      session: sessionAfterUser,
-      topic: topicAfterUser,
-      thread: threadAfterUser
+      session: scope.session,
+      topic: scope.topic,
+      thread: scope.thread
     }
-
-    onEvent?.({
-      type: 'message-created',
-      operationId: operation.id,
-      ...eventScope,
-      message: userMessage
-    })
-
-    const assistantTimestamp = createTimestamp()
-    let assistantMessage = await this.messagesRepository.save({
-      id: randomUUID(),
-      sessionId: eventScope.session.id,
-      topicId: eventScope.topic.id,
-      threadId: eventScope.thread.id,
-      parentId: userMessage.id,
-      operationId: operation.id,
-      role: 'assistant',
-      content: '',
-      reasoning: '',
-      status: 'streaming',
-      provider: provider.provider,
-      model: modelId,
-      createdAt: assistantTimestamp,
-      updatedAt: assistantTimestamp
-    })
-
-    onEvent?.({
-      type: 'message-created',
-      operationId: operation.id,
-      ...eventScope,
-      message: assistantMessage
-    })
+    let assistantMessage = initialAssistantMessage
+    const previousMessages = await this.messagesRepository.listByThread(scope.thread.id)
 
     const modelMessages = (
       await Promise.all(
-        [...previousMessages, userMessage].map((message) =>
-          toModelMessage(message, this.attachmentsDirectory)
-        )
+        previousMessages
+          .filter((message) => message.id !== assistantMessage.id)
+          .map((message) => toModelMessage(message, this.attachmentsDirectory))
       )
     ).filter((message): message is ModelMessage => message !== null)
 
@@ -703,7 +788,7 @@ export class ChatService {
   }: {
     event: AgentRuntimeEvent
     message: MessageRecord
-    onEvent?: SendMessageEventListener
+    onEvent?: ChatOperationEventListener
     operation: AgentOperationRecord
     scope: ConversationScope
   }): Promise<MessageRecord> {
@@ -919,6 +1004,50 @@ export class ChatService {
     }
   }
 
+  private async resolveOperationScope(operation: AgentOperationRecord): Promise<ConversationScope> {
+    const sessionId =
+      typeof operation.appContext?.sessionId === 'string'
+        ? operation.appContext.sessionId
+        : undefined
+
+    if (sessionId === undefined || operation.topicId == null || operation.threadId == null) {
+      throw new Error('Agent operation context is incomplete.')
+    }
+
+    const session = await this.sessionsRepository.findById(sessionId)
+    const topic = await this.topicsRepository.findById(operation.topicId)
+    const thread = await this.threadsRepository.findById(operation.threadId)
+
+    if (session === null || topic === null || thread === null) {
+      throw new Error('Agent operation context not found.')
+    }
+
+    return { session, topic, thread }
+  }
+
+  private async resolveOperationProvider(
+    operation: AgentOperationRecord,
+    session: SessionRecord
+  ): Promise<ProviderSettings> {
+    const settings = await this.settingsRepository.getSettings()
+    const providerId = operation.provider ?? session.provider
+    const provider = settings.providers[providerId]
+
+    if (provider === undefined) {
+      throw new Error(`Unknown provider: ${providerId}`)
+    }
+
+    if (!provider.enabled) {
+      throw new Error(`${provider.name} is disabled.`)
+    }
+
+    if (!isSupportedChatProvider(provider)) {
+      throw new Error(`${provider.name} is not supported for chat.`)
+    }
+
+    return this.withStoredApiKey(provider)
+  }
+
   private async createConversationScope(
     provider: ProviderSettings,
     title: string
@@ -989,7 +1118,8 @@ export class ChatService {
   private async createOperation(
     scope: ConversationScope,
     provider: ProviderSettings,
-    modelId: string
+    modelId: string,
+    status: AgentOperationRecord['status'] = 'running'
   ): Promise<AgentOperationRecord> {
     const timestamp = createTimestamp()
 
@@ -998,8 +1128,8 @@ export class ChatService {
       userId: defaultChatUserId,
       topicId: scope.topic.id,
       threadId: scope.thread.id,
-      status: 'running',
-      startedAt: timestamp,
+      status,
+      ...(status === 'running' ? { startedAt: timestamp } : {}),
       model: modelId,
       provider: provider.provider,
       trigger: 'chat',

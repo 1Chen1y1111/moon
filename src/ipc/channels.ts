@@ -6,10 +6,13 @@ export const ipcChannels = {
     listThreads: 'chat:listThreads',
     createSession: 'chat:createSession',
     importAttachment: 'chat:importAttachment',
+    createMessageTurn: 'chat:createMessageTurn',
+    runOperation: 'chat:runOperation',
     sendMessage: 'chat:sendMessage',
     cancelOperation: 'chat:cancelOperation',
     approveToolCall: 'chat:approveToolCall',
     rejectToolCall: 'chat:rejectToolCall',
+    operationEvent: 'chat:operationEvent',
     sendMessageEvent: 'chat:sendMessageEvent'
   },
   settings: {

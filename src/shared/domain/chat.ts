@@ -291,7 +291,26 @@ export type SendMessageResult = {
   messages: MessageRecord[]
 }
 
-export type SendMessageEvent =
+export type CreateMessageTurnResult = {
+  session: SessionRecord
+  topic: TopicRecord
+  thread: ThreadRecord
+  operation: AgentOperationRecord
+  userMessage: MessageRecord
+  assistantMessage: MessageRecord
+}
+
+export type RunChatOperationResult = {
+  operation: AgentOperationRecord
+  messages: MessageRecord[]
+}
+
+export type ChatOperationEvent =
+  | {
+      type: 'operation-started'
+      operationId: string
+      operation: AgentOperationRecord
+    }
   | {
       type: 'message-created'
       operationId: string
@@ -364,6 +383,8 @@ export type SendMessageEvent =
       error: string
       operation: AgentOperationRecord
     }
+
+export type SendMessageEvent = ChatOperationEvent
 
 export type MessageSearchResult = {
   messageId: string

@@ -8,6 +8,27 @@ import type {
   TopicRecord
 } from '@shared/domain/chat'
 
+export type ChatOperationStatus =
+  | 'preparing'
+  | 'running'
+  | 'waiting_for_human'
+  | 'succeeded'
+  | 'failed'
+  | 'cancelled'
+
+export type ChatOperationState = {
+  id: string
+  sessionId?: string
+  topicId?: string
+  threadId?: string
+  userMessageId?: string
+  assistantMessageId?: string
+  status: ChatOperationStatus
+  error?: string
+  createdAt: string
+  updatedAt: string
+}
+
 export type ChatDraftAttachment = ChatAttachmentRecord & {
   error?: string
   previewUrl?: string
@@ -27,6 +48,7 @@ export type ChatState = {
   messagesMap: Record<string, MessageRecord>
   messageIds: string[]
   draftAttachments: ChatDraftAttachment[]
+  operationsById: Record<string, ChatOperationState>
   sessionsStatus: 'idle' | 'loading' | 'succeeded' | 'failed'
   topicsStatus: 'idle' | 'loading' | 'succeeded' | 'failed'
   threadsStatus: 'idle' | 'loading' | 'succeeded' | 'failed'

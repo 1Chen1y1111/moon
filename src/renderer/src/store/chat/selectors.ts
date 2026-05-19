@@ -43,8 +43,27 @@ export function selectChatActiveThreadId(state: ChatState): string | null {
   return state.activeThreadId
 }
 
+export function selectChatActiveTopicId(state: ChatState): string | null {
+  return state.activeTopicId
+}
+
 export function selectChatActiveOperationId(state: ChatState): string | null {
   return state.activeOperationId
+}
+
+export function selectChatBlockingOperationId(state: ChatState): string | null {
+  const operation = Object.values(state.operationsById).find(
+    (candidate) =>
+      candidate.status === 'preparing' ||
+      candidate.status === 'running' ||
+      candidate.status === 'waiting_for_human'
+  )
+
+  return operation?.id ?? null
+}
+
+export function selectChatOperationsById(state: ChatState): ChatState['operationsById'] {
+  return state.operationsById
 }
 
 export function selectPendingToolInvocations(

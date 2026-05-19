@@ -13,6 +13,7 @@ export function createInitialChatState(): ChatState {
     messagesMap: {},
     messageIds: [],
     draftAttachments: [],
+    operationsById: {},
     sessionsStatus: 'idle',
     topicsStatus: 'idle',
     threadsStatus: 'idle',

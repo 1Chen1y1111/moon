@@ -1,7 +1,9 @@
 import type {
   AgentOperationRecord,
+  ChatOperationEvent,
+  CreateMessageTurnResult,
   MessageRecord,
-  SendMessageEvent,
+  RunChatOperationResult,
   SendMessageResult,
   SessionRecord,
   ThreadRecord,
@@ -10,7 +12,7 @@ import type {
 } from '@shared/domain/chat'
 import type { SendChatMessageInput } from '@shared/domain/chat-validation'
 
-import type { ChatDraftAttachment, ChatState } from './types'
+import type { ChatDraftAttachment, ChatOperationState, ChatState } from './types'
 
 export type ChatReducerAction =
   | { type: 'clearChatMessages' }
@@ -19,7 +21,7 @@ export type ChatReducerAction =
   | { type: 'clearDraftAttachments' }
   | { type: 'removeDraftAttachment'; id: string }
   | { type: 'updateDraftAttachment'; id: string; value: Partial<ChatDraftAttachment> }
-  | { type: 'applySendMessageEvent'; event: SendMessageEvent }
+  | { type: 'applyChatOperationEvent'; event: ChatOperationEvent }
   | { type: 'loadChatSessionsPending' }
   | { type: 'loadChatSessionsFulfilled'; sessions: SessionRecord[] }
   | { type: 'loadChatSessionsRejected'; error: unknown }
@@ -56,8 +58,14 @@ export type ChatReducerAction =
       type: 'sendChatMessagePending'
       input: SendChatMessageInput
       requestId: string
-      optimisticMessage: MessageRecord
+      optimisticAssistantMessage: MessageRecord
+      optimisticOperation: AgentOperationRecord
+      optimisticUserMessage: MessageRecord
     }
+  | { type: 'createMessageTurnFulfilled'; requestId: string; result: CreateMessageTurnResult }
+  | { type: 'runChatOperationPending'; operationId: string }
+  | { type: 'runChatOperationFulfilled'; operationId: string; result: RunChatOperationResult }
+  | { type: 'runChatOperationRejected'; operationId: string; error: unknown }
   | { type: 'sendChatMessageFulfilled'; result: SendMessageResult }
   | { type: 'sendChatMessageRejected'; requestId: string; error: unknown }
   | { type: 'cancelChatOperationFulfilled'; operation: AgentOperationRecord }
@@ -103,6 +111,56 @@ function upsertById<T extends { id: string }>(items: T[], item: T): T[] {
   nextItems[index] = item
 
   return nextItems
+}
+
+function toChatOperationStatus(operation: AgentOperationRecord): ChatOperationState['status'] {
+  if (operation.status === 'idle') {
+    return 'preparing'
+  }
+
+  if (operation.status === 'running') {
+    return 'running'
+  }
+
+  if (operation.status === 'waiting_for_human') {
+    return 'waiting_for_human'
+  }
+
+  if (operation.status === 'done') {
+    return 'succeeded'
+  }
+
+  if (operation.status === 'interrupted') {
+    return 'cancelled'
+  }
+
+  return 'failed'
+}
+
+function getOperationError(operation: AgentOperationRecord): string | undefined {
+  const message = operation.error?.message
+
+  return typeof message === 'string' && message.length > 0 ? message : undefined
+}
+
+function toChatOperationState(
+  operation: AgentOperationRecord,
+  messageIds: Pick<ChatOperationState, 'assistantMessageId' | 'userMessageId'> = {}
+): ChatOperationState {
+  const sessionId =
+    typeof operation.appContext?.sessionId === 'string' ? operation.appContext.sessionId : undefined
+
+  return {
+    id: operation.id,
+    ...(sessionId === undefined ? {} : { sessionId }),
+    ...(operation.topicId == null ? {} : { topicId: operation.topicId }),
+    ...(operation.threadId == null ? {} : { threadId: operation.threadId }),
+    ...messageIds,
+    status: toChatOperationStatus(operation),
+    ...(getOperationError(operation) === undefined ? {} : { error: getOperationError(operation) }),
+    createdAt: operation.createdAt,
+    updatedAt: operation.updatedAt
+  }
 }
 
 function toMessageState(
@@ -163,6 +221,33 @@ function replacePendingUserMessage(state: ChatState, message: MessageRecord): Ch
   }
 }
 
+function replaceMessageById(
+  state: ChatState,
+  previousMessageId: string,
+  nextMessage: MessageRecord
+): ChatState {
+  const { [previousMessageId]: _previousMessage, ...messagesMapWithoutPrevious } = state.messagesMap
+  void _previousMessage
+
+  if (state.messagesMap[previousMessageId] === undefined) {
+    return upsertMessage(state, nextMessage)
+  }
+
+  return {
+    ...state,
+    messageIds: state.messageIds.map((messageId) =>
+      messageId === previousMessageId ? nextMessage.id : messageId
+    ),
+    messages: state.messages.map((candidate) =>
+      candidate.id === previousMessageId ? nextMessage : candidate
+    ),
+    messagesMap: {
+      ...messagesMapWithoutPrevious,
+      [nextMessage.id]: nextMessage
+    }
+  }
+}
+
 function isVisibleEvent(state: ChatState, sessionId: string, threadId?: string): boolean {
   if (state.activeSessionId !== null && state.activeSessionId !== sessionId) {
     return false
@@ -197,11 +282,10 @@ function updateMessageById(
 }
 
 function removePendingSendMessages(state: ChatState, requestId: string): ChatState {
-  const removedIds = new Set([`pending-${requestId}`])
-
-  if (state.streamingAssistantMessageId !== null) {
-    removedIds.add(state.streamingAssistantMessageId)
-  }
+  const removedIds = new Set([`pending-${requestId}`, `pending-assistant-${requestId}`])
+  const { [`pending-operation-${requestId}`]: _pendingOperation, ...operationsById } =
+    state.operationsById
+  void _pendingOperation
 
   const nextMessageIds = state.messageIds.filter((messageId) => !removedIds.has(messageId))
   const nextMessagesMap = Object.fromEntries(
@@ -212,7 +296,8 @@ function removePendingSendMessages(state: ChatState, requestId: string): ChatSta
     ...state,
     messageIds: nextMessageIds,
     messages: state.messages.filter((message) => !removedIds.has(message.id)),
-    messagesMap: nextMessagesMap
+    messagesMap: nextMessagesMap,
+    operationsById
   }
 }
 
@@ -235,13 +320,76 @@ function removePendingToolInvocation(
   return pendingToolInvocations.filter((toolInvocation) => toolInvocation.id !== toolInvocationId)
 }
 
-function applySendMessageEvent(state: ChatState, event: SendMessageEvent): ChatState {
+function withOperationStatus(
+  state: ChatState,
+  operationId: string,
+  status: ChatOperationState['status'],
+  updatedAt: string,
+  error?: string
+): ChatState {
+  const operation = state.operationsById[operationId]
+
+  if (operation === undefined) {
+    return state
+  }
+
+  return {
+    ...state,
+    operationsById: {
+      ...state.operationsById,
+      [operationId]: {
+        ...operation,
+        status,
+        ...(error === undefined ? {} : { error }),
+        updatedAt
+      }
+    }
+  }
+}
+
+function applyChatOperationEvent(state: ChatState, event: ChatOperationEvent): ChatState {
+  if (event.type === 'operation-started') {
+    const previousOperation = state.operationsById[event.operationId]
+    const operation = toChatOperationState(event.operation, {
+      assistantMessageId: previousOperation?.assistantMessageId,
+      userMessageId: previousOperation?.userMessageId
+    })
+
+    return {
+      ...state,
+      activeOperationId: event.operationId,
+      sendStatus: 'sending',
+      operationsById: {
+        ...state.operationsById,
+        [event.operationId]: operation
+      }
+    }
+  }
+
   if (event.type === 'message-created') {
     const withEntities = {
       ...state,
       sessions: upsertSession(state.sessions, event.session),
       topics: upsertById(state.topics, event.topic),
-      threads: upsertById(state.threads, event.thread)
+      threads: upsertById(state.threads, event.thread),
+      operationsById: {
+        ...state.operationsById,
+        [event.operationId]: {
+          ...(state.operationsById[event.operationId] ??
+            toChatOperationState({
+              id: event.operationId,
+              appContext: { sessionId: event.session.id },
+              topicId: event.topic.id,
+              threadId: event.thread.id,
+              status: 'running',
+              createdAt: event.message.createdAt,
+              updatedAt: event.message.updatedAt
+            })),
+          ...(event.message.role === 'user' ? { userMessageId: event.message.id } : {}),
+          ...(event.message.role === 'assistant' ? { assistantMessageId: event.message.id } : {}),
+          updatedAt: event.message.updatedAt
+        }
+      }
     }
 
     if (!isVisibleEvent(withEntities, event.session.id, event.thread.id)) {
@@ -266,6 +414,15 @@ function applySendMessageEvent(state: ChatState, event: SendMessageEvent): ChatS
   }
 
   if (event.type === 'message-delta') {
+    const operation = state.operationsById[event.operationId]
+
+    if (
+      operation?.assistantMessageId !== undefined &&
+      operation.assistantMessageId !== event.messageId
+    ) {
+      return state
+    }
+
     return updateMessageById(state, event.messageId, (message) => ({
       ...message,
       content: `${message.content}${event.delta}`
@@ -273,6 +430,15 @@ function applySendMessageEvent(state: ChatState, event: SendMessageEvent): ChatS
   }
 
   if (event.type === 'reasoning-delta') {
+    const operation = state.operationsById[event.operationId]
+
+    if (
+      operation?.assistantMessageId !== undefined &&
+      operation.assistantMessageId !== event.messageId
+    ) {
+      return state
+    }
+
     return updateMessageById(state, event.messageId, (message) => ({
       ...message,
       reasoning: `${message.reasoning ?? ''}${event.delta}`
@@ -284,6 +450,15 @@ function applySendMessageEvent(state: ChatState, event: SendMessageEvent): ChatS
     event.type === 'tool-waiting-approval' ||
     event.type === 'tool-finish'
   ) {
+    const operation = state.operationsById[event.operationId]
+
+    if (
+      operation?.assistantMessageId !== undefined &&
+      operation.assistantMessageId !== event.messageId
+    ) {
+      return state
+    }
+
     const withTool = updateMessageById(state, event.messageId, (message) =>
       updateToolInvocation(message, event.toolInvocation)
     )
@@ -294,6 +469,12 @@ function applySendMessageEvent(state: ChatState, event: SendMessageEvent): ChatS
 
     return {
       ...withTool,
+      operationsById: withOperationStatus(
+        withTool,
+        event.operationId,
+        event.type === 'tool-waiting-approval' ? 'waiting_for_human' : 'running',
+        event.toolInvocation.updatedAt
+      ).operationsById,
       pendingToolInvocations
     }
   }
@@ -305,6 +486,13 @@ function applySendMessageEvent(state: ChatState, event: SendMessageEvent): ChatS
         sessions: upsertSession(state.sessions, event.session),
         topics: upsertById(state.topics, event.topic),
         threads: upsertById(state.threads, event.thread),
+        operationsById: {
+          ...state.operationsById,
+          [event.operationId]: toChatOperationState(event.operation, {
+            assistantMessageId: state.operationsById[event.operationId]?.assistantMessageId,
+            userMessageId: state.operationsById[event.operationId]?.userMessageId
+          })
+        },
         activeOperationId:
           state.activeOperationId === event.operationId ? null : state.activeOperationId
       }
@@ -321,6 +509,13 @@ function applySendMessageEvent(state: ChatState, event: SendMessageEvent): ChatS
       activeOperationId: null,
       streamingAssistantMessageId: null,
       sendStatus: 'succeeded',
+      operationsById: {
+        ...state.operationsById,
+        [event.operationId]: toChatOperationState(event.operation, {
+          assistantMessageId: state.operationsById[event.operationId]?.assistantMessageId,
+          userMessageId: state.operationsById[event.operationId]?.userMessageId
+        })
+      },
       pendingToolInvocations: [],
       ...toMessageState(event.messages)
     }
@@ -336,6 +531,13 @@ function applySendMessageEvent(state: ChatState, event: SendMessageEvent): ChatS
       activeOperationId: null,
       streamingAssistantMessageId: null,
       sendStatus: 'failed',
+      operationsById: {
+        ...state.operationsById,
+        [event.operationId]: toChatOperationState(event.operation, {
+          assistantMessageId: state.operationsById[event.operationId]?.assistantMessageId,
+          userMessageId: state.operationsById[event.operationId]?.userMessageId
+        })
+      },
       error: event.error
     },
     event.messageId ?? '',
@@ -360,7 +562,8 @@ export function chatReducer(state: ChatState, action: ChatReducerAction): ChatSt
       messagesStatus: 'idle',
       messagesRequestId: null,
       streamingAssistantMessageId: null,
-      pendingToolInvocations: []
+      pendingToolInvocations: [],
+      operationsById: {}
     }
   }
 
@@ -392,8 +595,8 @@ export function chatReducer(state: ChatState, action: ChatReducerAction): ChatSt
     }
   }
 
-  if (action.type === 'applySendMessageEvent') {
-    return applySendMessageEvent(state, action.event)
+  if (action.type === 'applyChatOperationEvent') {
+    return applyChatOperationEvent(state, action.event)
   }
 
   if (action.type === 'loadChatSessionsPending') {
@@ -527,7 +730,8 @@ export function chatReducer(state: ChatState, action: ChatReducerAction): ChatSt
       ...toMessageState([]),
       messagesRequestId: null,
       streamingAssistantMessageId: null,
-      pendingToolInvocations: []
+      pendingToolInvocations: [],
+      operationsById: {}
     }
   }
 
@@ -536,19 +740,134 @@ export function chatReducer(state: ChatState, action: ChatReducerAction): ChatSt
   }
 
   if (action.type === 'sendChatMessagePending') {
+    const baseState: ChatState = {
+      ...state,
+      sendStatus: 'sending',
+      error: null,
+      messagesRequestId: null,
+      streamingAssistantMessageId: action.optimisticAssistantMessage.id,
+      activeOperationId: action.optimisticOperation.id,
+      activeSessionId: action.input.sessionId ?? state.activeSessionId,
+      activeTopicId: action.input.topicId ?? state.activeTopicId,
+      activeThreadId: action.input.threadId ?? state.activeThreadId,
+      operationsById: {
+        ...state.operationsById,
+        [action.optimisticOperation.id]: toChatOperationState(action.optimisticOperation, {
+          assistantMessageId: action.optimisticAssistantMessage.id,
+          userMessageId: action.optimisticUserMessage.id
+        })
+      }
+    }
+
     return upsertMessage(
-      {
-        ...state,
-        sendStatus: 'sending',
-        error: null,
-        messagesRequestId: null,
-        streamingAssistantMessageId: null,
-        activeSessionId: action.input.sessionId ?? state.activeSessionId,
-        activeTopicId: action.input.topicId ?? state.activeTopicId,
-        activeThreadId: action.input.threadId ?? state.activeThreadId
-      },
-      action.optimisticMessage
+      upsertMessage(baseState, action.optimisticUserMessage),
+      action.optimisticAssistantMessage
     )
+  }
+
+  if (action.type === 'createMessageTurnFulfilled') {
+    const result = action.result
+    const pendingOperationId = `pending-operation-${action.requestId}`
+    const previousOperation = state.operationsById[pendingOperationId]
+    const { [pendingOperationId]: _pendingOperation, ...operationsById } = state.operationsById
+    void _pendingOperation
+
+    const stateWithEntities = {
+      ...state,
+      sessions: upsertSession(state.sessions, result.session),
+      topics: upsertById(state.topics, result.topic),
+      threads: upsertById(state.threads, result.thread),
+      activeOperationId: result.operation.id,
+      streamingAssistantMessageId: result.assistantMessage.id,
+      operationsById: {
+        ...operationsById,
+        [result.operation.id]: toChatOperationState(result.operation, {
+          assistantMessageId: result.assistantMessage.id,
+          userMessageId: result.userMessage.id
+        })
+      }
+    }
+
+    if (!isVisibleEvent(stateWithEntities, result.session.id, result.thread.id)) {
+      return stateWithEntities
+    }
+
+    const stateWithRealUserMessage = replaceMessageById(
+      {
+        ...stateWithEntities,
+        activeSessionId: result.session.id,
+        activeTopicId: result.topic.id,
+        activeThreadId: result.thread.id
+      },
+      previousOperation?.userMessageId ?? `pending-${action.requestId}`,
+      result.userMessage
+    )
+
+    return replaceMessageById(
+      stateWithRealUserMessage,
+      previousOperation?.assistantMessageId ?? `pending-assistant-${action.requestId}`,
+      result.assistantMessage
+    )
+  }
+
+  if (action.type === 'runChatOperationPending') {
+    return withOperationStatus(state, action.operationId, 'running', new Date().toISOString())
+  }
+
+  if (action.type === 'runChatOperationFulfilled') {
+    const result = action.result
+    const previousOperation = state.operationsById[action.operationId]
+    const nextState: ChatState = {
+      ...state,
+      sendStatus: 'succeeded',
+      activeOperationId:
+        state.activeOperationId === action.operationId ? null : state.activeOperationId,
+      streamingAssistantMessageId:
+        previousOperation?.assistantMessageId === state.streamingAssistantMessageId
+          ? null
+          : state.streamingAssistantMessageId,
+      pendingToolInvocations: [],
+      operationsById: {
+        ...state.operationsById,
+        [result.operation.id]: toChatOperationState(result.operation, {
+          assistantMessageId: previousOperation?.assistantMessageId,
+          userMessageId: previousOperation?.userMessageId
+        })
+      }
+    }
+
+    const assistantMessage = result.messages.find(
+      (message) => message.id === previousOperation?.assistantMessageId
+    )
+
+    if (
+      assistantMessage === undefined ||
+      !isVisibleEvent(nextState, assistantMessage.sessionId, assistantMessage.threadId)
+    ) {
+      return nextState
+    }
+
+    return {
+      ...nextState,
+      ...toMessageState(result.messages)
+    }
+  }
+
+  if (action.type === 'runChatOperationRejected') {
+    return {
+      ...withOperationStatus(
+        state,
+        action.operationId,
+        'failed',
+        new Date().toISOString(),
+        getErrorMessage(action.error)
+      ),
+      activeOperationId:
+        state.activeOperationId === action.operationId ? null : state.activeOperationId,
+      streamingAssistantMessageId: null,
+      sendStatus: 'failed',
+      error: getErrorMessage(action.error)
+    }
   }
 
   if (action.type === 'sendChatMessageFulfilled') {
@@ -562,7 +881,11 @@ export function chatReducer(state: ChatState, action: ChatReducerAction): ChatSt
         topics: upsertById(state.topics, result.topic),
         threads: upsertById(state.threads, result.thread),
         activeOperationId: null,
-        streamingAssistantMessageId: null
+        streamingAssistantMessageId: null,
+        operationsById: {
+          ...state.operationsById,
+          [result.operation.id]: toChatOperationState(result.operation)
+        }
       }
     }
 
@@ -577,6 +900,10 @@ export function chatReducer(state: ChatState, action: ChatReducerAction): ChatSt
       activeThreadId: result.thread.id,
       activeOperationId: null,
       streamingAssistantMessageId: null,
+      operationsById: {
+        ...state.operationsById,
+        [result.operation.id]: toChatOperationState(result.operation)
+      },
       pendingToolInvocations: [],
       ...toMessageState(result.messages)
     }
@@ -593,12 +920,34 @@ export function chatReducer(state: ChatState, action: ChatReducerAction): ChatSt
   }
 
   if (action.type === 'cancelChatOperationFulfilled') {
-    return {
+    const existingOperation = state.operationsById[action.operation.id]
+    const nextState = {
       ...state,
       activeOperationId:
         state.activeOperationId === action.operation.id ? null : state.activeOperationId,
-      sendStatus: action.operation.status === 'interrupted' ? 'failed' : state.sendStatus
+      streamingAssistantMessageId:
+        state.streamingAssistantMessageId === existingOperation?.assistantMessageId
+          ? null
+          : state.streamingAssistantMessageId,
+      sendStatus: action.operation.status === 'interrupted' ? 'failed' : state.sendStatus,
+      operationsById: {
+        ...state.operationsById,
+        [action.operation.id]: toChatOperationState(action.operation, {
+          assistantMessageId: existingOperation?.assistantMessageId,
+          userMessageId: existingOperation?.userMessageId
+        })
+      }
     }
+
+    if (existingOperation?.assistantMessageId === undefined) {
+      return nextState
+    }
+
+    return updateMessageById(nextState, existingOperation.assistantMessageId, (message) => ({
+      ...message,
+      status: 'cancelled',
+      error: 'Cancelled by user.'
+    }))
   }
 
   return updateMessageById(state, action.toolInvocation.messageId, (message) =>
