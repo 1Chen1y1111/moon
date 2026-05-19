@@ -11,8 +11,10 @@ const projectRoot = join(__dirname, '..')
 const components = [
   'badge',
   'button',
+  'button-group',
   'tooltip',
   'checkbox',
+  'collapsible',
   'dialog',
   'empty',
   'input',

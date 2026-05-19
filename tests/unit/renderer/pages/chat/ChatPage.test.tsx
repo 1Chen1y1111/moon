@@ -214,6 +214,27 @@ describe('ChatPage', () => {
     expect(await screen.findByText('你好，我在。')).toBeInTheDocument()
   })
 
+  it('renders assistant markdown and reasoning content', () => {
+    renderWithProviders(<ChatPage />, {
+      preloadedChat: {
+        sessions: [session],
+        messages: [
+          {
+            ...assistantMessage,
+            content: '# Markdown Title',
+            reasoning: 'checked context'
+          }
+        ],
+        sessionsStatus: 'succeeded'
+      },
+      routeState: { activeChatId: 'session-1' }
+    })
+
+    expect(screen.getByText('Markdown Title')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /推理/ })).toBeInTheDocument()
+    expect(screen.getByText('checked context')).toBeInTheDocument()
+  })
+
   it('uploads a text attachment and sends it without message text', async () => {
     const { container, user } = renderWithProviders(<ChatPage />)
     const fileInput = container.querySelector('input[accept*=".txt"]') as HTMLInputElement | null
