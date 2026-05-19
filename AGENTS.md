@@ -7,7 +7,7 @@ Guidelines for using AI coding agents in this Moon repository.
 - Electron 39 + electron-vite 5 + Vite 7
 - React 19 + TypeScript 5
 - TanStack Router for renderer routing
-- Redux Toolkit + React Redux for renderer state
+- Zustand for renderer state
 - TanStack Query for async client state where needed
 - Tailwind CSS v4 + shadcn/radix-nova + Radix UI + lucide-react for UI
 - Drizzle ORM + PGlite for local persistence
@@ -57,7 +57,8 @@ moon/
 |       |   |-- preload/            # Typed bridge exposed as window.api
 |       |   `-- renderer/
 |       |       `-- src/
-|       |           |-- app/        # Providers, router, route context, Redux store setup
+|       |           |-- app/        # Providers, router, and route context setup
+|       |           |-- store/      # Zustand stores and renderer state setup
 |       |           |-- pages/      # Route-level composition surfaces
 |       |           |-- layouts/    # Shells and route-level layout surfaces
 |       |           |-- features/   # User-facing feature sections and workflows
@@ -114,8 +115,7 @@ The renderer follows this dependency direction:
 app -> pages -> layouts -> features -> entities -> components/assets/styles
 ```
 
-- `apps/desktop/src/renderer/src/app/` wires global providers, router, route context, and the
-  Redux store.
+- `apps/desktop/src/renderer/src/app/` wires global providers, router, and route context.
 - `apps/desktop/src/renderer/src/pages/` should stay thin. Use pages for route-level
   composition and delegate shell surfaces to layouts or reusable behavior to
   features and entities.

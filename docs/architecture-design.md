@@ -56,8 +56,8 @@ Moon 是一个基于 Electron、React、TypeScript 的桌面应用。当前产�
 |  Renderer                                                       |
 |  apps/desktop/src/renderer/src                                               |
 |  +-------------------+      +----------------------+             |
-|  | Router            |      | Redux Store           |             |
-|  | / /chat /settings |      | settings              |             |
+|  | Router            |      | Zustand Store         |             |
+|  | / /chat /settings |      | settings / chat       |             |
 |  +---------+---------+      +----------+-----------+             |
 |            |                           |                         |
 |            v                           v                         |
@@ -123,7 +123,7 @@ preload 的职责是把主进程能力收敛为受控 API。当前只暴露 `win
 渲染层由 React 组成，主要职责是：
 
 - 通过 TanStack Router 组织页面。
-- 通过 Redux Toolkit 管理客户端 UI 状态。
+- 通过 Zustand 管理客户端 UI 状态。
 - 通过 `window.api` 请求主进程能力。
 - 使用 Tailwind CSS v4、shadcn 本地组件和 Radix primitives 组成界面。
 
@@ -325,7 +325,7 @@ messages
 ```text
 App
   -> AppProviders
-     -> Redux Provider
+     -> Zustand stores
      -> AppRouterContextStore.Provider
   -> RouterProvider(appRouter)
 ```
@@ -340,13 +340,14 @@ App
 
 设置窗口由主进程加载同一个 renderer bundle，并通过 hash `#/settings` 进入独立设置页面。调用 `window.api.windowControls.openSettings({ section: 'providers' })` 时会加载 `#/settings?section=providers`，用于从主窗口直接进入 Provider 设置。
 
-### 7.2 Redux Store 与实体层
+### 7.2 Zustand Store 与实体层
 
-Store 文件：`apps/desktop/src/renderer/src/app/store/index.ts`
+Store 文件：`apps/desktop/src/renderer/src/store`
 
 当前 slice：
 
 - `settings`：维护设置页当前选中的 section、`AppSettings`、加载/保存状态和错误信息。
+- `chat`：维护会话、主题、线程、消息、附件和 agent/tool 调用状态。
 
 `AppProviders` 内的 `ThemeController` 会在 renderer 启动后加载一次设置，订阅 `settings:on-change`，并根据 `light`、`dark`、`system` 写入根节点的 `.dark` class 和 `color-scheme`。
 
@@ -563,6 +564,6 @@ apps/desktop/resources/logo.png
 - 服务层负责校验和业务编排，仓储层只做数据读写。
 - renderer 以 `app -> pages -> layouts -> features -> entities -> components/assets/styles` 分层组织。
 - `packages/shared/src/domain` 只用于跨进程纯领域类型和常量；跨进程 IPC 契约放在 `packages/ipc/src`；基础 UI primitives 放在 `packages/ui/src`；renderer 内业务 UI、样式和资源放在 `apps/desktop/src/renderer/src/components`、`apps/desktop/src/renderer/src/styles` 和 `apps/desktop/src/renderer/src/assets`。
-- UI 状态使用 Redux；跨进程状态以 IPC 和持久化结果为准。
+- UI 状态使用 Zustand；跨进程状态以 IPC 和持久化结果为准。
 - 只暴露必要 preload API，避免扩大 Electron/Node 能力边界。
 - 新能力先定义可验证目标，再补最小测试闭环。

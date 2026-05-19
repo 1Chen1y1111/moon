@@ -28,6 +28,86 @@ export default defineConfig(
       ...eslintPluginReactRefresh.configs.vite.rules
     }
   },
+  {
+    files: ['apps/desktop/src/renderer/src/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'electron',
+              message: 'Renderer code must use window.api instead of importing Electron.'
+            }
+          ],
+          patterns: [
+            {
+              group: [
+                '@main',
+                '@main/*',
+                '@preload',
+                '@preload/*',
+                'apps/desktop/src/main/*',
+                'apps/desktop/src/preload/*',
+                'electron/*',
+                '@electron-toolkit/*'
+              ],
+              message: 'Renderer code must not import main/preload/Electron modules.'
+            }
+          ]
+        }
+      ]
+    }
+  },
+  {
+    files: ['packages/shared/src/**/*.{ts,tsx}'],
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'electron',
+              message: 'Shared domain code must stay free of Electron dependencies.'
+            },
+            {
+              name: 'react',
+              message: 'Shared domain code must stay free of React dependencies.'
+            },
+            {
+              name: 'react-dom',
+              message: 'Shared domain code must stay free of React dependencies.'
+            },
+            {
+              name: 'drizzle-orm',
+              message: 'Shared domain code must stay free of Drizzle runtime dependencies.'
+            }
+          ],
+          patterns: [
+            {
+              group: [
+                '@main',
+                '@main/*',
+                '@preload',
+                '@preload/*',
+                '@renderer',
+                '@renderer/*',
+                '@moon/ui',
+                '@moon/ui/*',
+                'electron/*',
+                '@electron-toolkit/*',
+                'react/*',
+                'react-dom/*',
+                'drizzle-orm/*'
+              ],
+              message:
+                'Shared domain code must not import UI, process, Electron, React, or Drizzle modules.'
+            }
+          ]
+        }
+      ]
+    }
+  },
   eslintConfigPrettier,
   {
     files: ['packages/ui/src/ui/*.tsx', 'packages/ui/src/hooks/*.ts'],
