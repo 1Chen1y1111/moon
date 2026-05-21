@@ -11,6 +11,8 @@ import { ReasoningBlock } from './components/ReasoningBlock'
 export function MessageBubble({ message }: { message: MessageRecord }): React.JSX.Element {
   const isUser = message.role === 'user'
   const isAssistant = message.role === 'assistant'
+  const statusLabel =
+    message.status === 'streaming' ? ' · 生成中' : message.status === 'error' ? ' · 失败' : null
 
   return (
     <Message from={isUser ? 'user' : 'assistant'} className="max-w-full">
@@ -22,16 +24,16 @@ export function MessageBubble({ message }: { message: MessageRecord }): React.JS
             : 'border border-border bg-secondary text-foreground'
         )}
       >
-        <div
-          className={cn(
-            'mb-1 text-[11px] font-medium leading-4',
-            isUser ? 'text-primary-foreground/75' : 'text-muted-foreground'
-          )}
-        >
-          {isUser ? '你' : 'Moon'}
-          {message.status === 'streaming' ? ' · 生成中' : null}
-          {message.status === 'error' ? ' · 失败' : null}
-        </div>
+        {statusLabel === null ? null : (
+          <div
+            className={cn(
+              'text-[11px] font-medium leading-4',
+              isUser ? 'text-primary-foreground/75' : 'text-muted-foreground'
+            )}
+          >
+            {statusLabel}
+          </div>
+        )}
         <MessageAttachmentList attachments={message.attachments ?? []} />
         <ReasoningBlock
           isStreaming={message.status === 'streaming'}
