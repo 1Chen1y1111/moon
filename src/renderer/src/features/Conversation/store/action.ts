@@ -1,13 +1,54 @@
 import type { ChatInputRuntimeInfo } from '@renderer/features/ChatInput'
 import type { StoreSetter } from '@renderer/store/types'
 import type { AgentOperationRecord, ChatAttachmentRecord, MessageRecord } from '@shared/domain/chat'
-import type { CancelAgentOperationInput, SendChatMessageInput } from '@shared/domain/chat-validation'
+import type {
+  CancelAgentOperationInput,
+  SendChatMessageInput
+} from '@shared/domain/chat-validation'
 import type { ProviderSettings } from '@shared/domain/settings'
+import useSWR, { type SWRResponse } from 'swr'
 
 import type { ConversationContext, OperationState } from '../types'
 import type { ConversationStore } from './index'
 
 type Setter = StoreSetter<ConversationStore>
+
+const swrFetchMessagesKey = 'moon-conversation-fetch-messages'
+
+function getTime(value: string): number {
+  const time = new Date(value).getTime()
+
+  return Number.isNaN(time) ? 0 : time
+}
+
+function mergeFetchedMessagesWithLocalState(
+  fetchedMessages: MessageRecord[],
+  localMessages: MessageRecord[]
+): MessageRecord[] {
+  if (localMessages.length === 0 || fetchedMessages.length === 0) {
+    return fetchedMessages
+  }
+
+  const localById = new Map(localMessages.map((message) => [message.id, message]))
+  let changed = false
+
+  const mergedMessages = fetchedMessages.map((message) => {
+    const localMessage = localById.get(message.id)
+
+    if (localMessage === undefined) {
+      return message
+    }
+
+    if (getTime(localMessage.updatedAt) <= getTime(message.updatedAt)) {
+      return message
+    }
+
+    changed = true
+    return localMessage
+  })
+
+  return changed ? mergedMessages : fetchedMessages
+}
 
 export type SendConversationMessageParams = {
   activeProvider?: ProviderSettings
@@ -88,8 +129,23 @@ export class ConversationActionImpl {
     this.#set({ context })
   }
 
-  setMessages = (messages: MessageRecord[]): void => {
-    this.#set({ messages })
+  replaceMessages = (messages: MessageRecord[], context = this.#get().context): void => {
+    this.#set({ messages, messagesInit: true })
+    this.#get().onMessagesChange?.(messages, context)
+  }
+
+  setMessages = (messages: MessageRecord[], messagesInit = true): void => {
+    this.#set({ messages, messagesInit })
+  }
+
+  setMessagesInit = (messagesInit: boolean): void => {
+    this.#set({ messagesInit })
+  }
+
+  setOnMessagesChange = (
+    onMessagesChange: ConversationStore['onMessagesChange'] | undefined
+  ): void => {
+    this.#set({ onMessagesChange })
   }
 
   setOperationState = (operationState: OperationState): void => {
@@ -98,6 +154,10 @@ export class ConversationActionImpl {
 
   setRuntimeInfo = (runtimeInfo: ChatInputRuntimeInfo): void => {
     this.#set({ runtimeInfo })
+  }
+
+  setSkipFetch = (skipFetch: boolean | undefined): void => {
+    this.#set({ skipFetch })
   }
 
   stopGenerating = (
@@ -112,6 +172,34 @@ export class ConversationActionImpl {
 
   updateInputMessage = (inputMessage: string): void => {
     this.#set({ inputMessage })
+  }
+
+  useFetchMessages = (
+    context: ConversationContext,
+    skipFetch?: boolean
+  ): SWRResponse<MessageRecord[]> => {
+    const shouldFetch =
+      skipFetch !== true && context.sessionId !== null && context.threadId !== null
+
+    return useSWR<MessageRecord[]>(
+      shouldFetch
+        ? [swrFetchMessagesKey, context.sessionId, context.topicId, context.threadId]
+        : null,
+      async () =>
+        window.api.chat.getMessages({
+          sessionId: context.sessionId as string,
+          threadId: context.threadId as string
+        }),
+      {
+        onSuccess: (messages) => {
+          const mergedMessages = mergeFetchedMessagesWithLocalState(messages, this.#get().messages)
+
+          this.replaceMessages(mergedMessages, context)
+        },
+        revalidateOnFocus: false,
+        shouldRetryOnError: false
+      }
+    )
   }
 }
 

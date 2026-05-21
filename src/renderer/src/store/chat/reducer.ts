@@ -17,6 +17,11 @@ import type { ChatDraftAttachment, ChatOperationState, ChatState } from './types
 export type ChatReducerAction =
   | { type: 'clearChatMessages' }
   | { type: 'clearChatError' }
+  | {
+      type: 'replaceChatMessages'
+      context: { sessionId: string | null; threadId: string | null; topicId: string | null }
+      messages: MessageRecord[]
+    }
   | { type: 'addDraftAttachment'; attachment: ChatDraftAttachment }
   | { type: 'clearDraftAttachments' }
   | { type: 'removeDraftAttachment'; id: string }
@@ -571,6 +576,36 @@ export function chatReducer(state: ChatState, action: ChatReducerAction): ChatSt
 
   if (action.type === 'clearChatError') {
     return { ...state, error: null }
+  }
+
+  if (action.type === 'replaceChatMessages') {
+    const { context } = action
+
+    if (context.sessionId === null) {
+      return state
+    }
+
+    if (state.activeSessionId !== context.sessionId) {
+      return state
+    }
+
+    if (context.topicId !== null && state.activeTopicId !== context.topicId) {
+      return state
+    }
+
+    if (context.threadId !== null && state.activeThreadId !== context.threadId) {
+      return state
+    }
+
+    return {
+      ...state,
+      activeSessionId: context.sessionId,
+      activeTopicId: context.topicId ?? state.activeTopicId,
+      activeThreadId: context.threadId ?? state.activeThreadId,
+      messagesStatus: 'succeeded',
+      messagesRequestId: null,
+      ...toMessageState(action.messages)
+    }
   }
 
   if (action.type === 'addDraftAttachment') {

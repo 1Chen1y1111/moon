@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { ChatPage } from '@renderer/pages/chat'
 import { renderWithProviders } from '@tests/helpers/renderer/render-with-providers'
 import { installMockWindowApi, type MockMoonApi } from '@tests/helpers/renderer/mock-window-api'
+import type { MessageRecord } from '@shared/domain/chat'
 import { createDefaultAppSettings, type AppSettings } from '@shared/domain/settings'
 
 const session = {
@@ -123,7 +124,7 @@ describe('ChatPage', () => {
   it('renders the empty state and disables empty sends', async () => {
     const { user } = renderWithProviders(<ChatPage />)
 
-    expect(screen.getByText('准备开始聊天')).toBeInTheDocument()
+    expect(screen.getByText('我们该做什么？')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '记忆' })).not.toHaveAttribute(
       'aria-disabled',
       'true'
@@ -137,6 +138,44 @@ describe('ChatPage', () => {
     await user.type(screen.getByRole('textbox', { name: '消息内容' }), 'hello')
 
     expect(screen.getByRole('button', { name: '发送' })).toBeEnabled()
+    expect(api.chat.getMessages).not.toHaveBeenCalled()
+  })
+
+  it('shows a skeleton while historical messages load', async () => {
+    let resolveMessages!: (messages: MessageRecord[]) => void
+    api.chat.getMessages.mockReturnValue(
+      new Promise((resolve) => {
+        resolveMessages = resolve
+      })
+    )
+
+    renderWithProviders(<ChatPage />, {
+      preloadedChat: {
+        activeSessionId: 'session-1',
+        activeThreadId: 'thread-1',
+        activeTopicId: 'topic-1',
+        sessions: [session],
+        sessionsStatus: 'succeeded',
+        threads: [thread],
+        threadsStatus: 'succeeded',
+        topics: [topic],
+        topicsStatus: 'succeeded'
+      },
+      routeState: { activeChatId: 'session-1' }
+    })
+
+    expect(screen.getByRole('status', { name: '加载聊天消息' })).toBeInTheDocument()
+    expect(screen.queryByText('正在加载消息...')).not.toBeInTheDocument()
+    await waitFor(() =>
+      expect(api.chat.getMessages).toHaveBeenCalledWith({
+        sessionId: 'session-1',
+        threadId: 'thread-1'
+      })
+    )
+
+    resolveMessages([userMessage, assistantMessage])
+
+    expect(await screen.findByText('你好，我在。')).toBeInTheDocument()
   })
 
   it('opens the web search action panel and toggles the search mode', async () => {
@@ -365,6 +404,10 @@ describe('ChatPage', () => {
   })
 
   it('switches the active session provider model from the action bar', async () => {
+    const deepseekSession = {
+      ...session,
+      provider: 'deepseek'
+    } as const
     const appSettings = createModelSwitchSettings()
     const savedSettings = {
       ...appSettings,
@@ -380,20 +423,24 @@ describe('ChatPage', () => {
       appSettings,
       savedSettings,
       chatMessages: [userMessage],
-      chatSessions: [session],
+      chatSessions: [deepseekSession],
       sentChatMessage: {
-        session: {
-          ...session,
-          provider: 'deepseek'
-        },
+        session: deepseekSession,
         messages: [userMessage, assistantMessage]
       }
     })
     const { user } = renderWithProviders(<ChatPage />, {
       preloadedChat: {
-        sessions: [session],
+        activeSessionId: 'session-1',
+        activeThreadId: 'thread-1',
+        activeTopicId: 'topic-1',
         messages: [userMessage],
-        sessionsStatus: 'succeeded'
+        sessions: [deepseekSession],
+        sessionsStatus: 'succeeded',
+        threads: [thread],
+        threadsStatus: 'succeeded',
+        topics: [topic],
+        topicsStatus: 'succeeded'
       },
       preloadedSettings: {
         appSettings,
@@ -531,8 +578,15 @@ describe('ChatPage', () => {
     api.chat.createMessageTurn.mockRejectedValueOnce(new Error('model down'))
     const { user } = renderWithProviders(<ChatPage />, {
       preloadedChat: {
+        activeSessionId: 'session-1',
+        activeThreadId: 'thread-1',
+        activeTopicId: 'topic-1',
         sessions: [session],
-        sessionsStatus: 'succeeded'
+        sessionsStatus: 'succeeded',
+        threads: [thread],
+        threadsStatus: 'succeeded',
+        topics: [topic],
+        topicsStatus: 'succeeded'
       },
       routeState: { activeChatId: 'session-1' }
     })

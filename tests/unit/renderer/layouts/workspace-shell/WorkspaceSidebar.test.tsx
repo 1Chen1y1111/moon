@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { WorkspaceSidebar } from '@renderer/layouts/workspace-shell/WorkspaceSidebar'
 import { WorkspaceShell } from '@renderer/layouts/workspace-shell'
+import { ChatPage } from '@renderer/pages/chat'
 import { renderWithProviders } from '@tests/helpers/renderer/render-with-providers'
 import { installMockWindowApi, type MockMoonApi } from '@tests/helpers/renderer/mock-window-api'
 
@@ -23,12 +24,6 @@ const newChatSession = {
   title: '新聊天'
 } as const
 
-const createdSession = {
-  ...session,
-  id: 'session-created',
-  title: '新聊天'
-} as const
-
 function renderRail(): void {
   renderWithProviders(<WorkspaceSidebar />)
 }
@@ -37,6 +32,15 @@ function renderInShell(options: Parameters<typeof renderWithProviders>[1] = {}):
   renderWithProviders(
     <WorkspaceShell>
       <section aria-label="Test route stage">route content</section>
+    </WorkspaceShell>,
+    options
+  )
+}
+
+function renderChatInShell(options: Parameters<typeof renderWithProviders>[1] = {}): void {
+  renderWithProviders(
+    <WorkspaceShell>
+      <ChatPage />
     </WorkspaceShell>,
     options
   )
@@ -77,9 +81,9 @@ describe('WorkspaceSidebar', () => {
     expect(await screen.findByRole('button', { name: '设置' })).toBeInTheDocument()
   })
 
-  it('creates a new chat when there is no reusable new chat session', async () => {
+  it('opens a blank chat entry without creating a session', async () => {
     const user = userEvent.setup()
-    api = installMockWindowApi({ chatSessions: [session], createdChatSession: createdSession })
+    api = installMockWindowApi({ chatSessions: [session] })
 
     renderInShell({ routeState: { activeChatId: 'session-1' } })
 
@@ -92,15 +96,12 @@ describe('WorkspaceSidebar', () => {
     expect(sessionButton).toHaveAttribute('aria-current', 'page')
 
     await user.click(within(rail).getByRole('button', { name: '新建聊天' }))
-    await waitFor(() => expect(api.chat.createSession).toHaveBeenCalledTimes(1))
-    expect(window.location.hash).toBe('#/chat')
-    expect(await within(rail).findByRole('button', { name: '新聊天' })).toHaveAttribute(
-      'aria-current',
-      'page'
-    )
+    expect(api.chat.createSession).not.toHaveBeenCalled()
+    expect(window.location.hash).toBe('#/')
+    expect(sessionButton).not.toHaveAttribute('aria-current')
   })
 
-  it('reuses an existing new chat session from the shell rail', async () => {
+  it('does not reuse an existing new chat session from the shell rail', async () => {
     const user = userEvent.setup()
     api = installMockWindowApi({ chatSessions: [session, newChatSession] })
 
@@ -113,10 +114,33 @@ describe('WorkspaceSidebar', () => {
     expect(sessionButton).toHaveAttribute('aria-current', 'page')
 
     await user.click(within(rail).getByRole('button', { name: '新建聊天' }))
-    expect(window.location.hash).toBe('#/chat')
+    expect(window.location.hash).toBe('#/')
     expect(api.chat.createSession).not.toHaveBeenCalled()
     expect(sessionButton).not.toHaveAttribute('aria-current')
-    expect(newChatButton).toHaveAttribute('aria-current', 'page')
+    expect(newChatButton).not.toHaveAttribute('aria-current')
+  })
+
+  it('clears the active draft when opening the blank chat entry', async () => {
+    const user = userEvent.setup()
+    api = installMockWindowApi({ chatSessions: [session] })
+
+    renderChatInShell({
+      preloadedChat: {
+        sessions: [session],
+        sessionsStatus: 'succeeded'
+      },
+      routeState: { activeChatId: 'session-1' }
+    })
+
+    const textbox = screen.getByRole('textbox', { name: '消息内容' })
+    await user.type(textbox, '旧会话草稿')
+
+    await user.click(screen.getByRole('button', { name: '新建聊天' }))
+
+    expect(api.chat.createSession).not.toHaveBeenCalled()
+    expect(window.location.hash).toBe('#/')
+    expect(screen.getByText('我们该做什么？')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: '消息内容' })).toHaveValue('')
   })
 
   it('deletes a session from the hover action', async () => {

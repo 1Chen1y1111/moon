@@ -11,12 +11,7 @@ import {
   Trash2
 } from 'lucide-react'
 
-import {
-  selectChatCreateStatus,
-  selectChatSessions,
-  selectChatSessionsStatus,
-  selectReusableNewChatSession
-} from '@renderer/store/chat/selectors'
+import { selectChatSessions, selectChatSessionsStatus } from '@renderer/store/chat/selectors'
 import { useChatStore } from '@renderer/store/chat'
 import { useAppRouterContext } from '@renderer/app/router/router-context'
 import { Button } from '@shadcn/ui/button'
@@ -24,17 +19,29 @@ import { ScrollArea } from '@shadcn/ui/scroll-area'
 
 import { WorkspaceChrome } from './WorkspaceChrome'
 
+let newChatRequestCounter = 0
+
+function createNewChatRequestId(): string {
+  newChatRequestCounter += 1
+
+  return `new-chat-${newChatRequestCounter}`
+}
+
+function navigateToNewChat(): void {
+  window.location.hash = '#/'
+}
+
 function navigateToChat(): void {
   window.location.hash = '#/chat'
 }
 
 export function WorkspaceSidebar(): React.JSX.Element {
   const sessions = useChatStore(selectChatSessions)
-  const reusableNewChatSession = useChatStore(selectReusableNewChatSession)
   const sessionsStatus = useChatStore(selectChatSessionsStatus)
-  const createStatus = useChatStore(selectChatCreateStatus)
   const loadChatSessions = useChatStore((state) => state.loadChatSessions)
-  const createChatSession = useChatStore((state) => state.createChatSession)
+  const clearChatDraftAttachments = useChatStore((state) => state.clearChatDraftAttachments)
+  const clearChatError = useChatStore((state) => state.clearChatError)
+  const clearChatMessages = useChatStore((state) => state.clearChatMessages)
   const deleteChatSession = useChatStore((state) => state.deleteChatSession)
   const { routeState, setRouteState } = useAppRouterContext()
   const [isMoreActionsOpen, setIsMoreActionsOpen] = useState(false)
@@ -78,29 +85,17 @@ export function WorkspaceSidebar(): React.JSX.Element {
     void window.api.windowControls.openSettings()
   }
 
-  const handleStartNewChat = async (): Promise<void> => {
-    if (reusableNewChatSession !== undefined) {
-      setRouteState((state) => ({
-        ...state,
-        activeChatId: reusableNewChatSession.id,
-        draftProviderId: null
-      }))
-      navigateToChat()
-      return
-    }
-
-    try {
-      const session = await createChatSession()
-
-      setRouteState((state) => ({
-        ...state,
-        activeChatId: session.id,
-        draftProviderId: null
-      }))
-      navigateToChat()
-    } catch {
-      navigateToChat()
-    }
+  const handleStartNewChat = (): void => {
+    clearChatDraftAttachments()
+    clearChatError()
+    clearChatMessages()
+    setRouteState((state) => ({
+      ...state,
+      activeChatId: null,
+      draftProviderId: null,
+      newChatRequestId: createNewChatRequestId()
+    }))
+    navigateToNewChat()
   }
 
   const handleSelectSession = (sessionId: string): void => {
@@ -140,10 +135,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
               variant="secondary"
               size="lg"
               className="justify-start gap-2"
-              disabled={createStatus === 'creating'}
-              onClick={() => {
-                void handleStartNewChat()
-              }}
+              onClick={handleStartNewChat}
             >
               <Plus aria-hidden="true" className="size-4" />
               新建聊天

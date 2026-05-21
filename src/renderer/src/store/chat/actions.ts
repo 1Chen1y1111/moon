@@ -26,6 +26,12 @@ import type { ChatDraftAttachment } from './types'
 
 type Setter = StoreSetter<ChatStore>
 
+type ReplaceChatMessagesContext = {
+  sessionId: string | null
+  threadId: string | null
+  topicId: string | null
+}
+
 let requestCounter = 0
 
 function createRequestId(prefix: string): string {
@@ -172,6 +178,10 @@ export class ChatActionImpl {
 
   clearChatError = (): void => {
     this.internal_clearChatError()
+  }
+
+  replaceChatMessages = (context: ReplaceChatMessagesContext, messages: MessageRecord[]): void => {
+    this.internal_dispatchChat({ type: 'replaceChatMessages', context, messages })
   }
 
   applyChatOperationEvent = (event: ChatOperationEvent): void => {

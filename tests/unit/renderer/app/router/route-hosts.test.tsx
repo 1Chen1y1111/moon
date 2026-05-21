@@ -2,7 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { AppProviders } from '@renderer/app/providers'
-import { SettingsRoute, WorkspaceLayout } from '@renderer/app/router/route-hosts'
+import { ChatRoute, SettingsRoute, WorkspaceLayout } from '@renderer/app/router/route-hosts'
 import { installMockWindowApi } from '@tests/helpers/renderer/mock-window-api'
 
 describe('route layouts', () => {
@@ -37,6 +37,19 @@ describe('route layouts', () => {
     expect(workspaceChrome.getByRole('button', { name: '最小化窗口' })).toBeInTheDocument()
     expect(workspaceChrome.getByRole('button', { name: '放大窗口' })).toBeInTheDocument()
     expect(workspaceChrome.getByRole('button', { name: '关闭窗口' })).toBeInTheDocument()
+  })
+
+  it('renders the chat route as the workspace entry surface', () => {
+    render(
+      <AppProviders>
+        <ChatRoute />
+      </AppProviders>
+    )
+
+    expect(screen.getByRole('complementary', { name: 'Workspace navigation' })).toBeInTheDocument()
+    expect(screen.getByText('我们该做什么？')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: '消息内容' })).toBeInTheDocument()
+    expect(screen.queryByText('Moon')).not.toBeInTheDocument()
   })
 
   it('renders the settings route without the workspace rail', () => {

@@ -9,6 +9,7 @@ import { MessageBubble } from '../../Messages'
 import { conversationSelectors, useConversationStore } from '../../store'
 import type { ChatListProps } from '../../types'
 import { InboxWelcome } from '../InboxWelcome'
+import SkeletonList from '../SkeletonList'
 
 type ChatListViewProps = ChatListProps & {
   messages: NonNullable<ChatListProps['messages']>
@@ -16,7 +17,6 @@ type ChatListViewProps = ChatListProps & {
 
 function ChatListView({
   className,
-  isLoading = false,
   messages,
   showWelcome = false
 }: ChatListViewProps): React.JSX.Element {
@@ -24,10 +24,6 @@ function ChatListView({
     <AiConversation aria-label="聊天消息" className={cn('min-h-0', className)}>
       <ConversationContent className="min-h-full gap-4 px-6 py-6">
         {showWelcome ? <InboxWelcome /> : null}
-
-        {isLoading ? (
-          <div className="text-sm leading-6 text-muted-foreground">正在加载消息...</div>
-        ) : null}
 
         {messages.map((message) => (
           <MessageBubble key={message.id} message={message} />
@@ -39,7 +35,19 @@ function ChatListView({
 }
 
 function ConnectedChatList(props: ChatListProps): React.JSX.Element {
+  const context = useConversationStore(conversationSelectors.context)
   const messages = useConversationStore(conversationSelectors.messages)
+  const messagesInit = useConversationStore(conversationSelectors.messagesInit)
+  const skipFetch = useConversationStore(conversationSelectors.skipFetch)
+  const useFetchMessages = useConversationStore((state) => state.useFetchMessages)
+
+  useFetchMessages(context, skipFetch)
+
+  const isNewConversation = context.sessionId === null
+
+  if (!messagesInit && !isNewConversation) {
+    return <SkeletonList />
+  }
 
   return <ChatListView {...props} messages={messages} />
 }

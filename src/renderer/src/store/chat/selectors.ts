@@ -6,6 +6,10 @@ export function selectChatSessions(state: ChatState): ChatState['sessions'] {
   return state.sessions
 }
 
+export function selectChatActiveSessionId(state: ChatState): string | null {
+  return state.activeSessionId
+}
+
 export function selectReusableNewChatSession(state: ChatState): SessionRecord | undefined {
   return state.sessions.find(
     (session) => session.title === '新聊天' || session.title === '新建聊天'

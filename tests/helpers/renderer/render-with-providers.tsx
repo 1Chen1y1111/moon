@@ -1,6 +1,7 @@
 import { useState, type PropsWithChildren, type ReactElement } from 'react'
 import { render, type RenderOptions, type RenderResult } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { SWRConfig } from 'swr'
 
 import { AppRouterContextStore, type AppRouteState } from '@renderer/app/router/router-context'
 import { resetChatStore, type ChatState } from '@renderer/store/chat'
@@ -32,7 +33,9 @@ export function renderWithProviders(
 
     return (
       <AppRouterContextStore.Provider value={{ routeState: currentRouteState, setRouteState }}>
-        <TooltipProvider>{children}</TooltipProvider>
+        <SWRConfig value={{ provider: () => new Map(), dedupingInterval: 0 }}>
+          <TooltipProvider>{children}</TooltipProvider>
+        </SWRConfig>
       </AppRouterContextStore.Provider>
     )
   }
