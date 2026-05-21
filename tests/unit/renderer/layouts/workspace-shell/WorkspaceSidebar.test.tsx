@@ -17,15 +17,28 @@ const session = {
   updatedAt: '2026-05-09T00:00:00.000Z'
 } as const
 
+const newChatSession = {
+  ...session,
+  id: 'session-new',
+  title: '新聊天'
+} as const
+
+const createdSession = {
+  ...session,
+  id: 'session-created',
+  title: '新聊天'
+} as const
+
 function renderRail(): void {
   renderWithProviders(<WorkspaceSidebar />)
 }
 
-function renderInShell(): void {
+function renderInShell(options: Parameters<typeof renderWithProviders>[1] = {}): void {
   renderWithProviders(
     <WorkspaceShell>
       <section aria-label="Test route stage">route content</section>
-    </WorkspaceShell>
+    </WorkspaceShell>,
+    options
   )
 }
 
@@ -64,21 +77,71 @@ describe('WorkspaceSidebar', () => {
     expect(await screen.findByRole('button', { name: '设置' })).toBeInTheDocument()
   })
 
-  it('creates chats and opens settings from the shell rail', async () => {
+  it('creates a new chat when there is no reusable new chat session', async () => {
+    const user = userEvent.setup()
+    api = installMockWindowApi({ chatSessions: [session], createdChatSession: createdSession })
+
+    renderInShell({ routeState: { activeChatId: 'session-1' } })
+
+    const rail = screen.getByRole('complementary', { name: 'Workspace navigation' })
+    const shellMain = screen.getByRole('main')
+    const sessionButton = await within(rail).findByRole('button', { name: '计划讨论' })
+
+    expect(shellMain).toHaveClass('flex', 'min-h-screen', 'min-w-0', 'flex-1')
+    expect(within(shellMain).getByRole('region', { name: 'Test route stage' })).toBeInTheDocument()
+    expect(sessionButton).toHaveAttribute('aria-current', 'page')
+
+    await user.click(within(rail).getByRole('button', { name: '新建聊天' }))
+    await waitFor(() => expect(api.chat.createSession).toHaveBeenCalledTimes(1))
+    expect(window.location.hash).toBe('#/chat')
+    expect(await within(rail).findByRole('button', { name: '新聊天' })).toHaveAttribute(
+      'aria-current',
+      'page'
+    )
+  })
+
+  it('reuses an existing new chat session from the shell rail', async () => {
+    const user = userEvent.setup()
+    api = installMockWindowApi({ chatSessions: [session, newChatSession] })
+
+    renderInShell({ routeState: { activeChatId: 'session-1' } })
+
+    const rail = screen.getByRole('complementary', { name: 'Workspace navigation' })
+    const sessionButton = await within(rail).findByRole('button', { name: '计划讨论' })
+    const newChatButton = await within(rail).findByRole('button', { name: '新聊天' })
+
+    expect(sessionButton).toHaveAttribute('aria-current', 'page')
+
+    await user.click(within(rail).getByRole('button', { name: '新建聊天' }))
+    expect(window.location.hash).toBe('#/chat')
+    expect(api.chat.createSession).not.toHaveBeenCalled()
+    expect(sessionButton).not.toHaveAttribute('aria-current')
+    expect(newChatButton).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('deletes a session from the hover action', async () => {
+    const user = userEvent.setup()
+
+    renderInShell({ routeState: { activeChatId: 'session-1' } })
+
+    const rail = screen.getByRole('complementary', { name: 'Workspace navigation' })
+    const sessionButton = await within(rail).findByRole('button', { name: '计划讨论' })
+
+    await user.hover(sessionButton)
+    await user.click(within(rail).getByRole('button', { name: '删除会话 计划讨论' }))
+
+    await waitFor(() =>
+      expect(api.chat.deleteSession).toHaveBeenCalledWith({ sessionId: 'session-1' })
+    )
+    expect(within(rail).queryByRole('button', { name: '计划讨论' })).not.toBeInTheDocument()
+  })
+
+  it('opens settings from the shell rail', async () => {
     const user = userEvent.setup()
 
     renderInShell()
 
     const rail = screen.getByRole('complementary', { name: 'Workspace navigation' })
-    const shellMain = screen.getByRole('main')
-
-    expect(shellMain).toHaveClass('flex', 'min-h-screen', 'min-w-0', 'flex-1')
-    expect(within(shellMain).getByRole('region', { name: 'Test route stage' })).toBeInTheDocument()
-
-    await user.click(within(rail).getByRole('button', { name: '新建聊天' }))
-    await waitFor(() => expect(api.chat.createSession).toHaveBeenCalledTimes(1))
-    expect(window.location.hash).toBe('#/chat')
-
     await user.hover(within(rail).getByRole('button', { name: '更多操作' }))
     await user.click(await within(rail).findByRole('button', { name: '设置' }))
 

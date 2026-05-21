@@ -280,6 +280,12 @@ export const listChatThreadsInputSchema = z.object({
 
 export type ListChatThreadsInput = z.infer<typeof listChatThreadsInputSchema>
 
+export const deleteChatSessionInputSchema = z.object({
+  sessionId: z.string().trim().min(1, 'Session ID is required.')
+})
+
+export type DeleteChatSessionInput = z.infer<typeof deleteChatSessionInputSchema>
+
 export const sendChatMessageInputSchema = z
   .object({
     sessionId: z.string().trim().min(1, 'Session ID is required.').optional(),

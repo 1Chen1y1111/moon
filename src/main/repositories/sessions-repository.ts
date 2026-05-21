@@ -41,6 +41,10 @@ export class SessionsRepository {
     return row === undefined ? null : toSessionRecord(row)
   }
 
+  async deleteById(id: string): Promise<void> {
+    await this.database.db.delete(sessions).where(eq(sessions.id, id))
+  }
+
   async save(session: SessionRecord): Promise<SessionRecord> {
     const parsedSession = sessionRecordSchema.parse(session)
     const sessionValues = normalizeSessionRecord(parsedSession)

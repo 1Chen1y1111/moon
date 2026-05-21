@@ -11,6 +11,7 @@ describe('ipcChannels', () => {
     expect(ipcChannels.chat.listTopics).toBe('chat:listTopics')
     expect(ipcChannels.chat.listThreads).toBe('chat:listThreads')
     expect(ipcChannels.chat.createSession).toBe('chat:createSession')
+    expect(ipcChannels.chat.deleteSession).toBe('chat:deleteSession')
     expect(ipcChannels.chat.importAttachment).toBe('chat:importAttachment')
     expect(ipcChannels.chat.createMessageTurn).toBe('chat:createMessageTurn')
     expect(ipcChannels.chat.runOperation).toBe('chat:runOperation')

@@ -1,18 +1,31 @@
 import LogoIcon from '@renderer/assets/logo.png'
 import { useAppRouterContext } from '@renderer/app/router/router-context'
 import { useChatStore } from '@renderer/store/chat'
+import { selectReusableNewChatSession } from '@renderer/store/chat/selectors'
 import { Button } from '@shadcn/ui/button'
 
 export function HomeEmptyState(): React.JSX.Element {
   const { setRouteState } = useAppRouterContext()
+  const reusableNewChatSession = useChatStore(selectReusableNewChatSession)
   const createChatSession = useChatStore((state) => state.createChatSession)
 
   const handleCreateChat = async (): Promise<void> => {
+    if (reusableNewChatSession !== undefined) {
+      setRouteState((state) => ({
+        ...state,
+        activeChatId: reusableNewChatSession.id,
+        draftProviderId: null
+      }))
+      window.location.hash = '#/chat'
+      return
+    }
+
     const session = await createChatSession()
 
     setRouteState((state) => ({
       ...state,
-      activeChatId: session.id
+      activeChatId: session.id,
+      draftProviderId: null
     }))
     window.location.hash = '#/chat'
   }

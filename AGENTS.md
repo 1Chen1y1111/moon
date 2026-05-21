@@ -32,6 +32,8 @@ Keep changes surgical:
 - Match nearby style even when another style looks cleaner.
 - Do not refactor adjacent code unless the task requires it.
 - Remove only imports, variables, or files made unused by your own change.
+- Add concise comments only when they clarify non-obvious logic, process
+  boundaries, or intent; avoid comments that merely restate the code.
 - Mention unrelated dead code or risks instead of fixing them opportunistically.
 
 For behavior changes, verify the result with focused tests. If a bug fix is

@@ -5,6 +5,7 @@ export const ipcChannels = {
     listTopics: 'chat:listTopics',
     listThreads: 'chat:listThreads',
     createSession: 'chat:createSession',
+    deleteSession: 'chat:deleteSession',
     importAttachment: 'chat:importAttachment',
     createMessageTurn: 'chat:createMessageTurn',
     runOperation: 'chat:runOperation',

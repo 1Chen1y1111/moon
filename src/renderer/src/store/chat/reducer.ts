@@ -54,6 +54,8 @@ export type ChatReducerAction =
   | { type: 'createChatSessionPending' }
   | { type: 'createChatSessionFulfilled'; session: SessionRecord }
   | { type: 'createChatSessionRejected'; error: unknown }
+  | { type: 'deleteChatSessionFulfilled'; sessionId: string }
+  | { type: 'deleteChatSessionRejected'; error: unknown }
   | {
       type: 'sendChatMessagePending'
       input: SendChatMessageInput
@@ -737,6 +739,36 @@ export function chatReducer(state: ChatState, action: ChatReducerAction): ChatSt
 
   if (action.type === 'createChatSessionRejected') {
     return { ...state, createStatus: 'failed', error: getErrorMessage(action.error) }
+  }
+
+  if (action.type === 'deleteChatSessionFulfilled') {
+    const isActiveSession = state.activeSessionId === action.sessionId
+
+    return {
+      ...state,
+      sessions: state.sessions.filter((session) => session.id !== action.sessionId),
+      ...(isActiveSession
+        ? {
+            activeSessionId: null,
+            activeTopicId: null,
+            activeThreadId: null,
+            activeOperationId: null,
+            topics: [],
+            threads: [],
+            messagesMap: {},
+            messageIds: [],
+            messages: [],
+            messagesRequestId: null,
+            streamingAssistantMessageId: null,
+            pendingToolInvocations: [],
+            operationsById: {}
+          }
+        : {})
+    }
+  }
+
+  if (action.type === 'deleteChatSessionRejected') {
+    return { ...state, error: getErrorMessage(action.error) }
   }
 
   if (action.type === 'sendChatMessagePending') {

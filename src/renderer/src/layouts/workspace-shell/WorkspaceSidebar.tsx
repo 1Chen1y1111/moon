@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type MouseEvent } from 'react'
 import {
   CircleFadingArrowUp,
   Ellipsis,
@@ -7,13 +7,15 @@ import {
   Music4,
   Plus,
   Settings,
-  SlidersHorizontal
+  SlidersHorizontal,
+  Trash2
 } from 'lucide-react'
 
 import {
   selectChatCreateStatus,
   selectChatSessions,
-  selectChatSessionsStatus
+  selectChatSessionsStatus,
+  selectReusableNewChatSession
 } from '@renderer/store/chat/selectors'
 import { useChatStore } from '@renderer/store/chat'
 import { useAppRouterContext } from '@renderer/app/router/router-context'
@@ -28,10 +30,12 @@ function navigateToChat(): void {
 
 export function WorkspaceSidebar(): React.JSX.Element {
   const sessions = useChatStore(selectChatSessions)
+  const reusableNewChatSession = useChatStore(selectReusableNewChatSession)
   const sessionsStatus = useChatStore(selectChatSessionsStatus)
   const createStatus = useChatStore(selectChatCreateStatus)
   const loadChatSessions = useChatStore((state) => state.loadChatSessions)
   const createChatSession = useChatStore((state) => state.createChatSession)
+  const deleteChatSession = useChatStore((state) => state.deleteChatSession)
   const { routeState, setRouteState } = useAppRouterContext()
   const [isMoreActionsOpen, setIsMoreActionsOpen] = useState(false)
   const closeTimeoutRef = useRef<number | null>(null)
@@ -74,13 +78,24 @@ export function WorkspaceSidebar(): React.JSX.Element {
     void window.api.windowControls.openSettings()
   }
 
-  const handleCreateSession = async (): Promise<void> => {
+  const handleStartNewChat = async (): Promise<void> => {
+    if (reusableNewChatSession !== undefined) {
+      setRouteState((state) => ({
+        ...state,
+        activeChatId: reusableNewChatSession.id,
+        draftProviderId: null
+      }))
+      navigateToChat()
+      return
+    }
+
     try {
       const session = await createChatSession()
 
       setRouteState((state) => ({
         ...state,
-        activeChatId: session.id
+        activeChatId: session.id,
+        draftProviderId: null
       }))
       navigateToChat()
     } catch {
@@ -94,6 +109,23 @@ export function WorkspaceSidebar(): React.JSX.Element {
       activeChatId: sessionId
     }))
     navigateToChat()
+  }
+
+  const handleDeleteSession = async (
+    event: MouseEvent<HTMLButtonElement>,
+    sessionId: string
+  ): Promise<void> => {
+    event.stopPropagation()
+
+    await deleteChatSession(sessionId)
+
+    if (routeState.activeChatId === sessionId) {
+      setRouteState((state) => ({
+        ...state,
+        activeChatId: null,
+        draftProviderId: null
+      }))
+    }
   }
 
   return (
@@ -110,7 +142,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
               className="justify-start gap-2"
               disabled={createStatus === 'creating'}
               onClick={() => {
-                void handleCreateSession()
+                void handleStartNewChat()
               }}
             >
               <Plus aria-hidden="true" className="size-4" />
@@ -125,16 +157,30 @@ export function WorkspaceSidebar(): React.JSX.Element {
                 {sessions.map((session) => {
                   const isActive = routeState.activeChatId === session.id
 
+                  const title = session.title ?? '未命名会话'
+
                   return (
                     <div key={session.id} role="listitem">
-                      <button
-                        type="button"
-                        aria-current={isActive ? 'page' : undefined}
-                        className="flex w-full min-w-0 rounded-md px-2 py-2 text-left text-xs leading-5 text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-current:bg-accent"
-                        onClick={() => handleSelectSession(session.id)}
-                      >
-                        <span className="truncate">{session.title}</span>
-                      </button>
+                      <div className="group/session relative">
+                        <button
+                          type="button"
+                          aria-current={isActive ? 'page' : undefined}
+                          className="flex w-full min-w-0 rounded-md py-2 pl-2 pr-9 text-left text-xs leading-5 text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-current:bg-accent"
+                          onClick={() => handleSelectSession(session.id)}
+                        >
+                          <span className="truncate">{title}</span>
+                        </button>
+                        <button
+                          type="button"
+                          aria-label={`删除会话 ${title}`}
+                          className="absolute right-1 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[background-color,color,opacity] hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/session:opacity-100"
+                          onClick={(event) => {
+                            void handleDeleteSession(event, session.id)
+                          }}
+                        >
+                          <Trash2 aria-hidden="true" className="size-3.5" strokeWidth={1.75} />
+                        </button>
+                      </div>
                     </div>
                   )
                 })}

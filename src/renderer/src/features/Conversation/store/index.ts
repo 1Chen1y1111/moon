@@ -1,6 +1,5 @@
-import { createContext, useContext, type ReactNode } from 'react'
 import { createStore as createVanillaStore, type StoreApi } from 'zustand/vanilla'
-import { useStore } from 'zustand'
+import { createContext as createZustandContext } from 'zustand-utils'
 
 import { flattenActions } from '@renderer/store/flatten-actions'
 
@@ -21,37 +20,11 @@ export function createStore(params: CreateConversationStoreParams): Conversation
   }))
 }
 
-const ConversationStoreContext = createContext<ConversationStoreApi | null>(null)
-
-export function ConversationStoreProvider({
-  children,
-  store
-}: {
-  children: ReactNode
-  store: ConversationStoreApi
-}): React.JSX.Element {
-  return (
-    <ConversationStoreContext.Provider value={store}>{children}</ConversationStoreContext.Provider>
-  )
-}
-
-export function useConversationStoreApi(): ConversationStoreApi {
-  const store = useContext(ConversationStoreContext)
-
-  if (store === null) {
-    throw new Error('useConversationStoreApi must be used within ConversationProvider')
-  }
-
-  return store
-}
-
-export function useConversationStore<T>(
-  selector: (state: ConversationStore) => T
-): T {
-  const store = useConversationStoreApi()
-
-  return useStore(store, selector)
-}
+export const {
+  Provider: ConversationStoreProvider,
+  useStore: useConversationStore,
+  useStoreApi: useConversationStoreApi
+} = createZustandContext<ConversationStoreApi>()
 
 export { conversationSelectors } from './selectors'
 export type { ConversationAction, SendConversationMessageParams } from './action'

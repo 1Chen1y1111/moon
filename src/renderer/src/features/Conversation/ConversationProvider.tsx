@@ -45,7 +45,7 @@ export function ConversationProvider({
   const [store] = useState(() => createStore({ context, messages, operationState }))
 
   return (
-    <ConversationStoreProvider store={store}>
+    <ConversationStoreProvider createStore={() => store}>
       <StoreUpdater context={context} messages={messages} operationState={operationState} />
       {children}
     </ConversationStoreProvider>

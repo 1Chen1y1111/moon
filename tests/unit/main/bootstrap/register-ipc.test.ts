@@ -28,6 +28,7 @@ describe('registerIpcHandlers', () => {
     cancelOperation: vi.fn(),
     createMessageTurn: vi.fn(),
     createSession: vi.fn(),
+    deleteSession: vi.fn(),
     getMessages: vi.fn(),
     importAttachment: vi.fn(),
     listThreads: vi.fn(),
@@ -54,6 +55,7 @@ describe('registerIpcHandlers', () => {
     chatService.cancelOperation.mockReset()
     chatService.createMessageTurn.mockReset()
     chatService.createSession.mockReset()
+    chatService.deleteSession.mockReset()
     chatService.getMessages.mockReset()
     chatService.importAttachment.mockReset()
     chatService.listThreads.mockReset()
@@ -183,6 +185,7 @@ describe('registerIpcHandlers', () => {
     chatService.listTopics.mockResolvedValue([topic])
     chatService.listThreads.mockResolvedValue([thread])
     chatService.createSession.mockResolvedValue(session)
+    chatService.deleteSession.mockResolvedValue(undefined)
     chatService.importAttachment.mockResolvedValue(attachment)
     chatService.createMessageTurn.mockResolvedValue({
       session,
@@ -237,6 +240,12 @@ describe('registerIpcHandlers', () => {
     expect(await getRegisteredHandler(ipcChannels.chat.createSession)?.({ sender: {} })).toBe(
       session
     )
+    await expect(
+      getRegisteredHandler(ipcChannels.chat.deleteSession)?.(
+        { sender: {} },
+        { sessionId: 'session-1' }
+      )
+    ).resolves.toBeUndefined()
     expect(
       await getRegisteredHandler(ipcChannels.chat.importAttachment)?.(
         { sender: {} },
@@ -296,6 +305,7 @@ describe('registerIpcHandlers', () => {
     expect(chatService.getMessages).toHaveBeenCalledWith({ sessionId: 'session-1' })
     expect(chatService.listTopics).toHaveBeenCalledWith({ sessionId: 'session-1' })
     expect(chatService.listThreads).toHaveBeenCalledWith({ topicId: 'topic-1' })
+    expect(chatService.deleteSession).toHaveBeenCalledWith({ sessionId: 'session-1' })
     expect(chatService.importAttachment).toHaveBeenCalledWith(attachmentInput)
     expect(chatService.createMessageTurn).toHaveBeenCalledWith({ content: 'hello' })
     expect(chatService.runOperation).toHaveBeenCalledWith(

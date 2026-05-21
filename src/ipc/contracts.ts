@@ -16,6 +16,7 @@ import type {
   ApproveToolCallInput,
   CancelAgentOperationInput,
   CreateMessageTurnInput,
+  DeleteChatSessionInput,
   GetChatMessagesInput,
   ImportChatAttachmentInput,
   ListChatThreadsInput,
@@ -56,6 +57,10 @@ export type AppIpcContractMap = {
   [ipcChannels.chat.createSession]: {
     request: undefined
     response: SessionRecord
+  }
+  [ipcChannels.chat.deleteSession]: {
+    request: DeleteChatSessionInput
+    response: void
   }
   [ipcChannels.chat.importAttachment]: {
     request: ImportChatAttachmentInput
@@ -146,6 +151,7 @@ export type MoonApi = {
     listTopics: (input: ListChatTopicsInput) => Promise<TopicRecord[]>
     listThreads: (input: ListChatThreadsInput) => Promise<ThreadRecord[]>
     createSession: () => Promise<SessionRecord>
+    deleteSession: (input: DeleteChatSessionInput) => Promise<void>
     importAttachment: (input: ImportChatAttachmentInput) => Promise<ChatAttachmentRecord>
     createMessageTurn: (input: CreateMessageTurnInput) => Promise<CreateMessageTurnResult>
     runOperation: (input: RunChatOperationInput) => Promise<RunChatOperationResult>

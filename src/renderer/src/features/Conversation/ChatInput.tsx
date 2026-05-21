@@ -5,10 +5,7 @@ import { ActionBar } from '@renderer/features/ChatInput/ActionBar'
 import { ChatInput as BaseChatInput } from '@renderer/features/ChatInput'
 import type { ChatInputAttachment, ChatInputRuntimeInfo } from '@renderer/features/ChatInput'
 import { useChatStore } from '@renderer/store/chat'
-import {
-  selectChatDraftAttachments,
-  selectChatSessions
-} from '@renderer/store/chat/selectors'
+import { selectChatDraftAttachments, selectChatSessions } from '@renderer/store/chat/selectors'
 import { useSettingsStore } from '@renderer/store/settings'
 import { selectAppSettings } from '@renderer/store/settings/selectors'
 import {

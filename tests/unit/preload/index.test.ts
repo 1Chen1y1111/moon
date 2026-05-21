@@ -65,6 +65,7 @@ describe('preload api', () => {
     await api.chat.listTopics({ sessionId: 'session-1' })
     await api.chat.listThreads({ topicId: 'topic-1' })
     await api.chat.createSession()
+    await api.chat.deleteSession({ sessionId: 'session-1' })
     await api.chat.importAttachment({
       name: 'note.txt',
       mimeType: 'text/plain',
@@ -93,6 +94,9 @@ describe('preload api', () => {
       topicId: 'topic-1'
     })
     expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.createSession)
+    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.deleteSession, {
+      sessionId: 'session-1'
+    })
     expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.importAttachment, {
       name: 'note.txt',
       mimeType: 'text/plain',

@@ -21,6 +21,7 @@ const api: MoonApi = {
     listTopics: (input) => invokeIpcChannel(ipcChannels.chat.listTopics, input),
     listThreads: (input) => invokeIpcChannel(ipcChannels.chat.listThreads, input),
     createSession: () => invokeIpcChannel(ipcChannels.chat.createSession),
+    deleteSession: (input) => invokeIpcChannel(ipcChannels.chat.deleteSession, input),
     importAttachment: (input) => invokeIpcChannel(ipcChannels.chat.importAttachment, input),
     createMessageTurn: (input) => invokeIpcChannel(ipcChannels.chat.createMessageTurn, input),
     runOperation: (input) => invokeIpcChannel(ipcChannels.chat.runOperation, input),

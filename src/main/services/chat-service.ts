@@ -37,6 +37,7 @@ import {
   createMessageTurnInputSchema,
   getChatMessagesInputSchema,
   importChatAttachmentInputSchema,
+  deleteChatSessionInputSchema,
   listChatThreadsInputSchema,
   listChatTopicsInputSchema,
   rejectToolCallInputSchema,
@@ -45,6 +46,7 @@ import {
   type ApproveToolCallInput,
   type CancelAgentOperationInput,
   type CreateMessageTurnInput,
+  type DeleteChatSessionInput,
   type GetChatMessagesInput,
   type ImportChatAttachmentInput,
   type ListChatThreadsInput,
@@ -392,6 +394,12 @@ export class ChatService {
     const scope = await this.createConversationScope(provider, newChatTitle)
 
     return scope.session
+  }
+
+  async deleteSession(input: DeleteChatSessionInput): Promise<void> {
+    const parsedInput = deleteChatSessionInputSchema.parse(input)
+
+    await this.sessionsRepository.deleteById(parsedInput.sessionId)
   }
 
   async importAttachment(input: ImportChatAttachmentInput): Promise<ChatAttachmentRecord> {

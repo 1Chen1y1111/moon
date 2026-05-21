@@ -1,9 +1,15 @@
-import type { ChatAttachmentRecord } from '@shared/domain/chat'
+import type { ChatAttachmentRecord, SessionRecord } from '@shared/domain/chat'
 
 import type { ChatState } from './types'
 
 export function selectChatSessions(state: ChatState): ChatState['sessions'] {
   return state.sessions
+}
+
+export function selectReusableNewChatSession(state: ChatState): SessionRecord | undefined {
+  return state.sessions.find(
+    (session) => session.title === '新聊天' || session.title === '新建聊天'
+  )
 }
 
 export function selectChatMessages(state: ChatState): ChatState['messages'] {

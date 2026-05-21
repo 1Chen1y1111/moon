@@ -200,6 +200,9 @@ export class ChatActionImpl {
 
   createChatSession = (): Promise<SessionRecord> => this.internal_createChatSession()
 
+  deleteChatSession = (sessionId: string): Promise<void> =>
+    this.internal_deleteChatSession(sessionId)
+
   sendChatMessage = (input: SendChatMessageInput): Promise<SendMessageResult> =>
     this.internal_sendChatMessage(input)
 
@@ -324,6 +327,16 @@ export class ChatActionImpl {
       return session
     } catch (error) {
       this.internal_dispatchChat({ type: 'createChatSessionRejected', error })
+      throw error
+    }
+  }
+
+  internal_deleteChatSession = async (sessionId: string): Promise<void> => {
+    try {
+      await window.api.chat.deleteSession({ sessionId })
+      this.internal_dispatchChat({ type: 'deleteChatSessionFulfilled', sessionId })
+    } catch (error) {
+      this.internal_dispatchChat({ type: 'deleteChatSessionRejected', error })
       throw error
     }
   }

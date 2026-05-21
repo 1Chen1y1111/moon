@@ -105,6 +105,14 @@ class SessionsRepositoryMock {
 
     return session
   }
+
+  async deleteById(id: string): Promise<void> {
+    const index = this.sessions.findIndex((session) => session.id === id)
+
+    if (index !== -1) {
+      this.sessions.splice(index, 1)
+    }
+  }
 }
 
 class MessagesRepositoryMock {
@@ -696,6 +704,35 @@ describe('ChatService.sendMessage', () => {
     const { service, sessionsRepository } = createService({ settings })
 
     await expect(service.sendMessage({ content: 'hello' })).rejects.toThrow('API key is required')
+    expect(sessionsRepository.sessions).toEqual([])
+  })
+})
+
+describe('ChatService.deleteSession', () => {
+  it('deletes a chat session by id', async () => {
+    const session: SessionRecord = {
+      id: 'session-1',
+      projectId: null,
+      provider: 'openai',
+      title: 'Plan',
+      status: 'active',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:00.000Z'
+    }
+    const settings = createSettings([
+      createProviderSettings({
+        provider: 'openai',
+        type: 'openai',
+        model: 'gpt-5.4'
+      })
+    ])
+    const { service, sessionsRepository } = createService({
+      sessions: [session],
+      settings
+    })
+
+    await service.deleteSession({ sessionId: 'session-1' })
+
     expect(sessionsRepository.sessions).toEqual([])
   })
 })

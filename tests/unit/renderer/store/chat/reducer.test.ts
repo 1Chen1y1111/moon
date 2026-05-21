@@ -261,4 +261,33 @@ describe('chat reducer message ownership', () => {
     expect(state.streamingAssistantMessageId).toBeNull()
     expect(state.operationsById['pending-operation-send-request']).toBeUndefined()
   })
+
+  it('removes deleted sessions and clears active chat state', () => {
+    const state = chatReducer(
+      {
+        ...createInitialChatState(),
+        activeSessionId: 'session-1',
+        activeTopicId: 'topic-1',
+        activeThreadId: 'thread-1',
+        sessions: [sessionOne],
+        topics: [topicOne],
+        threads: [threadOne],
+        messages: [messageOne],
+        messageIds: [messageOne.id],
+        messagesMap: { [messageOne.id]: messageOne },
+        operationsById: { [operationOne.id]: { ...operationOne, status: 'succeeded' } }
+      },
+      {
+        type: 'deleteChatSessionFulfilled',
+        sessionId: 'session-1'
+      }
+    )
+
+    expect(state.sessions).toEqual([])
+    expect(state.activeSessionId).toBeNull()
+    expect(state.activeTopicId).toBeNull()
+    expect(state.activeThreadId).toBeNull()
+    expect(state.messages).toEqual([])
+    expect(state.operationsById).toEqual({})
+  })
 })

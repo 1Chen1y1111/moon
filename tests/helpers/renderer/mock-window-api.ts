@@ -20,6 +20,7 @@ import type {
   ApproveToolCallInput,
   CancelAgentOperationInput,
   CreateMessageTurnInput,
+  DeleteChatSessionInput,
   GetChatMessagesInput,
   ImportChatAttachmentInput,
   ListChatThreadsInput,
@@ -51,6 +52,7 @@ export type MockMoonApi = {
     listTopics: MockFn<(input: ListChatTopicsInput) => Promise<TopicRecord[]>>
     listThreads: MockFn<(input: ListChatThreadsInput) => Promise<ThreadRecord[]>>
     createSession: MockFn<() => Promise<SessionRecord>>
+    deleteSession: MockFn<(input: DeleteChatSessionInput) => Promise<void>>
     importAttachment: MockFn<(input: ImportChatAttachmentInput) => Promise<ChatAttachmentRecord>>
     createMessageTurn: MockFn<(input: CreateMessageTurnInput) => Promise<CreateMessageTurnResult>>
     runOperation: MockFn<(input: RunChatOperationInput) => Promise<RunChatOperationResult>>
@@ -256,6 +258,7 @@ function createMockWindowApi(options: MockWindowApiOptions = {}): MockMoonApi {
         .fn<(input: ListChatThreadsInput) => Promise<ThreadRecord[]>>()
         .mockResolvedValue(chatThreads),
       createSession: vi.fn<() => Promise<SessionRecord>>().mockResolvedValue(createdChatSession),
+      deleteSession: vi.fn<(input: DeleteChatSessionInput) => Promise<void>>().mockResolvedValue(),
       importAttachment: vi
         .fn<(input: ImportChatAttachmentInput) => Promise<ChatAttachmentRecord>>()
         .mockImplementation(async (input) => ({
