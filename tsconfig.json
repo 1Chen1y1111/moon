@@ -1,30 +1,8 @@
 {
   "files": [],
   "references": [
-    { "path": "./tsconfig.node.json" },
-    { "path": "./tsconfig.web.json" },
-    { "path": "./tsconfig.test.json" }
-  ],
-  "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@renderer": ["src/renderer/src"],
-      "@renderer/*": ["src/renderer/src/*"],
-      "@ipc": ["src/ipc"],
-      "@ipc/*": ["src/ipc/*"],
-      "@shared": ["src/shared"],
-      "@shared/*": ["src/shared/*"],
-      "@main": ["src/main"],
-      "@main/*": ["src/main/*"],
-      "@preload": ["src/preload"],
-      "@preload/*": ["src/preload/*"],
-      "@shadcn": ["src/shadcn"],
-      "@shadcn/ui": ["src/shadcn/ui"],
-      "@shadcn/lib": ["src/shadcn/lib"],
-      "@shadcn/lib/utils": ["src/shadcn/lib/utils.ts"],
-      "@shadcn/*": ["src/shadcn/*"],
-      "@tests": ["tests"],
-      "@tests/*": ["tests/*"]
-    }
-  }
+    { "path": "./packages/shared/tsconfig.json" },
+    { "path": "./packages/ui/tsconfig.json" },
+    { "path": "./apps/electron/tsconfig.json" }
+  ]
 }

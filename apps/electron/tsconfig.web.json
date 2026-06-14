@@ -1,0 +1,50 @@
+{
+  "extends": "@electron-toolkit/tsconfig/tsconfig.web.json",
+  "include": [
+    "src/renderer/src/env.d.ts",
+    "src/renderer/src/**/*",
+    "src/renderer/src/**/*.tsx",
+    "src/ipc/**/*",
+    "src/preload/*.d.ts"
+  ],
+  "compilerOptions": {
+    "composite": true,
+    "jsx": "react-jsx",
+    "baseUrl": ".",
+    "paths": {
+      "@renderer": [
+        "src/renderer/src"
+      ],
+      "@renderer/*": [
+        "src/renderer/src/*"
+      ],
+      "@ipc": [
+        "src/ipc"
+      ],
+      "@ipc/*": [
+        "src/ipc/*"
+      ],
+      "@moon/shared": [
+        "../../packages/shared/src"
+      ],
+      "@moon/shared/*": [
+        "../../packages/shared/src/*"
+      ],
+      "@moon/ui": [
+        "../../packages/ui/src"
+      ],
+      "@moon/ui/*": [
+        "../../packages/ui/src/*"
+      ],
+      "@moon/ui/ui": [
+        "../../packages/ui/src/ui"
+      ],
+      "@moon/ui/lib": [
+        "../../packages/ui/src/lib"
+      ],
+      "@moon/ui/lib/utils": [
+        "../../packages/ui/src/lib/utils.ts"
+      ]
+    }
+  }
+}

@@ -1,48 +1,49 @@
 # moon
 
-An Electron application with React and TypeScript
+Electron + React + TypeScript desktop app, organized as a pnpm monorepo.
 
-## Recommended IDE Setup
+## Workspace
 
-- [VSCode](https://code.visualstudio.com/) + [ESLint](https://marketplace.visualstudio.com/items?itemName=dbaeumer.vscode-eslint) + [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode)
-
-## Project Setup
-
-### Install
-
-```bash
-$ pnpm install
+```text
+moon/
+  apps/electron/      Electron desktop app
+  packages/shared/    Pure shared domain types, validation, and defaults
+  packages/ui/        Local shadcn and ai-elements primitives
 ```
 
-### Development
+## Install
 
 ```bash
-$ pnpm dev
+pnpm install
 ```
 
-### Build
+## Development
+
+Use explicit workspace filters from the repo root.
 
 ```bash
-# For windows
-$ pnpm build:win
-
-# For macOS
-$ pnpm build:mac
-
-# For Linux
-$ pnpm build:linux
+pnpm --filter @moon/electron dev
+pnpm --filter @moon/electron start
 ```
 
-### Test
+## Build
 
 ```bash
-$ pnpm exec vitest run
+pnpm --filter @moon/electron build
+pnpm --filter @moon/electron build:win
+pnpm --filter @moon/electron build:mac
+pnpm --filter @moon/electron build:linux
 ```
 
-Tests live under `tests/`:
+## Checks
 
-- `tests/unit/` for main/preload/renderer unit and boundary tests.
-- `tests/integration/` for SQLite, repository, and database bootstrap tests.
-- `tests/helpers/` for shared test setup and helpers.
+```bash
+pnpm --filter @moon/shared typecheck
+pnpm --filter @moon/shared test
+pnpm --filter @moon/ui typecheck
+pnpm --filter @moon/electron typecheck
+pnpm --filter @moon/electron test
+```
 
-`tsconfig.test.json` provides TypeScript alias support for the centralized test tree.
+Electron tests live under `apps/electron/tests/`. Shared-domain tests live under
+`packages/shared/tests/`.

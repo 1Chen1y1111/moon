@@ -7,7 +7,7 @@
   },
   "editor.colorDecorators": true,
   "tailwindCSS.colorDecorators": true,
-  "tailwindCSS.experimental.configFile": "src/renderer/src/styles/main.css",
+  "tailwindCSS.experimental.configFile": "apps/electron/src/renderer/src/styles/main.css",
   "[typescript]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },

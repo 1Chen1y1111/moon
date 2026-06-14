@@ -1,0 +1,34 @@
+{
+  "extends": "@electron-toolkit/tsconfig/tsconfig.web.json",
+  "include": [
+    "tests/**/*",
+    "src/renderer/src/env.d.ts",
+    "src/preload/*.d.ts",
+    "src/ipc/**/*"
+  ],
+  "compilerOptions": {
+    "composite": true,
+    "jsx": "react-jsx",
+    "types": ["node", "electron-vite/node", "vitest/globals", "@testing-library/jest-dom"],
+    "baseUrl": ".",
+    "paths": {
+      "@ipc": ["src/ipc"],
+      "@ipc/*": ["src/ipc/*"],
+      "@moon/shared": ["../../packages/shared/src"],
+      "@moon/shared/*": ["../../packages/shared/src/*"],
+      "@moon/ui": ["../../packages/ui/src"],
+      "@moon/ui/*": ["../../packages/ui/src/*"],
+      "@moon/ui/ui": ["../../packages/ui/src/ui"],
+      "@moon/ui/lib": ["../../packages/ui/src/lib"],
+      "@moon/ui/lib/utils": ["../../packages/ui/src/lib/utils.ts"],
+      "@main": ["src/main"],
+      "@main/*": ["src/main/*"],
+      "@preload": ["src/preload"],
+      "@preload/*": ["src/preload/*"],
+      "@renderer": ["src/renderer/src"],
+      "@renderer/*": ["src/renderer/src/*"],
+      "@tests": ["tests"],
+      "@tests/*": ["tests/*"]
+    }
+  }
+}

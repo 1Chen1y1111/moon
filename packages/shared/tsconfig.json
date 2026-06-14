@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM"],
+    "strict": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@moon/shared": ["src"],
+      "@moon/shared/*": ["src/*"]
+    },
+    "types": ["vitest/globals"]
+  },
+  "include": ["src/**/*", "tests/**/*"]
+}
