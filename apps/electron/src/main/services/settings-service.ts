@@ -1,3 +1,8 @@
+/**
+ * 负责设置页 provider 配置的校验、模型刷新和连接测试编排。
+ * 它只处理 main 进程服务逻辑，不直接管理 React 状态或 Electron IPC 注册。
+ */
+
 import { execFile } from 'node:child_process'
 import { promisify } from 'node:util'
 
@@ -26,10 +31,14 @@ import {
   isBuiltInProviderId,
   providerMetadata,
   providerModelManualOverrideFields,
+  resolveProviderEffectiveBaseUrl,
+  resolveProviderModelDiscovery,
+  resolveProviderPiModelsProviderId,
   type ProviderId,
   type ProviderModel,
   type ProviderModelManualOverride
 } from '@moon/shared/domain/provider'
+import { getPiProviderModels } from '@moon/shared/config/models-pi'
 import type { SettingsRepository } from '../repositories/settings-repository'
 
 const execFileAsync = promisify(execFile)
@@ -40,6 +49,7 @@ const providerModelManualOverrideFieldSet = new Set<string>(providerModelManualO
 
 type ProviderConnectionConfig = SaveProviderInput & {
   apiKey: string
+  resolvedBaseUrl: string
   selectedModel: string
 }
 
@@ -478,8 +488,41 @@ function mergeModelsWithExistingState(
   return models.map((model) => applyExistingModelState(model, existingModelsById.get(model.id)))
 }
 
+/**
+ * 合并内置模型目录和用户已有模型，保留用户手动添加的额外模型。
+ */
+function mergeCatalogModelsWithExistingState(
+  models: ProviderModel[],
+  existingModels: ProviderModel[]
+): ProviderModel[] {
+  const mergedModels = mergeModelsWithExistingState(models, existingModels)
+  const mergedModelIds = new Set(mergedModels.map((model) => model.id))
+  const manualModels = existingModels.filter(
+    (model) => model.isManual && !mergedModelIds.has(model.id)
+  )
+
+  return [...mergedModels, ...manualModels]
+}
+
+/**
+ * 模型目录首次刷新时自动启用第一个模型，避免 provider 已启用但首页无模型。
+ */
+function enableDefaultModelIfNeeded(
+  models: ProviderModel[],
+  hasSelectedModel: boolean
+): ProviderModel[] {
+  if (hasSelectedModel || models.some((model) => model.enabled) || models.length === 0) {
+    return models
+  }
+
+  return models.map((model, index) => (index === 0 ? { ...model, enabled: true } : model))
+}
+
+/**
+ * 校验 HTTP provider 发请求前所需的 endpoint 和凭据。
+ */
 function ensureReadyForHttp(config: ProviderConnectionConfig): void {
-  const baseUrl = config.baseUrl.trim()
+  const baseUrl = config.resolvedBaseUrl.trim()
 
   if (baseUrl.length === 0) {
     throw new Error('Base URL is required.')
@@ -488,6 +531,45 @@ function ensureReadyForHttp(config: ProviderConnectionConfig): void {
   if (!config.noApiKey && config.apiKey.trim().length === 0) {
     throw new Error('API key is required.')
   }
+}
+
+/**
+ * 解析不需要远端模型列表接口的 provider 模型目录，并套用已有启用状态。
+ */
+async function resolveStaticProviderModels(
+  config: ProviderConnectionConfig
+): Promise<ProviderModel[]> {
+  const defaultModels = isBuiltInProviderId(config.provider)
+    ? providerMetadata[config.provider].defaultModels
+    : []
+  const enrichedModels = await enrichModelsFromModelsDev(config.provider, defaultModels)
+  const existingModels = [...config.availableModels, ...config.models]
+  const mergedModels = mergeCatalogModelsWithExistingState(enrichedModels, existingModels)
+
+  return enableDefaultModelIfNeeded(mergedModels, pickModel(config).length > 0)
+}
+
+/**
+ * 通过 Pi SDK 模型目录解析内置 provider 模型，失败时返回空数组以便继续旧路径。
+ */
+async function resolvePiProviderModels(config: ProviderConnectionConfig): Promise<ProviderModel[]> {
+  const piProvider = resolveProviderPiModelsProviderId(config.provider)
+
+  if (piProvider.length === 0) {
+    return []
+  }
+
+  const piModels = await getPiProviderModels(piProvider)
+
+  if (piModels.length === 0) {
+    return []
+  }
+
+  const enrichedModels = await enrichModelsFromModelsDev(config.provider, piModels)
+  const existingModels = [...config.availableModels, ...config.models]
+  const mergedModels = mergeCatalogModelsWithExistingState(enrichedModels, existingModels)
+
+  return enableDefaultModelIfNeeded(mergedModels, pickModel(config).length > 0)
 }
 
 function pickModel(config: ProviderConnectionConfig): string {
@@ -503,6 +585,9 @@ function pickModel(config: ProviderConnectionConfig): string {
 export class SettingsService {
   constructor(private readonly settingsRepository: SettingsRepository) {}
 
+  /**
+   * 读取完整应用设置，供 IPC handler 返回给 renderer。
+   */
   async getSettings(): Promise<AppSettings> {
     return this.settingsRepository.getSettings()
   }
@@ -531,6 +616,9 @@ export class SettingsService {
     return this.settingsRepository.deleteProvider(parsedInput.provider)
   }
 
+  /**
+   * 刷新 provider 的模型列表；内置 provider 优先使用 Pi 模型目录，再回退旧发现路径。
+   */
   async fetchProviderModels(input: ProviderConnectionInput): Promise<AppSettings> {
     const config = await this.resolveConnectionConfig(input)
 
@@ -538,23 +626,55 @@ export class SettingsService {
       return this.settingsRepository.updateProviderModels(config.provider, config.models, [])
     }
 
+    const modelDiscovery = resolveProviderModelDiscovery(config.provider)
+
+    if (modelDiscovery === 'none') {
+      return this.settingsRepository.updateProviderModels(
+        config.provider,
+        config.models,
+        config.availableModels
+      )
+    }
+
+    const piModels = await resolvePiProviderModels(config)
+
+    if (piModels.length > 0) {
+      await this.settingsRepository.saveProvider(config.provider, config)
+
+      return this.settingsRepository.updateProviderModels(config.provider, piModels, piModels)
+    }
+
+    if (modelDiscovery === 'static') {
+      const staticModels = await resolveStaticProviderModels(config)
+
+      await this.settingsRepository.saveProvider(config.provider, config)
+
+      return this.settingsRepository.updateProviderModels(
+        config.provider,
+        staticModels,
+        staticModels
+      )
+    }
+
     ensureReadyForHttp(config)
 
     const payload =
       config.type === 'google'
         ? await fetchJson(
-            `${joinEndpoint(config.baseUrl, 'models')}?key=${encodeURIComponent(config.apiKey)}`,
+            `${joinEndpoint(config.resolvedBaseUrl, 'models')}?key=${encodeURIComponent(
+              config.apiKey
+            )}`,
             {
               headers: createHeaders(config),
               method: 'GET'
             }
           )
         : config.apiFormat === 'anthropic' || config.type === 'anthropic'
-          ? await fetchJson(joinVersionedEndpoint(config.baseUrl, 'v1/models'), {
+          ? await fetchJson(joinVersionedEndpoint(config.resolvedBaseUrl, 'v1/models'), {
               headers: createHeaders(config),
               method: 'GET'
             })
-          : await fetchJson(joinEndpoint(config.baseUrl, 'models'), {
+          : await fetchJson(joinEndpoint(config.resolvedBaseUrl, 'models'), {
               headers: createHeaders(config),
               method: 'GET'
             })
@@ -568,6 +688,9 @@ export class SettingsService {
     return this.settingsRepository.updateProviderModels(config.provider, mergedModels, mergedModels)
   }
 
+  /**
+   * 使用 provider 当前协议 endpoint 发起最小请求，验证配置能否工作。
+   */
   async testProvider(input: ProviderConnectionInput): Promise<ProviderTestResult> {
     try {
       const config = await this.resolveConnectionConfig(input)
@@ -589,9 +712,10 @@ export class SettingsService {
 
       if (config.type === 'google') {
         await fetchJson(
-          `${joinEndpoint(config.baseUrl, `models/${model}:generateContent`)}?key=${encodeURIComponent(
-            config.apiKey
-          )}`,
+          `${joinEndpoint(
+            config.resolvedBaseUrl,
+            `models/${model}:generateContent`
+          )}?key=${encodeURIComponent(config.apiKey)}`,
           {
             body: JSON.stringify({
               contents: [{ parts: [{ text: 'ping' }] }],
@@ -602,7 +726,7 @@ export class SettingsService {
           }
         )
       } else if (config.apiFormat === 'anthropic' || config.type === 'anthropic') {
-        await fetchJson(joinVersionedEndpoint(config.baseUrl, 'v1/messages'), {
+        await fetchJson(joinVersionedEndpoint(config.resolvedBaseUrl, 'v1/messages'), {
           body: JSON.stringify({
             max_tokens: 1,
             messages: [{ role: 'user', content: 'ping' }],
@@ -612,7 +736,7 @@ export class SettingsService {
           method: 'POST'
         })
       } else if (config.apiFormat === 'openai-responses') {
-        await fetchJson(joinEndpoint(config.baseUrl, 'responses'), {
+        await fetchJson(joinEndpoint(config.resolvedBaseUrl, 'responses'), {
           body: JSON.stringify({
             input: 'ping',
             max_output_tokens: 1,
@@ -622,7 +746,7 @@ export class SettingsService {
           method: 'POST'
         })
       } else {
-        await fetchJson(joinEndpoint(config.baseUrl, 'chat/completions'), {
+        await fetchJson(joinEndpoint(config.resolvedBaseUrl, 'chat/completions'), {
           body: JSON.stringify({
             messages: [{ role: 'user', content: 'ping' }],
             model,
@@ -653,6 +777,9 @@ export class SettingsService {
     return this.settingsRepository.saveAppearance(parsedInput)
   }
 
+  /**
+   * 给保存草稿补齐默认字段，确保后续校验面对完整 provider 形状。
+   */
   private withProviderDefaults(input: SaveProviderInput): SaveProviderInput {
     const defaults = createDefaultProviderSettings(input.provider)
 
@@ -676,6 +803,9 @@ export class SettingsService {
     }
   }
 
+  /**
+   * 合并用户输入、已保存设置和协议 endpoint，返回连接测试可直接使用的配置。
+   */
   private async resolveConnectionConfig(
     input: ProviderConnectionInput
   ): Promise<ProviderConnectionConfig> {
@@ -687,7 +817,7 @@ export class SettingsService {
         ...input,
         name: input.name ?? savedProvider.name,
         type: input.type ?? savedProvider.type,
-        baseUrl: input.baseUrl || savedProvider.baseUrl || savedProvider.defaultBaseUrl,
+        baseUrl: input.baseUrl || savedProvider.baseUrl,
         apiFormat: input.apiFormat ?? savedProvider.apiFormat,
         useMaxCompletionTokens:
           input.useMaxCompletionTokens ?? savedProvider.useMaxCompletionTokens,
@@ -714,7 +844,13 @@ export class SettingsService {
 
     return {
       ...parsedInput,
-      apiKey
+      apiKey,
+      resolvedBaseUrl: resolveProviderEffectiveBaseUrl({
+        provider: parsedInput.provider,
+        apiFormat: parsedInput.apiFormat,
+        baseUrl: parsedInput.baseUrl,
+        defaultBaseUrl: savedProvider.defaultBaseUrl
+      })
     }
   }
 

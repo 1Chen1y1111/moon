@@ -1,3 +1,8 @@
+/**
+ * 负责 Provider 设置页的状态编排和主进程动作触发。
+ * 它只管理 renderer 侧草稿、校验错误和列表选择，不直接访问数据库或 SDK。
+ */
+
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { toast } from 'sonner'
 
@@ -24,6 +29,7 @@ import type {
 import {
   createDraftFromProvider,
   getErrorMessage,
+  normalizeProviderDraftForSubmit,
   normalizeSearchText,
   removeModel,
   updateModelEnabled,
@@ -161,11 +167,12 @@ export function ProviderSettingsSection({
   )
 
   const handleSaveProvider = useCallback(async (): Promise<void> => {
-    if (selectedDraft === null) {
+    if (selectedDraft === null || selectedSettings === undefined) {
       return
     }
 
-    const parsed = saveProviderInputSchema.safeParse(selectedDraft)
+    const submitDraft = normalizeProviderDraftForSubmit(selectedSettings, selectedDraft)
+    const parsed = saveProviderInputSchema.safeParse(submitDraft)
 
     if (!parsed.success) {
       const nextErrors: ProviderFormErrors = {}
@@ -193,17 +200,19 @@ export function ProviderSettingsSection({
     } catch {
       // The settings slice owns the displayed save error.
     }
-  }, [saveProviderSettings, selectedDraft, selectedProvider])
+  }, [saveProviderSettings, selectedDraft, selectedProvider, selectedSettings])
 
   const handleFetchModels = useCallback(async (): Promise<void> => {
-    if (selectedDraft === null) {
+    if (selectedDraft === null || selectedSettings === undefined) {
       return
     }
 
     setFetchingProviders((current) => ({ ...current, [selectedProvider]: true }))
 
     try {
-      await fetchProviderModelsSettings({ ...selectedDraft, selectedModel: '' })
+      const submitDraft = normalizeProviderDraftForSubmit(selectedSettings, selectedDraft)
+
+      await fetchProviderModelsSettings({ ...submitDraft, selectedModel: '' })
       setDraftOverrides((current) => ({
         ...current,
         [selectedProvider]: undefined
@@ -215,11 +224,11 @@ export function ProviderSettingsSection({
     } finally {
       setFetchingProviders((current) => ({ ...current, [selectedProvider]: false }))
     }
-  }, [fetchProviderModelsSettings, selectedDraft, selectedProvider])
+  }, [fetchProviderModelsSettings, selectedDraft, selectedProvider, selectedSettings])
 
   const handleTestProvider = useCallback(
     async (modelId?: string): Promise<void> => {
-      if (selectedDraft === null) {
+      if (selectedDraft === null || selectedSettings === undefined) {
         return
       }
 
@@ -228,8 +237,9 @@ export function ProviderSettingsSection({
 
       try {
         const startedAt = performance.now()
+        const submitDraft = normalizeProviderDraftForSubmit(selectedSettings, selectedDraft)
         const result = await window.api.settings.testProvider({
-          ...selectedDraft,
+          ...submitDraft,
           selectedModel: modelId ?? ''
         })
         const elapsedMs = Math.round(performance.now() - startedAt)
@@ -244,7 +254,7 @@ export function ProviderSettingsSection({
         setTestingProviders((current) => ({ ...current, [selectedProvider]: false }))
       }
     },
-    [selectedDraft, selectedProvider]
+    [selectedDraft, selectedProvider, selectedSettings]
   )
 
   const handleDeleteProvider = useCallback(async (): Promise<void> => {

@@ -1,7 +1,12 @@
+/**
+ * 负责组合单个 provider 设置卡片的表单、模型列表和代理端点信息。
+ * 它只处理卡片内交互状态，不直接访问 main 进程或持久化层。
+ */
+
 import { memo, useState } from 'react'
 
 import { ScrollArea } from '@moon/ui/ui/scroll-area'
-import type { ProviderModel } from '@moon/shared/domain/provider'
+import { resolveProviderEffectiveBaseUrl, type ProviderModel } from '@moon/shared/domain/provider'
 import { createProviderProxyEndpoints } from '@moon/shared/domain/provider-proxy'
 import type { ProviderSettings, ProviderTestResult } from '@moon/shared/domain/settings'
 import {
@@ -66,7 +71,14 @@ function ProviderSettingsCardBase({
   onUpdateModel
 }: ProviderSettingsCardProps): React.JSX.Element {
   const displayBaseUrl =
-    draft.baseUrl.trim() || provider.defaultBaseUrl || provider.description || 'No endpoint'
+    resolveProviderEffectiveBaseUrl({
+      provider: provider.provider,
+      apiFormat: draft.apiFormat,
+      baseUrl: draft.baseUrl,
+      defaultBaseUrl: provider.defaultBaseUrl
+    }) ||
+    provider.description ||
+    'No endpoint'
   const draftModels = draft.models ?? []
   const draftAvailableModels = draft.availableModels ?? []
   const allModels = draftAvailableModels.length > 0 ? draftAvailableModels : draftModels

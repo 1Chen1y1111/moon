@@ -1,3 +1,8 @@
+/**
+ * 负责首页聊天输入区的模型切换弹层。
+ * 它只读写 provider 设置，不直接调用模型运行时或持久化实现。
+ */
+
 import { useMemo, useState } from 'react'
 import { Bot, Check, Search, Settings2, SlidersHorizontal } from 'lucide-react'
 import { toast } from 'sonner'
@@ -16,11 +21,11 @@ import { Input } from '@moon/ui/ui/input'
 import { ScrollArea } from '@moon/ui/ui/scroll-area'
 import {
   findChatProviderModel,
-  getEnabledChatProviderModels,
-  isSupportedChatProvider,
+  getSelectableChatProviderModels,
+  isSelectableChatProvider,
   selectChatModelId,
   selectChatModelLabel,
-  selectDefaultChatProvider
+  selectDefaultSelectableChatProvider
 } from '@moon/shared/domain/chat-provider'
 import { formatProviderModelContextWindow, type ProviderModel } from '@moon/shared/domain/provider'
 import type { ProviderSettings } from '@moon/shared/domain/settings'
@@ -92,7 +97,7 @@ function selectProviderForPage(
       ? undefined
       : providers[draftProviderId]
 
-  if (draftProvider?.enabled && isSupportedChatProvider(draftProvider)) {
+  if (draftProvider?.enabled && isSelectableChatProvider(draftProvider)) {
     return draftProvider
   }
 
@@ -101,7 +106,7 @@ function selectProviderForPage(
   }
 
   try {
-    return selectDefaultChatProvider({ appearance: { theme: 'system' }, providers })
+    return selectDefaultSelectableChatProvider({ appearance: { theme: 'system' }, providers })
   } catch {
     return undefined
   }
@@ -347,12 +352,12 @@ export default function Model(): React.JSX.Element {
       : `${activeProvider.provider}:${selectedModelId}`
   const providerGroups = useMemo<ProviderGroup[]>(() => {
     const providers = Object.values(appSettings.providers).filter(
-      (provider) => provider.enabled && isSupportedChatProvider(provider)
+      (provider) => provider.enabled && isSelectableChatProvider(provider)
     )
 
     return providers.map((provider) => ({
       provider,
-      models: getEnabledChatProviderModels(provider)
+      models: getSelectableChatProviderModels(provider)
     }))
   }, [appSettings.providers])
   const switchTitle =

@@ -1,4 +1,5 @@
 node_modules
+.pnpm-store
 dist
 out
 .DS_Store
@@ -8,4 +9,5 @@ out
 .worktrees
 .moon-pglite-dev
 screenshorts
+craft-agents-oss
 Design.md

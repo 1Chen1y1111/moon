@@ -1,13 +1,39 @@
+/**
+ * 负责渲染 provider 设置中的连接字段。
+ * 它只处理表单展示和草稿回写，不直接保存设置或发起连接测试。
+ */
+
 import { ExternalLink, Eye, EyeOff, Terminal } from 'lucide-react'
 
 import { Button } from '@moon/ui/ui/button'
 import { Input } from '@moon/ui/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@moon/ui/ui/select'
 import { cn } from '@moon/ui/lib/utils'
+import { resolveProviderDefaultBaseUrl, type ProviderApiFormat } from '@moon/shared/domain/provider'
 import type { ProviderSettings } from '@moon/shared/domain/settings'
 
 import { FieldHint, FieldLabel } from './ProviderField'
 import type { ProviderDraft, ProviderFormErrors } from '../types'
+import { usesEditableProviderProtocol } from '../provider-settings.utils'
 
+/**
+ * 返回 API 协议的用户可读名称，只在自定义 endpoint 配置时展示。
+ */
+function formatApiFormatLabel(apiFormat: ProviderApiFormat): string {
+  if (apiFormat === 'anthropic') {
+    return 'Anthropic Messages (/v1/messages)'
+  }
+
+  if (apiFormat === 'openai-responses') {
+    return 'OpenAI Responses (/responses)'
+  }
+
+  return 'OpenAI Chat Completions (/chat/completions)'
+}
+
+/**
+ * 渲染只需要启用开关的 provider 卡片内容。
+ */
 export function EnableOnlyProviderCard({
   description,
   enabled,
@@ -29,6 +55,9 @@ export function EnableOnlyProviderCard({
   )
 }
 
+/**
+ * 渲染 ACP provider 的命令和参数字段。
+ */
 export function AcpConnectionFields({
   provider,
   draft,
@@ -86,6 +115,9 @@ export function AcpConnectionFields({
   )
 }
 
+/**
+ * 渲染 HTTP provider 的 API Key 与 Endpoint 字段。
+ */
 export function ApiConnectionFields({
   provider,
   draft,
@@ -105,6 +137,10 @@ export function ApiConnectionFields({
   onRevealApiKeyToggle: () => void
   children: React.ReactNode
 }): React.JSX.Element {
+  const usesEditableProtocol = usesEditableProviderProtocol(provider)
+  const defaultBaseUrl =
+    resolveProviderDefaultBaseUrl(provider.provider, draft.apiFormat) || provider.defaultBaseUrl
+
   return (
     <div className="space-y-4">
       {children}
@@ -152,20 +188,47 @@ export function ApiConnectionFields({
       ) : null}
 
       <div className="block">
-        <FieldLabel>Base URL</FieldLabel>
+        <FieldLabel>Endpoint URL</FieldLabel>
         <Input
-          aria-label={`${provider.name} Base URL`}
+          aria-label={`${provider.name} Endpoint URL`}
           value={draft.baseUrl}
+          disabled={isSaving}
           onChange={(event) => onDraftChange('baseUrl', event.target.value)}
           className={cn('mt-3')}
-          placeholder={provider.defaultBaseUrl || 'https://api.example.com/v1'}
+          placeholder={defaultBaseUrl || 'https://api.example.com/v1'}
         />
         {errors.baseUrl ? (
           <FieldHint>{errors.baseUrl}</FieldHint>
-        ) : provider.defaultBaseUrl ? (
-          <FieldHint>留空时使用默认端点：{provider.defaultBaseUrl}</FieldHint>
+        ) : defaultBaseUrl ? (
+          <FieldHint>默认 endpoint：{defaultBaseUrl}</FieldHint>
         ) : null}
       </div>
+
+      {usesEditableProtocol ? (
+        <div className="block">
+          <FieldLabel>Protocol</FieldLabel>
+          <Select
+            value={draft.apiFormat}
+            disabled={isSaving}
+            onValueChange={(value) => onDraftChange('apiFormat', value as ProviderApiFormat)}
+          >
+            <SelectTrigger
+              aria-label={`${provider.name} Endpoint Protocol`}
+              className="mt-3 w-full"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="openai-chat">{formatApiFormatLabel('openai-chat')}</SelectItem>
+              <SelectItem value="openai-responses">
+                {formatApiFormatLabel('openai-responses')}
+              </SelectItem>
+              <SelectItem value="anthropic">{formatApiFormatLabel('anthropic')}</SelectItem>
+            </SelectContent>
+          </Select>
+          <FieldHint>自定义 endpoint 需要选择对应协议。</FieldHint>
+        </div>
+      ) : null}
     </div>
   )
 }

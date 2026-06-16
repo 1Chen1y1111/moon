@@ -11,10 +11,12 @@
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
+      "@moon/core": ["../core/src"],
+      "@moon/core/*": ["../core/src/*"],
       "@moon/shared": ["src"],
       "@moon/shared/*": ["src/*"]
     },
-    "types": ["vitest/globals"]
+    "types": ["vitest/globals", "node"]
   },
   "include": ["src/**/*", "tests/**/*"]
 }

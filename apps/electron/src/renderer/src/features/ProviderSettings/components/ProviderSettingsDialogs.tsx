@@ -1,3 +1,8 @@
+/**
+ * 负责渲染 provider 设置里的新增 provider 对话框。
+ * 它只收集用户输入并回传给父级，不直接调用 IPC 或保存设置。
+ */
+
 import { useState } from 'react'
 import { Terminal } from 'lucide-react'
 
@@ -21,6 +26,9 @@ import type { ProviderApiFormat } from '@moon/shared/domain/provider'
 
 import type { CustomAcpProviderInput, CustomProviderInput } from '../types'
 
+/**
+ * 渲染对话框内字段标题，保持新增 provider 表单的标签样式一致。
+ */
 function DialogFieldLabel({
   children,
   htmlFor
@@ -35,10 +43,16 @@ function DialogFieldLabel({
   )
 }
 
+/**
+ * 渲染对话框内字段说明，承载输入格式或协议边界提示。
+ */
 function DialogFieldHint({ children }: { children: React.ReactNode }): React.JSX.Element {
   return <span className="mt-1.5 block text-xs leading-5 text-muted-foreground">{children}</span>
 }
 
+/**
+ * 渲染自定义 HTTP provider 创建表单，并把 endpoint 与协议配置回传给父级。
+ */
 export function CustomProviderDialog({
   isSaving,
   onClose,
@@ -81,9 +95,9 @@ export function CustomProviderDialog({
               />
             </div>
             <div>
-              <DialogFieldLabel>Base URL</DialogFieldLabel>
+              <DialogFieldLabel>Endpoint URL</DialogFieldLabel>
               <Input
-                aria-label="Custom Provider Base URL"
+                aria-label="Custom Provider Endpoint URL"
                 value={baseUrl}
                 onChange={(event) => setBaseUrl(event.target.value)}
                 className={cn('mt-3')}
@@ -103,12 +117,12 @@ export function CustomProviderDialog({
               />
             </div>
             <div>
-              <DialogFieldLabel>API Format</DialogFieldLabel>
+              <DialogFieldLabel>Protocol</DialogFieldLabel>
               <Select
                 value={apiFormat}
                 onValueChange={(value) => setApiFormat(value as ProviderApiFormat)}
               >
-                <SelectTrigger aria-label="Custom Provider API Format">
+                <SelectTrigger aria-label="Custom Provider Protocol">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -117,7 +131,7 @@ export function CustomProviderDialog({
                   <SelectItem value="anthropic">Anthropic Messages (/v1/messages)</SelectItem>
                 </SelectContent>
               </Select>
-              <DialogFieldHint>Choose the API endpoint format your provider uses</DialogFieldHint>
+              <DialogFieldHint>Choose the protocol this custom endpoint uses.</DialogFieldHint>
             </div>
             <div className="flex items-center justify-between gap-6">
               <div>
@@ -179,6 +193,9 @@ export function CustomProviderDialog({
   )
 }
 
+/**
+ * 渲染自定义 ACP provider 创建表单，并把命令配置回传给父级。
+ */
 export function CustomAcpProviderDialog({
   isSaving,
   onClose,

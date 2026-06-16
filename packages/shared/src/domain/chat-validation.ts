@@ -1,3 +1,8 @@
+/**
+ * 负责定义聊天领域输入和记录结构的运行时校验规则。
+ * 它只校验跨进程数据形状，不执行仓储写入或 agent 调用。
+ */
+
 import { z } from 'zod'
 
 import { providerIdSchema } from './settings-validation'
@@ -86,6 +91,7 @@ export type ImportChatAttachmentInput = z.infer<typeof importChatAttachmentInput
 export const sessionRecordSchema = z.object({
   id: z.string().min(1),
   slug: z.string().min(1).max(100).optional(),
+  llmConnectionId: z.string().min(1).nullable().optional(),
   projectId: z.string().min(1).nullable(),
   provider: providerIdSchema,
   title: z.string().nullable().optional(),

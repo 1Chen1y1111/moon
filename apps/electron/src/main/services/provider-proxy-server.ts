@@ -1,3 +1,8 @@
+/**
+ * 负责在 main 进程提供本地 provider proxy，并把 OpenAI/Anthropic 兼容请求转发到真实 endpoint。
+ * 它只处理 HTTP 代理协议和 provider 配置解析，不持久化设置或直接参与聊天会话编排。
+ */
+
 import { randomUUID } from 'node:crypto'
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import type { Socket } from 'node:net'
@@ -7,6 +12,7 @@ import {
   providerProxyBaseUrl,
   providerProxyPort
 } from '@moon/shared/domain/provider-proxy'
+import { resolveProviderEffectiveBaseUrl } from '@moon/shared/domain/provider'
 import type { ProviderSettings } from '@moon/shared/domain/settings'
 import type { SettingsRepository } from '../repositories/settings-repository'
 
@@ -728,6 +734,9 @@ export class ProviderProxyServer {
     }
   }
 
+  /**
+   * 从设置中解析 provider、密钥和协议 endpoint，供代理请求处理流程使用。
+   */
   private async resolveProvider(providerId: string): Promise<ResolvedProvider> {
     const settings = await this.settingsRepository.getSettings()
     const provider = settings.providers[providerId]
@@ -740,7 +749,12 @@ export class ProviderProxyServer {
       throw new HttpError(400, 'Provider proxy is only available for HTTP providers.')
     }
 
-    const resolvedBaseUrl = provider.baseUrl.trim() || provider.defaultBaseUrl.trim()
+    const resolvedBaseUrl = resolveProviderEffectiveBaseUrl({
+      provider: provider.provider,
+      apiFormat: provider.apiFormat,
+      baseUrl: provider.baseUrl,
+      defaultBaseUrl: provider.defaultBaseUrl
+    })
 
     if (resolvedBaseUrl.length === 0) {
       throw new HttpError(400, 'Base URL is required.')

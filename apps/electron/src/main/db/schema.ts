@@ -1,3 +1,8 @@
+/**
+ * 负责定义 Electron 主进程本地数据库的 Drizzle schema。
+ * 它只描述表结构和字段类型，不执行迁移、连接初始化或仓储逻辑。
+ */
+
 import { sql } from 'drizzle-orm'
 import {
   boolean,
@@ -30,6 +35,7 @@ import type {
   TopicMode,
   TopicStatus
 } from '@moon/shared/domain/chat'
+import type { AgentBackendProvider, CustomEndpointApi, ThinkingLevel } from '@moon/shared/config'
 import type {
   ProviderId,
   ProviderApiFormat,
@@ -40,6 +46,7 @@ import type {
 export const tableNames = {
   settings: 'settings',
   providerSettings: 'provider_settings',
+  llmConnections: 'llm_connections',
   projects: 'projects',
   sessions: 'sessions',
   topics: 'topics',
@@ -88,6 +95,30 @@ export const providerSettings = pgTable('provider_settings', {
   updatedAt: timestamp('updated_at', { mode: 'string', withTimezone: true }).notNull()
 })
 
+export const llmConnections = pgTable(
+  'llm_connections',
+  {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    providerId: text('provider_id').$type<ProviderId>(),
+    backend: text('backend').notNull().$type<AgentBackendProvider>(),
+    model: text('model').notNull(),
+    apiKey: text('encrypted_api_key').notNull().default(''),
+    baseUrl: text('base_url').notNull().default(''),
+    customEndpoint: jsonb('custom_endpoint').$type<{ api: CustomEndpointApi }>(),
+    enabled: boolean('enabled').notNull().default(true),
+    isDefault: boolean('is_default').notNull().default(false),
+    thinkingLevel: text('thinking_level').notNull().default('medium').$type<ThinkingLevel>(),
+    createdAt: timestamp('created_at', { mode: 'string', withTimezone: true }).notNull(),
+    updatedAt: timestamp('updated_at', { mode: 'string', withTimezone: true }).notNull()
+  },
+  (table) => [
+    index('llm_connections_enabled_idx').on(table.enabled),
+    index('llm_connections_is_default_idx').on(table.isDefault),
+    index('llm_connections_provider_id_idx').on(table.providerId)
+  ]
+)
+
 export const projects = pgTable('projects', {
   id: text('id').primaryKey(),
   path: text('path').notNull().unique(),
@@ -101,6 +132,9 @@ export const sessions = pgTable(
   {
     id: text('id').primaryKey(),
     slug: varchar('slug', { length: 100 }).notNull(),
+    llmConnectionId: text('llm_connection_id').references(() => llmConnections.id, {
+      onDelete: 'set null'
+    }),
     projectId: text('project_id').references(() => projects.id, { onDelete: 'set null' }),
     provider: text('provider').notNull().$type<ProviderId>(),
     title: text('title'),
@@ -120,6 +154,7 @@ export const sessions = pgTable(
     uniqueIndex('slug_user_id_unique').on(table.slug, table.userId),
     uniqueIndex('sessions_client_id_user_id_unique').on(table.clientId, table.userId),
     index('sessions_project_id_idx').on(table.projectId),
+    index('sessions_llm_connection_id_idx').on(table.llmConnectionId),
     index('sessions_user_id_idx').on(table.userId),
     index('sessions_id_user_id_idx').on(table.id, table.userId),
     index('sessions_user_id_updated_at_idx').on(table.userId, table.updatedAt),

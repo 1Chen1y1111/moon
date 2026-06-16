@@ -8,6 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { bootstrapDatabase } from '@main/db/bootstrap'
 import { createDatabaseConnection, type AppDatabaseConnection } from '@main/db/connection'
+import { providerSettings } from '@main/db/schema'
 import { SettingsRepository } from '@main/repositories/settings-repository'
 
 const pgliteTestTimeout = 30_000
@@ -106,6 +107,60 @@ describe('SettingsRepository', () => {
       expect(persistedSettings.providers.claude.updatedAt).toMatch(
         /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/
       )
+      await secondConnection.close()
+    },
+    pgliteTestTimeout
+  )
+
+  it(
+    'persists LLM connections across PGlite connections',
+    async () => {
+      const directoryPath = mkdtempSync(join(tmpdir(), 'moon-settings-repository-'))
+      const databasePath = join(directoryPath, 'moon-pglite')
+      tempDirectories.push(directoryPath)
+
+      const firstConnection = await createBootstrappedConnection(databasePath)
+      const firstRepository = new SettingsRepository(firstConnection)
+
+      await firstRepository.saveLlmConnection({
+        id: 'compat-main',
+        name: 'Compat Main',
+        providerId: 'openrouter',
+        backend: 'pi_compat',
+        model: 'anthropic/claude-sonnet',
+        apiKey: 'sk-or-demo',
+        baseUrl: 'https://compat.example.com',
+        customEndpoint: { api: 'anthropic-messages' },
+        enabled: true,
+        isDefault: true,
+        thinkingLevel: 'medium'
+      })
+
+      expect(await firstRepository.selectDefaultLlmConnection()).toMatchObject({
+        id: 'compat-main',
+        providerId: 'openrouter',
+        backend: 'pi_compat',
+        model: 'anthropic/claude-sonnet',
+        apiKey: 'sk-or-demo',
+        customEndpoint: { api: 'anthropic-messages' }
+      })
+
+      await firstConnection.close()
+
+      const secondConnection = await createBootstrappedConnection(databasePath)
+      const secondRepository = new SettingsRepository(secondConnection)
+
+      expect(await secondRepository.listLlmConnections()).toEqual([
+        expect.objectContaining({
+          id: 'compat-main',
+          name: 'Compat Main',
+          providerId: 'openrouter',
+          backend: 'pi_compat',
+          baseUrl: 'https://compat.example.com',
+          isDefault: true
+        })
+      ])
+
       await secondConnection.close()
     },
     pgliteTestTimeout
@@ -239,6 +294,139 @@ describe('SettingsRepository', () => {
         apiKey: 'sk-deepseek-demo',
         model: 'deepseek-chat',
         baseUrl: 'https://api.deepseek.com/v1'
+      })
+
+      await connection.close()
+    },
+    pgliteTestTimeout
+  )
+
+  it(
+    'promotes enabled available models to the active provider model selection',
+    async () => {
+      const directoryPath = mkdtempSync(join(tmpdir(), 'moon-settings-repository-'))
+      const databasePath = join(directoryPath, 'moon-pglite')
+      tempDirectories.push(directoryPath)
+
+      const connection = await createBootstrappedConnection(databasePath)
+      const repository = new SettingsRepository(connection)
+
+      await repository.saveProvider('deepseek', {
+        apiKey: 'sk-deepseek-demo',
+        model: '',
+        enabled: true,
+        apiFormat: 'anthropic',
+        models: [],
+        availableModels: [
+          {
+            id: 'deepseek-v4-flash',
+            name: 'DeepSeek V4 Flash',
+            enabled: true,
+            isManual: false,
+            supportsToolCalling: true
+          }
+        ]
+      })
+
+      const settings = await repository.getSettings()
+
+      expect(settings.providers.deepseek).toMatchObject({
+        provider: 'deepseek',
+        model: 'deepseek-v4-flash',
+        models: [
+          {
+            id: 'deepseek-v4-flash',
+            name: 'DeepSeek V4 Flash',
+            enabled: true,
+            isManual: false,
+            supportsToolCalling: true
+          }
+        ],
+        availableModels: [
+          {
+            id: 'deepseek-v4-flash',
+            name: 'DeepSeek V4 Flash',
+            enabled: true,
+            isManual: false,
+            supportsToolCalling: true
+          }
+        ]
+      })
+
+      await connection.close()
+    },
+    pgliteTestTimeout
+  )
+
+  it(
+    'recovers old DeepSeek rows with no fetched models using static defaults',
+    async () => {
+      const directoryPath = mkdtempSync(join(tmpdir(), 'moon-settings-repository-'))
+      const databasePath = join(directoryPath, 'moon-pglite')
+      tempDirectories.push(directoryPath)
+
+      const connection = await createBootstrappedConnection(databasePath)
+      const repository = new SettingsRepository(connection)
+      const updatedAt = new Date().toISOString()
+
+      await connection.db.insert(providerSettings).values({
+        provider: 'deepseek',
+        name: 'DeepSeek',
+        providerType: 'deepseek',
+        model: '',
+        models: [],
+        availableModels: [],
+        baseUrl: '',
+        apiKey: 'sk-deepseek-demo',
+        apiFormat: 'openai-chat',
+        useMaxCompletionTokens: false,
+        customHeaders: '',
+        enabled: true,
+        isCustom: false,
+        isAcp: false,
+        isOauth: false,
+        acpCommand: '',
+        acpArgs: [],
+        acpAuthMethodId: '',
+        modelsUpdatedAt: null,
+        updatedAt
+      })
+
+      const settings = await repository.getSettings()
+
+      expect(settings.providers.deepseek).toMatchObject({
+        provider: 'deepseek',
+        enabled: true,
+        apiFormat: 'openai-chat',
+        model: 'deepseek-v4-flash',
+        models: [
+          {
+            id: 'deepseek-v4-flash',
+            name: 'deepseek-v4-flash',
+            enabled: true,
+            isManual: false
+          },
+          {
+            id: 'deepseek-v4-pro',
+            name: 'deepseek-v4-pro',
+            enabled: false,
+            isManual: false
+          }
+        ],
+        availableModels: [
+          {
+            id: 'deepseek-v4-flash',
+            name: 'deepseek-v4-flash',
+            enabled: true,
+            isManual: false
+          },
+          {
+            id: 'deepseek-v4-pro',
+            name: 'deepseek-v4-pro',
+            enabled: false,
+            isManual: false
+          }
+        ]
       })
 
       await connection.close()

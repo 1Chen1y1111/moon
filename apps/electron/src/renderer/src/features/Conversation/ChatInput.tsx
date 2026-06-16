@@ -1,3 +1,8 @@
+/**
+ * 负责把会话上下文、设置状态和聊天输入组件连接起来。
+ * 它只编排渲染端状态与发送参数，不直接访问 Electron IPC 之外的运行时实现。
+ */
+
 import { useEffect, useMemo } from 'react'
 
 import { useAppRouterContext } from '@renderer/app/router/router-context'
@@ -9,9 +14,9 @@ import { selectChatDraftAttachments, selectChatSessions } from '@renderer/store/
 import { useSettingsStore } from '@renderer/store/settings'
 import { selectAppSettings } from '@renderer/store/settings/selectors'
 import {
-  isSupportedChatProvider,
+  isSelectableChatProvider,
   selectChatModelLabel,
-  selectDefaultChatProvider
+  selectDefaultSelectableChatProvider
 } from '@moon/shared/domain/chat-provider'
 import type { ChatAttachmentRecord } from '@moon/shared/domain/chat'
 import type { ProviderSettings } from '@moon/shared/domain/settings'
@@ -25,7 +30,7 @@ function selectConversationProvider(
 ): ProviderSettings | undefined {
   const draftProvider = draftProviderId === null ? undefined : providers[draftProviderId]
 
-  if (draftProvider?.enabled && isSupportedChatProvider(draftProvider)) {
+  if (draftProvider?.enabled && isSelectableChatProvider(draftProvider)) {
     return draftProvider
   }
 
@@ -34,7 +39,7 @@ function selectConversationProvider(
   }
 
   try {
-    return selectDefaultChatProvider({ appearance: { theme: 'system' }, providers })
+    return selectDefaultSelectableChatProvider({ appearance: { theme: 'system' }, providers })
   } catch {
     return undefined
   }

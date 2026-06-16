@@ -1,3 +1,8 @@
+/**
+ * 负责定义 provider 目录、默认模型和 endpoint 解析规则。
+ * 它只描述跨进程共享的 provider 元数据，不保存用户密钥或创建 SDK client。
+ */
+
 export const builtInProviderIds = [
   'moonshot',
   'openai',
@@ -27,6 +32,8 @@ export type ProviderId = string
 export const providerApiFormats = ['openai-chat', 'openai-responses', 'anthropic'] as const
 
 export type ProviderApiFormat = (typeof providerApiFormats)[number]
+
+export type ProviderModelDiscoveryMode = 'http' | 'static' | 'none'
 
 export type ProviderKind = 'official' | 'custom' | 'coding-plan' | 'acp' | 'oauth' | 'local'
 
@@ -75,6 +82,8 @@ export type ProviderModel = {
   supportsEmbedding?: boolean
   contextWindow?: number
   maxOutputTokens?: number
+  providerApi?: string
+  providerBaseUrl?: string
   providerOptions?: string
   manualOverrides?: ProviderModelManualOverride[]
 }
@@ -84,6 +93,9 @@ type AutoProviderModelCapability = Extract<
   'supportsVision' | 'supportsToolCalling' | 'supportsReasoning'
 >
 
+/**
+ * 格式化模型上下文窗口，供 UI 展示紧凑的人类可读数值。
+ */
 export function formatProviderModelContextWindow(model: ProviderModel): string {
   if (model.contextWindow === undefined) {
     return ''
@@ -105,6 +117,9 @@ export function formatProviderModelContextWindow(model: ProviderModel): string {
   return String(model.contextWindow)
 }
 
+/**
+ * 判断模型字段是否被用户手动覆盖，避免自动刷新覆盖用户意图。
+ */
 function hasProviderModelManualOverride(
   model: ProviderModel,
   field: ProviderModelManualOverride
@@ -112,6 +127,9 @@ function hasProviderModelManualOverride(
   return model.manualOverrides?.includes(field) ?? false
 }
 
+/**
+ * 解析自动模型能力字段；用户覆盖优先，否则默认认为远端模型支持该能力。
+ */
 export function resolveAutoProviderModelCapability(
   model: ProviderModel,
   field: AutoProviderModelCapability
@@ -126,6 +144,8 @@ export type ProviderMetadata = {
   type: ProviderType
   kind: ProviderKind
   defaultBaseUrl: string
+  apiFormatBaseUrls?: Partial<Record<ProviderApiFormat, string>>
+  modelDiscovery?: ProviderModelDiscoveryMode
   apiKeyHelpUrl: string
   requiresBaseUrl: boolean
   noApiKey: boolean
@@ -136,11 +156,15 @@ export type ProviderMetadata = {
   modelPlaceholder: string
   defaultModels: ProviderModel[]
   modelsDevProviderId?: string
+  piModelsProviderId?: string
   badge?: string
   acpCommand?: string
   acpArgs?: string[]
 }
 
+/**
+ * 创建内置 provider 的默认模型条目，调用方可再叠加远端元数据或用户覆盖。
+ */
 function model(id: string, name = id, enabled = false, contextWindow?: number): ProviderModel {
   return {
     id,
@@ -189,7 +213,8 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'moonshot-v1-8k',
     defaultModels: [model('moonshot-v1-8k'), model('moonshot-v1-32k'), model('moonshot-v1-128k')],
-    modelsDevProviderId: 'moonshotai'
+    modelsDevProviderId: 'moonshotai',
+    piModelsProviderId: 'moonshotai'
   },
   openai: {
     provider: 'openai',
@@ -206,7 +231,8 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     defaultApiFormat: 'openai-chat',
     defaultUseMaxCompletionTokens: true,
     modelPlaceholder: 'gpt-5.4',
-    defaultModels: [model('gpt-5.4', 'gpt-5.4', true, 400_000), model('gpt-5.2', 'gpt-5.2')]
+    defaultModels: [model('gpt-5.4', 'gpt-5.4', true, 400_000), model('gpt-5.2', 'gpt-5.2')],
+    piModelsProviderId: 'openai'
   },
   claude: {
     provider: 'claude',
@@ -228,7 +254,8 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
       model('claude-opus-4-5'),
       model('claude-3-7-sonnet-latest')
     ],
-    modelsDevProviderId: 'anthropic'
+    modelsDevProviderId: 'anthropic',
+    piModelsProviderId: 'anthropic'
   },
   gemini: {
     provider: 'gemini',
@@ -246,7 +273,8 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'gemini-2.5-pro',
     defaultModels: [model('gemini-2.5-pro'), model('gemini-2.5-flash')],
-    modelsDevProviderId: 'google'
+    modelsDevProviderId: 'google',
+    piModelsProviderId: 'google'
   },
   aihubmix: {
     provider: 'aihubmix',
@@ -271,7 +299,8 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     description: 'DeepSeek 对话与推理模型。',
     type: 'deepseek',
     kind: 'official',
-    defaultBaseUrl: 'https://api.deepseek.com/v1',
+    defaultBaseUrl: 'https://api.deepseek.com',
+    modelDiscovery: 'static',
     apiKeyHelpUrl: 'https://platform.deepseek.com/api_keys',
     requiresBaseUrl: false,
     noApiKey: false,
@@ -279,8 +308,12 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     isOAuth: false,
     defaultApiFormat: 'openai-chat',
     defaultUseMaxCompletionTokens: false,
-    modelPlaceholder: 'deepseek-chat',
-    defaultModels: [model('deepseek-chat'), model('deepseek-reasoner')]
+    modelPlaceholder: 'deepseek-v4-flash',
+    defaultModels: [
+      model('deepseek-v4-flash', 'deepseek-v4-flash', true),
+      model('deepseek-v4-pro')
+    ],
+    piModelsProviderId: 'deepseek'
   },
   'z-ai-coding-plan': {
     provider: 'z-ai-coding-plan',
@@ -331,7 +364,8 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     defaultApiFormat: 'openai-chat',
     defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'openai/gpt-5.4',
-    defaultModels: []
+    defaultModels: [],
+    piModelsProviderId: 'openrouter'
   },
   'azure-openai': {
     provider: 'azure-openai',
@@ -348,7 +382,8 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     defaultApiFormat: 'openai-chat',
     defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'Deployment name (e.g., gpt-4o)',
-    defaultModels: []
+    defaultModels: [],
+    piModelsProviderId: 'azure-openai-responses'
   },
   'github-copilot': {
     provider: 'github-copilot',
@@ -490,7 +525,8 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     defaultApiFormat: 'openai-chat',
     defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'provider/model',
-    defaultModels: []
+    defaultModels: [],
+    piModelsProviderId: 'cloudflare-ai-gateway'
   }
 }
 
@@ -498,6 +534,90 @@ export const providerCatalog: ProviderMetadata[] = builtInProviderIds.map(
   (provider) => providerMetadata[provider]
 )
 
+/**
+ * 判断 provider 是否来自内置目录，调用方据此决定是否能读取内置元数据。
+ */
 export function isBuiltInProviderId(provider: ProviderId): provider is BuiltInProviderId {
   return builtInProviderIds.includes(provider as BuiltInProviderId)
+}
+
+/**
+ * 解析内置 provider 的默认协议；未知 provider 使用调用方传入的回退值。
+ */
+export function resolveProviderDefaultApiFormat(
+  provider: ProviderId,
+  fallback: ProviderApiFormat
+): ProviderApiFormat {
+  if (!isBuiltInProviderId(provider)) {
+    return fallback
+  }
+
+  return providerMetadata[provider].defaultApiFormat
+}
+
+/**
+ * 按 provider 和协议解析默认 endpoint，避免把模型列表根地址和运行时协议地址混在一起。
+ */
+export function resolveProviderDefaultBaseUrl(
+  provider: ProviderId,
+  apiFormat: ProviderApiFormat
+): string {
+  if (!isBuiltInProviderId(provider)) {
+    return ''
+  }
+
+  const metadata = providerMetadata[provider]
+
+  return (metadata.apiFormatBaseUrls?.[apiFormat] ?? metadata.defaultBaseUrl).trim()
+}
+
+/**
+ * 解析内置 provider 对应的 Pi 模型目录 provider key；没有映射时返回空字符串。
+ */
+export function resolveProviderPiModelsProviderId(provider: ProviderId): string {
+  if (!isBuiltInProviderId(provider)) {
+    return ''
+  }
+
+  return providerMetadata[provider].piModelsProviderId ?? ''
+}
+
+/**
+ * 解析 provider 实际请求 endpoint，用户显式填写的 baseUrl 始终优先。
+ */
+export function resolveProviderEffectiveBaseUrl({
+  apiFormat,
+  baseUrl,
+  defaultBaseUrl,
+  provider
+}: {
+  provider: ProviderId
+  apiFormat: ProviderApiFormat
+  baseUrl?: string
+  defaultBaseUrl?: string
+}): string {
+  const configuredBaseUrl = baseUrl?.trim() ?? ''
+
+  if (configuredBaseUrl.length > 0) {
+    return configuredBaseUrl
+  }
+
+  if (isBuiltInProviderId(provider)) {
+    const providerDefaultBaseUrl = resolveProviderDefaultBaseUrl(provider, apiFormat)
+
+    if (providerDefaultBaseUrl.length > 0) {
+      return providerDefaultBaseUrl
+    }
+  }
+
+  return defaultBaseUrl?.trim() ?? ''
+}
+
+/**
+ * 返回 provider 模型发现方式；未知 provider 默认走 HTTP 拉取，保持自定义 provider 兼容性。
+ */
+export function resolveProviderModelDiscovery(provider: ProviderId): ProviderModelDiscoveryMode {
+  return isBuiltInProviderId(provider)
+    ? (providerMetadata[provider].modelDiscovery ?? 'http')
+    : 'http'
 }

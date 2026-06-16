@@ -7,6 +7,7 @@ Electron + React + TypeScript desktop app, organized as a pnpm monorepo.
 ```text
 moon/
   apps/electron/      Electron desktop app
+  packages/core/      Pure core session, message, usage, and agent event types
   packages/shared/    Pure shared domain types, validation, and defaults
   packages/ui/        Local shadcn and ai-elements primitives
 ```
@@ -38,6 +39,7 @@ pnpm --filter @moon/electron build:linux
 ## Checks
 
 ```bash
+pnpm --filter @moon/core typecheck
 pnpm --filter @moon/shared typecheck
 pnpm --filter @moon/shared test
 pnpm --filter @moon/ui typecheck

@@ -1,5 +1,10 @@
 // @vitest-environment node
 
+/**
+ * 负责验证 ChatService 的主进程会话编排和 agent 事件落库行为。
+ * 测试使用内存仓储和 mock backend，不触发真实 SDK 或数据库。
+ */
+
 import { mkdtemp, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -15,47 +20,17 @@ import type {
   TopicRecord
 } from '@moon/shared/domain/chat'
 import type { SessionRecord } from '@moon/shared/domain/chat'
-import { createDefaultAppSettings, createDefaultProviderSettings } from '@moon/shared/domain/settings'
+import {
+  createDefaultAppSettings,
+  createDefaultProviderSettings
+} from '@moon/shared/domain/settings'
 import type { AppSettings, ProviderSettings } from '@moon/shared/domain/settings'
-
-const aiProviderMocks = vi.hoisted(() => {
-  const openaiChat = vi.fn((modelId: string) => ({ kind: 'openai-chat', modelId }))
-  const openaiResponses = vi.fn((modelId: string) => ({ kind: 'openai-responses', modelId }))
-  const anthropicChat = vi.fn((modelId: string) => ({ kind: 'anthropic-chat', modelId }))
-  const googleChat = vi.fn((modelId: string) => ({ kind: 'google-chat', modelId }))
-  const compatibleChatModel = vi.fn((modelId: string) => ({
-    kind: 'compatible-chat',
-    modelId
-  }))
-
-  return {
-    anthropicChat,
-    compatibleChatModel,
-    createAnthropic: vi.fn(() => ({ chat: anthropicChat })),
-    createGoogleGenerativeAI: vi.fn(() => ({ chat: googleChat })),
-    createOpenAI: vi.fn(() => ({ chat: openaiChat, responses: openaiResponses })),
-    createOpenAICompatible: vi.fn(() => ({ chatModel: compatibleChatModel })),
-    googleChat,
-    openaiChat,
-    openaiResponses
-  }
-})
-
-vi.mock('@ai-sdk/openai', () => ({
-  createOpenAI: aiProviderMocks.createOpenAI
-}))
-
-vi.mock('@ai-sdk/openai-compatible', () => ({
-  createOpenAICompatible: aiProviderMocks.createOpenAICompatible
-}))
-
-vi.mock('@ai-sdk/anthropic', () => ({
-  createAnthropic: aiProviderMocks.createAnthropic
-}))
-
-vi.mock('@ai-sdk/google', () => ({
-  createGoogleGenerativeAI: aiProviderMocks.createGoogleGenerativeAI
-}))
+import type { AgentBackend, AgentBackendConfig, AgentEvent } from '@moon/shared/agent'
+import {
+  llmConnectionSchema,
+  selectDefaultLlmConnection,
+  type NormalizedLlmConnection
+} from '@moon/shared/config'
 
 function createProviderSettings(
   input: Partial<ProviderSettings> & Pick<ProviderSettings, 'provider'>
@@ -77,6 +52,50 @@ function createSettings(providers: ProviderSettings[]): AppSettings {
     ...createDefaultAppSettings(),
     providers: Object.fromEntries(providers.map((provider) => [provider.provider, provider]))
   }
+}
+
+function createClaudeSettings(input: Partial<ProviderSettings> = {}): AppSettings {
+  return createSettings([
+    createProviderSettings({
+      provider: 'claude',
+      type: 'anthropic',
+      model: 'claude-sonnet-4-5',
+      ...input
+    })
+  ])
+}
+
+function createAnthropicCompatibleProvider(
+  input: Partial<ProviderSettings> & Pick<ProviderSettings, 'provider'>
+): ProviderSettings {
+  return createProviderSettings({
+    apiFormat: 'anthropic',
+    baseUrl: 'https://api.example.com',
+    model: 'anthropic/claude-sonnet',
+    ...input
+  })
+}
+
+/**
+ * 创建 Anthropic Messages 兼容 connection fixture。
+ */
+function createAnthropicCompatConnection(
+  input: Partial<NormalizedLlmConnection> = {}
+): NormalizedLlmConnection {
+  return llmConnectionSchema.parse({
+    id: 'compat-main',
+    name: 'Compat Main',
+    providerId: 'openrouter',
+    backend: 'pi_compat',
+    model: 'anthropic/claude-sonnet',
+    apiKey: 'stored-connection-key',
+    baseUrl: 'https://compat.example.com',
+    customEndpoint: { api: 'anthropic-messages' },
+    enabled: true,
+    isDefault: true,
+    thinkingLevel: 'medium',
+    ...input
+  })
 }
 
 class SessionsRepositoryMock {
@@ -249,22 +268,44 @@ class ToolInvocationsRepositoryMock {
 }
 
 type CreateServiceResult = {
+  createAgentBackend: ReturnType<typeof vi.fn>
   messagesRepository: MessagesRepositoryMock
   service: ChatService
   sessionsRepository: SessionsRepositoryMock
   settingsRepository: {
+    findLlmConnectionById: (id: string) => Promise<NormalizedLlmConnection | null>
     getProviderApiKey: (provider: string) => Promise<string>
     getSettings: () => Promise<AppSettings>
+    listLlmConnections: () => Promise<NormalizedLlmConnection[]>
+    saveLlmConnection: (connection: NormalizedLlmConnection) => Promise<NormalizedLlmConnection>
+    selectDefaultLlmConnection: () => Promise<NormalizedLlmConnection | null>
+  }
+  toolInvocationsRepository: ToolInvocationsRepositoryMock
+}
+
+function createMockAgentBackend(events: AgentEvent[]): AgentBackend {
+  return {
+    async *chat(): AsyncGenerator<AgentEvent> {
+      for (const event of events) {
+        yield event
+      }
+    },
+    abort: vi.fn(async () => {}),
+    destroy: vi.fn(),
+    getModel: vi.fn(() => 'test-model'),
+    isProcessing: vi.fn(() => false),
+    setModel: vi.fn()
   }
 }
 
 function createService(input: {
+  agentEvents?: AgentEvent[]
   attachmentsDirectory?: string
-  generateText?: (input: never) => Promise<{ text: string }>
+  createAgentBackend?: ReturnType<typeof vi.fn>
+  llmConnections?: NormalizedLlmConnection[]
   messages?: MessageRecord[]
   sessions?: SessionRecord[]
   settings: AppSettings
-  streamText?: (input: never) => { textStream: AsyncIterable<string> }
 }): CreateServiceResult {
   const sessionsRepository = new SessionsRepositoryMock(input.sessions)
   const messagesRepository = new MessagesRepositoryMock(input.messages)
@@ -290,34 +331,50 @@ function createService(input: {
   )
   const agentOperationsRepository = new AgentOperationsRepositoryMock()
   const toolInvocationsRepository = new ToolInvocationsRepositoryMock()
+  const llmConnections = [...(input.llmConnections ?? [])]
   const settingsRepository = {
+    findLlmConnectionById: vi.fn(
+      async (id: string) => llmConnections.find((connection) => connection.id === id) ?? null
+    ),
     getProviderApiKey: vi.fn(
       async (provider: string) => input.settings.providers[provider]?.apiKey ?? ''
     ),
-    getSettings: vi.fn(async () => input.settings)
+    getSettings: vi.fn(async () => input.settings),
+    listLlmConnections: vi.fn(async () => llmConnections),
+    saveLlmConnection: vi.fn(async (connection: NormalizedLlmConnection) => {
+      const index = llmConnections.findIndex((candidate) => candidate.id === connection.id)
+
+      if (index === -1) {
+        llmConnections.push(connection)
+      } else {
+        llmConnections[index] = connection
+      }
+
+      return connection
+    }),
+    selectDefaultLlmConnection: vi.fn(async () => selectDefaultLlmConnection(llmConnections))
   }
+  const createAgentBackend =
+    input.createAgentBackend ??
+    vi.fn(() => createMockAgentBackend(input.agentEvents ?? [{ type: 'text_delta', text: 'ok' }]))
 
   return {
+    createAgentBackend,
     messagesRepository,
     service: new ChatService({
       agentOperationsRepository: agentOperationsRepository as never,
       attachmentsDirectory: input.attachmentsDirectory,
+      createAgentBackend: createAgentBackend as never,
       messagesRepository: messagesRepository as never,
       sessionsRepository: sessionsRepository as never,
       settingsRepository: settingsRepository as never,
-      streamText:
-        input.streamText ??
-        ((agentInput) => ({
-          textStream: (async function* (): AsyncGenerator<string> {
-            yield (await input.generateText?.(agentInput as never))?.text ?? ''
-          })()
-        })),
       threadsRepository: threadsRepository as never,
       toolInvocationsRepository: toolInvocationsRepository as never,
       topicsRepository: topicsRepository as never
     }),
     sessionsRepository,
-    settingsRepository
+    settingsRepository,
+    toolInvocationsRepository
   }
 }
 
@@ -326,7 +383,7 @@ describe('ChatService provider resolution', () => {
     vi.clearAllMocks()
   })
 
-  it('selects the first enabled supported non-ACP provider', async () => {
+  it('selects the first enabled supported Anthropic provider', async () => {
     const { selectDefaultChatProvider } = await import('@main/services/chat-service')
     const azure = createProviderSettings({
       provider: 'azure-openai',
@@ -343,9 +400,16 @@ describe('ChatService provider resolution', () => {
       provider: 'openai',
       model: 'gpt-5.4'
     })
+    const claude = createProviderSettings({
+      provider: 'claude',
+      type: 'anthropic',
+      model: 'claude-sonnet-4-5'
+    })
 
-    expect(selectDefaultChatProvider(createSettings([azure, codingPlan, openai]))).toBe(openai)
-    expect(() => selectDefaultChatProvider(createSettings([azure, codingPlan]))).toThrow(
+    expect(selectDefaultChatProvider(createSettings([azure, codingPlan, openai, claude]))).toBe(
+      claude
+    )
+    expect(() => selectDefaultChatProvider(createSettings([azure, codingPlan, openai]))).toThrow(
       'No enabled chat provider configured.'
     )
   })
@@ -390,108 +454,15 @@ describe('ChatService provider resolution', () => {
   })
 })
 
-describe('createChatLanguageModel', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-  })
-
-  it('builds OpenAI chat and responses models', async () => {
-    const { createChatLanguageModel } = await import('@main/services/chat-service')
-    const provider = createProviderSettings({
-      provider: 'openai',
-      type: 'openai',
-      apiFormat: 'openai-chat',
-      baseUrl: 'https://api.openai.com/v1',
-      customHeaders: '{"X-Test":1}'
-    })
-
-    createChatLanguageModel(provider, 'gpt-5.4')
-    createChatLanguageModel({ ...provider, apiFormat: 'openai-responses' }, 'gpt-5.4')
-
-    expect(aiProviderMocks.createOpenAI).toHaveBeenCalledWith({
-      apiKey: 'stored-key',
-      baseURL: 'https://api.openai.com/v1',
-      headers: { 'X-Test': '1' }
-    })
-    expect(aiProviderMocks.openaiChat).toHaveBeenCalledWith('gpt-5.4')
-    expect(aiProviderMocks.openaiResponses).toHaveBeenCalledWith('gpt-5.4')
-  })
-
-  it('builds compatible, Anthropic, Gemini, and no-key Ollama providers', async () => {
-    const { createChatLanguageModel } = await import('@main/services/chat-service')
-
-    createChatLanguageModel(
-      createProviderSettings({
-        provider: 'deepseek',
-        type: 'deepseek',
-        baseUrl: 'https://api.deepseek.com/v1'
-      }),
-      'deepseek-chat'
-    )
-    createChatLanguageModel(
-      createProviderSettings({
-        provider: 'claude',
-        type: 'anthropic',
-        apiFormat: 'anthropic',
-        baseUrl: 'https://api.anthropic.com'
-      }),
-      'claude-sonnet-4-5'
-    )
-    createChatLanguageModel(
-      createProviderSettings({
-        provider: 'gemini',
-        type: 'google',
-        baseUrl: 'https://generativelanguage.googleapis.com/v1beta'
-      }),
-      'gemini-2.5-pro'
-    )
-    createChatLanguageModel(
-      createProviderSettings({
-        provider: 'ollama',
-        type: 'ollama',
-        apiKey: '',
-        hasApiKey: false,
-        noApiKey: true,
-        baseUrl: 'http://localhost:11434/v1'
-      }),
-      'llama3.2'
-    )
-
-    expect(aiProviderMocks.createOpenAICompatible).toHaveBeenCalledWith({
-      apiKey: 'stored-key',
-      baseURL: 'https://api.deepseek.com/v1',
-      name: 'deepseek'
-    })
-    expect(aiProviderMocks.createAnthropic).toHaveBeenCalledWith({
-      apiKey: 'stored-key',
-      baseURL: 'https://api.anthropic.com/v1'
-    })
-    expect(aiProviderMocks.createGoogleGenerativeAI).toHaveBeenCalledWith({
-      apiKey: 'stored-key',
-      baseURL: 'https://generativelanguage.googleapis.com/v1beta'
-    })
-    expect(aiProviderMocks.createOpenAICompatible).toHaveBeenCalledWith({
-      baseURL: 'http://localhost:11434/v1',
-      name: 'ollama'
-    })
-  })
-})
-
 describe('ChatService.sendMessage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
 
   it('saves user and assistant messages for a new session', async () => {
-    const settings = createSettings([
-      createProviderSettings({
-        provider: 'openai',
-        type: 'openai',
-        model: 'gpt-5.4'
-      })
-    ])
+    const settings = createClaudeSettings()
     const { messagesRepository, service, sessionsRepository } = createService({
-      generateText: vi.fn(async () => ({ text: ' 你好，Moon 已经在线。 ' })),
+      agentEvents: [{ type: 'text_delta', text: ' 你好，Moon 已经在线。 ' }],
       settings
     })
 
@@ -510,82 +481,205 @@ describe('ChatService.sendMessage', () => {
   })
 
   it('uses the requested provider for a new session', async () => {
+    const openrouter = createAnthropicCompatibleProvider({
+      provider: 'openrouter',
+      type: 'openrouter'
+    })
     const settings = createSettings([
-      createProviderSettings({
-        provider: 'openai',
-        type: 'openai',
-        model: 'gpt-5.4'
-      }),
-      createProviderSettings({
-        provider: 'deepseek',
-        model: 'deepseek-chat'
-      })
+      createProviderSettings({ provider: 'claude', type: 'anthropic', model: 'claude-sonnet-4-5' }),
+      openrouter
     ])
     const { service, sessionsRepository } = createService({
-      generateText: vi.fn(async () => ({ text: 'ok' })),
+      agentEvents: [{ type: 'text_delta', text: 'ok' }],
       settings
     })
 
-    await service.sendMessage({ provider: 'deepseek', content: 'hello' })
+    await service.sendMessage({ provider: 'openrouter', content: 'hello' })
 
-    expect(sessionsRepository.sessions[0].provider).toBe('deepseek')
+    expect(sessionsRepository.sessions[0].provider).toBe('openrouter')
+  })
+
+  it('passes Anthropic-compatible providers through pi_compat connection config', async () => {
+    const openrouter = createAnthropicCompatibleProvider({
+      provider: 'openrouter',
+      type: 'openrouter',
+      baseUrl: 'https://compat.example.com',
+      defaultBaseUrl: 'https://compat.example.com',
+      model: 'anthropic/claude-sonnet'
+    })
+    const createAgentBackend = vi.fn((_config: AgentBackendConfig) =>
+      createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
+    )
+    const { service } = createService({
+      createAgentBackend,
+      settings: createSettings([openrouter])
+    })
+
+    await service.sendMessage({ content: 'hello' })
+
+    expect(createAgentBackend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'pi_compat',
+        model: 'anthropic/claude-sonnet',
+        apiKey: 'stored-key',
+        baseUrl: 'https://compat.example.com',
+        customEndpoint: { api: 'anthropic-messages' }
+      })
+    )
+  })
+
+  it('passes DeepSeek providers through OpenAI-compatible pi_compat config', async () => {
+    const deepseek = createProviderSettings({
+      provider: 'deepseek',
+      type: 'deepseek',
+      model: 'deepseek-v4-flash',
+      availableModels: [
+        {
+          id: 'deepseek-v4-flash',
+          name: 'DeepSeek V4 Flash',
+          enabled: true,
+          isManual: false,
+          providerApi: 'openai-completions',
+          providerBaseUrl: 'https://api.deepseek.com'
+        }
+      ],
+      models: [
+        {
+          id: 'deepseek-v4-flash',
+          name: 'DeepSeek V4 Flash',
+          enabled: true,
+          isManual: false,
+          providerApi: 'openai-completions',
+          providerBaseUrl: 'https://api.deepseek.com'
+        }
+      ]
+    })
+    const createAgentBackend = vi.fn((_config: AgentBackendConfig) =>
+      createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
+    )
+    const { service, sessionsRepository } = createService({
+      createAgentBackend,
+      settings: createSettings([deepseek])
+    })
+
+    await service.sendMessage({ content: 'hello' })
+
+    expect(sessionsRepository.sessions[0].llmConnectionId).toBeNull()
+    expect(createAgentBackend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'pi_compat',
+        model: 'deepseek-v4-flash',
+        apiKey: 'stored-key',
+        baseUrl: 'https://api.deepseek.com',
+        customEndpoint: { api: 'openai-completions' }
+      })
+    )
+  })
+
+  it('uses the persisted default LLM connection before provider fallback', async () => {
+    const createAgentBackend = vi.fn((_config: AgentBackendConfig) =>
+      createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
+    )
+    const { service, sessionsRepository } = createService({
+      createAgentBackend,
+      llmConnections: [createAnthropicCompatConnection()],
+      settings: createDefaultAppSettings()
+    })
+
+    await service.sendMessage({ content: 'hello' })
+
+    expect(sessionsRepository.sessions[0]).toMatchObject({
+      provider: 'openrouter',
+      llmConnectionId: 'compat-main'
+    })
+    expect(createAgentBackend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'pi_compat',
+        model: 'anthropic/claude-sonnet',
+        apiKey: 'stored-connection-key',
+        customEndpoint: { api: 'anthropic-messages' }
+      })
+    )
+  })
+
+  it('reuses the session LLM connection for follow-up turns', async () => {
+    const session: SessionRecord = {
+      id: 'session-1',
+      llmConnectionId: 'compat-main',
+      projectId: null,
+      provider: 'openrouter',
+      title: 'Plan',
+      status: 'active',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:00.000Z'
+    }
+    const createAgentBackend = vi.fn((_config: AgentBackendConfig) =>
+      createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
+    )
+    const { service } = createService({
+      createAgentBackend,
+      llmConnections: [createAnthropicCompatConnection({ isDefault: false })],
+      sessions: [session],
+      settings: createClaudeSettings()
+    })
+
+    await service.sendMessage({ sessionId: 'session-1', content: 'continue' })
+
+    expect(createAgentBackend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'pi_compat',
+        model: 'anthropic/claude-sonnet',
+        apiKey: 'stored-connection-key'
+      })
+    )
   })
 
   it('uses the requested provider for an existing session', async () => {
     const session: SessionRecord = {
       id: 'session-1',
       projectId: null,
-      provider: 'openai',
+      provider: 'claude',
       title: 'Plan',
       status: 'active',
       createdAt: '2026-05-09T00:00:00.000Z',
       updatedAt: '2026-05-09T00:00:00.000Z'
     }
+    const openrouter = createAnthropicCompatibleProvider({
+      provider: 'openrouter',
+      type: 'openrouter'
+    })
     const settings = createSettings([
-      createProviderSettings({
-        provider: 'openai',
-        type: 'openai',
-        model: 'gpt-5.4'
-      }),
-      createProviderSettings({
-        provider: 'deepseek',
-        model: 'deepseek-chat'
-      })
+      createProviderSettings({ provider: 'claude', type: 'anthropic', model: 'claude-sonnet-4-5' }),
+      openrouter
     ])
     const { service, sessionsRepository } = createService({
-      generateText: vi.fn(async () => ({ text: 'ok' })),
+      agentEvents: [{ type: 'text_delta', text: 'ok' }],
       sessions: [session],
       settings
     })
 
     await service.sendMessage({
       sessionId: 'session-1',
-      provider: 'deepseek',
+      provider: 'openrouter',
       content: 'hello'
     })
 
-    expect(sessionsRepository.sessions[0].provider).toBe('deepseek')
+    expect(sessionsRepository.sessions[0].provider).toBe('openrouter')
   })
 
   it('keeps the user message but does not save an empty assistant response', async () => {
     const session: SessionRecord = {
       id: 'session-1',
       projectId: null,
-      provider: 'openai',
+      provider: 'claude',
       title: '新聊天',
       status: 'active',
       createdAt: '2026-05-09T00:00:00.000Z',
       updatedAt: '2026-05-09T00:00:00.000Z'
     }
-    const settings = createSettings([
-      createProviderSettings({
-        provider: 'openai',
-        type: 'openai',
-        model: 'gpt-5.4'
-      })
-    ])
+    const settings = createClaudeSettings()
     const { messagesRepository, service } = createService({
-      generateText: vi.fn(async () => ({ text: '   ' })),
+      agentEvents: [{ type: 'text_delta', text: '   ' }],
       sessions: [session],
       settings
     })
@@ -607,22 +701,14 @@ describe('ChatService.sendMessage', () => {
   })
 
   it('emits saved user and assistant stream events while sending', async () => {
-    const settings = createSettings([
-      createProviderSettings({
-        provider: 'openai',
-        type: 'openai',
-        model: 'gpt-5.4'
-      })
-    ])
+    const settings = createClaudeSettings()
     const events: unknown[] = []
     const { service } = createService({
       settings,
-      streamText: vi.fn(() => ({
-        textStream: (async function* (): AsyncGenerator<string> {
-          yield '你好'
-          yield '，Moon'
-        })()
-      }))
+      agentEvents: [
+        { type: 'text_delta', text: '你好' },
+        { type: 'text_delta', text: '，Moon' }
+      ]
     })
 
     const result = await service.sendMessage({ content: '测试' }, (event) => events.push(event))
@@ -638,24 +724,158 @@ describe('ChatService.sendMessage', () => {
     ])
   })
 
-  it('sends stored attachments as model message parts', async () => {
-    const attachmentsDirectory = await mkdtemp(join(tmpdir(), 'moon-chat-attachments-'))
-    const settings = createSettings([
-      createProviderSettings({
-        provider: 'openai',
-        type: 'openai',
-        model: 'gpt-5.4'
+  it('persists provider session ids and usage updates on operations', async () => {
+    const settings = createClaudeSettings()
+    const { service } = createService({
+      settings,
+      agentEvents: [
+        { type: 'session_id_update', sessionId: 'sdk-session-1' },
+        {
+          type: 'usage_update',
+          usage: {
+            cacheReadTokens: 2,
+            costUsd: 0.12,
+            inputTokens: 10,
+            outputTokens: 5,
+            totalTokens: 17
+          }
+        },
+        { type: 'text_delta', text: 'ok' }
+      ]
+    })
+
+    const result = await service.sendMessage({ content: '测试 usage' })
+
+    expect(result.operation).toMatchObject({
+      metadata: { providerSessionId: 'sdk-session-1' },
+      totalCost: '0.12',
+      totalInputTokens: 10,
+      totalOutputTokens: 5,
+      totalTokens: 17,
+      usage: {
+        cacheReadTokens: 2,
+        costUsd: 0.12,
+        inputTokens: 10,
+        outputTokens: 5,
+        totalTokens: 17
+      }
+    })
+  })
+
+  it('persists usage carried by complete events', async () => {
+    const settings = createClaudeSettings()
+    const { service } = createService({
+      settings,
+      agentEvents: [
+        { type: 'text_delta', text: 'ok' },
+        {
+          type: 'complete',
+          usage: {
+            costUsd: 0.04,
+            inputTokens: 3,
+            outputTokens: 4
+          }
+        }
+      ]
+    })
+
+    const result = await service.sendMessage({ content: '测试 complete usage' })
+
+    expect(result.operation).toMatchObject({
+      totalCost: '0.04',
+      totalInputTokens: 3,
+      totalOutputTokens: 4,
+      totalTokens: 7,
+      usage: {
+        costUsd: 0.04,
+        inputTokens: 3,
+        outputTokens: 4,
+        totalTokens: 7
+      }
+    })
+  })
+
+  it('persists status and info events on operation metadata', async () => {
+    const settings = createClaudeSettings()
+    const { service } = createService({
+      settings,
+      agentEvents: [
+        {
+          type: 'status',
+          message: 'Claude is compacting context.',
+          statusType: 'compacting'
+        },
+        {
+          type: 'info',
+          level: 'info',
+          message: 'Claude tool Read is running (3s).'
+        },
+        { type: 'text_delta', text: 'ok' }
+      ]
+    })
+
+    const result = await service.sendMessage({ content: '测试状态事件' })
+
+    expect(result.operation.metadata).toMatchObject({
+      lastAgentInfo: {
+        level: 'info',
+        message: 'Claude tool Read is running (3s).'
+      },
+      lastAgentStatus: {
+        message: 'Claude is compacting context.',
+        statusType: 'compacting'
+      }
+    })
+  })
+
+  it('persists tool start and result events on tool invocations', async () => {
+    const settings = createClaudeSettings()
+    const events: unknown[] = []
+    const { service, toolInvocationsRepository } = createService({
+      settings,
+      agentEvents: [
+        {
+          type: 'tool_start',
+          toolUseId: 'tool-1',
+          toolName: 'Read',
+          input: { file_path: 'README.md' }
+        },
+        {
+          type: 'tool_result',
+          toolUseId: 'tool-1',
+          result: { output: 'hello' },
+          isError: false
+        },
+        { type: 'text_delta', text: 'done' }
+      ]
+    })
+
+    await service.sendMessage({ content: '跑工具' }, (event) => events.push(event))
+
+    expect(toolInvocationsRepository.invocations).toEqual([
+      expect.objectContaining({
+        id: 'tool-1',
+        toolCallId: 'tool-1',
+        name: 'Read',
+        arguments: { file_path: 'README.md' },
+        result: { output: 'hello' },
+        status: 'done'
       })
     ])
-    const streamText = vi.fn(() => ({
-      textStream: (async function* (): AsyncGenerator<string> {
-        yield 'ok'
-      })()
-    }))
+    expect(events.map((event) => (event as { type: string }).type)).toContain('tool-start')
+    expect(events.map((event) => (event as { type: string }).type)).toContain('tool-finish')
+  })
+
+  it('sends stored attachments as model message parts', async () => {
+    const attachmentsDirectory = await mkdtemp(join(tmpdir(), 'moon-chat-attachments-'))
+    const settings = createClaudeSettings()
+    const createAgentBackend = vi.fn(() =>
+      createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
+    )
     const { messagesRepository, service } = createService({
       attachmentsDirectory,
-      settings,
-      streamText: streamText as never
+      createAgentBackend,
+      settings
     })
 
     await writeFile(join(attachmentsDirectory, '11111111-1111-4111-8111-111111111111'), 'hello')
@@ -677,15 +897,16 @@ describe('ChatService.sendMessage', () => {
     expect(messagesRepository.messages[0].attachments).toEqual([
       expect.objectContaining({ name: 'note.txt', kind: 'file' })
     ])
-    expect(streamText).toHaveBeenCalledWith(
+    expect(createAgentBackend).toHaveBeenCalledWith(
       expect.objectContaining({
+        apiKey: 'stored-key',
+        baseUrl: 'https://api.anthropic.com',
+        model: 'claude-sonnet-4-5',
+        provider: 'anthropic',
         messages: [
           expect.objectContaining({
             role: 'user',
-            content: expect.arrayContaining([
-              { type: 'text', text: 'read this' },
-              { type: 'text', text: '\n\n[Attachment: note.txt]\nhello' }
-            ])
+            content: 'read this\n\n[Attachment: note.txt]\nhello'
           })
         ]
       })
@@ -693,14 +914,7 @@ describe('ChatService.sendMessage', () => {
   })
 
   it('does not create a session when provider setup is incomplete', async () => {
-    const settings = createSettings([
-      createProviderSettings({
-        provider: 'openai',
-        apiKey: '',
-        hasApiKey: false,
-        type: 'openai'
-      })
-    ])
+    const settings = createClaudeSettings({ apiKey: '', hasApiKey: false })
     const { service, sessionsRepository } = createService({ settings })
 
     await expect(service.sendMessage({ content: 'hello' })).rejects.toThrow('API key is required')
@@ -713,19 +927,13 @@ describe('ChatService.deleteSession', () => {
     const session: SessionRecord = {
       id: 'session-1',
       projectId: null,
-      provider: 'openai',
+      provider: 'claude',
       title: 'Plan',
       status: 'active',
       createdAt: '2026-05-09T00:00:00.000Z',
       updatedAt: '2026-05-09T00:00:00.000Z'
     }
-    const settings = createSettings([
-      createProviderSettings({
-        provider: 'openai',
-        type: 'openai',
-        model: 'gpt-5.4'
-      })
-    ])
+    const settings = createClaudeSettings()
     const { service, sessionsRepository } = createService({
       sessions: [session],
       settings
@@ -743,27 +951,25 @@ describe('ChatService two-stage runtime', () => {
   })
 
   it('creates a message turn without running the model', async () => {
-    const settings = createSettings([
-      createProviderSettings({
-        provider: 'openai',
-        type: 'openai',
-        model: 'gpt-5.4'
-      })
-    ])
-    const streamText = vi.fn(() => ({
-      textStream: (async function* (): AsyncGenerator<string> {
-        yield 'should not run'
-      })()
-    }))
+    const settings = createClaudeSettings()
+    const createAgentBackend = vi.fn(() =>
+      createMockAgentBackend([{ type: 'text_delta', text: 'should not run' }])
+    )
     const { messagesRepository, service } = createService({
-      settings,
-      streamText: streamText as never
+      createAgentBackend,
+      settings
     })
 
     const result = await service.createMessageTurn({ content: 'hello' })
 
-    expect(streamText).not.toHaveBeenCalled()
+    expect(createAgentBackend).not.toHaveBeenCalled()
     expect(result.operation.status).toBe('idle')
+    expect(result.operation.appContext).toMatchObject({
+      sessionId: result.session.id,
+      llmConnectionBackend: 'anthropic'
+    })
+    expect(result.operation.appContext).not.toHaveProperty('llmConnectionId')
+    expect(result.session.llmConnectionId).toBeNull()
     expect(result.assistantMessage.status).toBe('pending')
     expect(messagesRepository.messages.map((message) => message.role)).toEqual([
       'user',
@@ -772,13 +978,7 @@ describe('ChatService two-stage runtime', () => {
   })
 
   it('returns a clear error when running an unknown operation', async () => {
-    const settings = createSettings([
-      createProviderSettings({
-        provider: 'openai',
-        type: 'openai',
-        model: 'gpt-5.4'
-      })
-    ])
+    const settings = createClaudeSettings()
     const { service } = createService({ settings })
 
     await expect(service.runOperation({ operationId: 'missing-operation' })).rejects.toThrow(

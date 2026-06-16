@@ -1,0 +1,128 @@
+/**
+ * 负责验证 LLM connection 到 agent backend config 的转换规则。
+ * 测试只覆盖纯配置映射，不创建真实 backend 或访问 Electron 运行时。
+ */
+
+import { describe, expect, it } from 'vitest'
+
+import {
+  assertLlmConnectionReadyForAgent,
+  createConnectionAgentBackendConfig
+} from '../../src/agent'
+import { llmConnectionSchema } from '../../src/config'
+
+describe('createConnectionAgentBackendConfig', () => {
+  it('maps Anthropic connection fields to backend config', () => {
+    const messages = [{ role: 'user' as const, content: 'hello' }]
+    const connection = llmConnectionSchema.parse({
+      id: 'anthropic-main',
+      name: 'Claude Main',
+      backend: 'anthropic',
+      model: 'claude-sonnet-4-5',
+      apiKey: ' stored-key ',
+      baseUrl: ' https://api.anthropic.com ',
+      thinkingLevel: 'high'
+    })
+
+    expect(createConnectionAgentBackendConfig(connection, messages)).toEqual({
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-5',
+      apiKey: 'stored-key',
+      baseUrl: 'https://api.anthropic.com',
+      thinkingLevel: 'high',
+      messages
+    })
+  })
+
+  it('maps Pi connection without executing the Pi backend', () => {
+    const connection = llmConnectionSchema.parse({
+      id: 'pi-main',
+      name: 'Pi Main',
+      backend: 'pi',
+      model: 'gpt-5'
+    })
+
+    expect(createConnectionAgentBackendConfig(connection, [])).toEqual({
+      provider: 'pi',
+      model: 'gpt-5',
+      thinkingLevel: 'medium',
+      messages: []
+    })
+  })
+
+  it('maps pi_compat custom endpoint fields to backend config', () => {
+    const messages = [{ role: 'user' as const, content: 'hello' }]
+    const connection = llmConnectionSchema.parse({
+      id: 'compat-main',
+      name: 'Compat Main',
+      backend: 'pi_compat',
+      model: 'compat-model',
+      apiKey: ' stored-key ',
+      baseUrl: ' https://compat.example.com ',
+      customEndpoint: { api: 'anthropic-messages' }
+    })
+
+    expect(createConnectionAgentBackendConfig(connection, messages)).toEqual({
+      provider: 'pi_compat',
+      model: 'compat-model',
+      apiKey: 'stored-key',
+      baseUrl: 'https://compat.example.com',
+      customEndpoint: { api: 'anthropic-messages' },
+      thinkingLevel: 'medium',
+      messages
+    })
+  })
+})
+
+describe('assertLlmConnectionReadyForAgent', () => {
+  it('accepts enabled non-Pi connections with an API key', () => {
+    const connection = llmConnectionSchema.parse({
+      id: 'compat-main',
+      name: 'Compat Main',
+      backend: 'pi_compat',
+      model: 'compat-model',
+      apiKey: 'stored-key',
+      customEndpoint: { api: 'anthropic-messages' }
+    })
+
+    expect(() => assertLlmConnectionReadyForAgent(connection)).not.toThrow()
+  })
+
+  it('rejects disabled connections, missing API keys, and unwired Pi connections', () => {
+    expect(() =>
+      assertLlmConnectionReadyForAgent(
+        llmConnectionSchema.parse({
+          id: 'disabled-main',
+          name: 'Disabled Main',
+          backend: 'anthropic',
+          model: 'claude-sonnet-4-5',
+          apiKey: 'stored-key',
+          enabled: false
+        })
+      )
+    ).toThrow('Disabled Main is disabled.')
+
+    expect(() =>
+      assertLlmConnectionReadyForAgent(
+        llmConnectionSchema.parse({
+          id: 'missing-key',
+          name: 'Missing Key',
+          backend: 'pi_compat',
+          model: 'compat-model'
+        })
+      )
+    ).toThrow('Missing Key API key is required.')
+
+    expect(() =>
+      assertLlmConnectionReadyForAgent(
+        llmConnectionSchema.parse({
+          id: 'pi-main',
+          name: 'Pi Main',
+          backend: 'pi',
+          model: 'gpt-5',
+          apiKey: 'stored-key'
+        })
+      )
+    ).toThrow('Pi backend is not wired yet')
+  })
+})

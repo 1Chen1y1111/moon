@@ -1,3 +1,8 @@
+/**
+ * 负责应用设置和 provider 设置输入的共享校验 schema。
+ * 它只描述跨进程传输数据的结构约束，不读取数据库或执行远端请求。
+ */
+
 import { z } from 'zod'
 
 import { providerApiFormats, providerModelManualOverrideFields } from './provider'
@@ -23,6 +28,8 @@ export const providerModelSchema = z.object({
   supportsEmbedding: z.boolean().optional(),
   contextWindow: z.number().int().positive().optional(),
   maxOutputTokens: z.number().int().positive().optional(),
+  providerApi: z.string().trim().optional(),
+  providerBaseUrl: z.string().trim().optional(),
   providerOptions: z.string().optional(),
   manualOverrides: z.array(z.enum(providerModelManualOverrideFields)).optional()
 })
@@ -67,6 +74,9 @@ export const appSettingsSchema = z.object({
   providers: z.record(providerIdSchema, providerSettingsSchema)
 })
 
+/**
+ * 校验可选 HTTP URL 字段，空值由调用方的业务规则单独判断。
+ */
 function validateHttpUrl(value: string, context: z.RefinementCtx, path: string[]): void {
   if (value.length === 0) {
     return
@@ -86,6 +96,9 @@ function validateHttpUrl(value: string, context: z.RefinementCtx, path: string[]
   }
 }
 
+/**
+ * 校验自定义 headers 是 JSON object，避免数组或基本类型被当作 header map。
+ */
 function validateHeadersJson(value: string, context: z.RefinementCtx): void {
   const trimmedValue = value.trim()
 

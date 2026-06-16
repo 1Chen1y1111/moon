@@ -154,45 +154,40 @@ describe('SettingsService', () => {
     )
   })
 
-  it('enriches fetched provider models with exact models.dev metadata', async () => {
+  it('uses the Pi DeepSeek catalog and enriches it with exact models.dev metadata', async () => {
     const settingsRepository = createSettingsRepositoryMock()
     const service = new SettingsService(settingsRepository as never)
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(
-        createJsonResponse({
-          data: [{ id: 'deepseek-v4-flash' }, { id: 'deepseek-v4-pro' }]
-        })
-      )
-      .mockResolvedValueOnce(
-        createJsonResponse({
-          deepseek: {
-            models: {
-              'deepseek-v4-flash': {
-                name: 'DeepSeek V4 Flash',
-                modalities: { input: ['text', 'image'], output: ['text'] },
-                tool_call: true,
-                reasoning: false,
-                limit: { context: 131_072, output: 8192 }
-              },
-              'deepseek-v4-pro': {
-                name: 'DeepSeek V4 Pro',
-                modalities: { input: ['text'], output: ['text', 'image'] },
-                tool_call: true,
-                reasoning: true,
-                limit: { context: 262_144, output: 16_384 }
-              },
-              'deepseek-extra': {
-                name: 'DeepSeek Extra',
-                tool_call: true
-              }
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createJsonResponse({
+        deepseek: {
+          models: {
+            'deepseek-v4-flash': {
+              name: 'DeepSeek V4 Flash',
+              modalities: { input: ['text', 'image'], output: ['text'] },
+              tool_call: true,
+              reasoning: false,
+              limit: { context: 131_072, output: 8192 }
+            },
+            'deepseek-v4-pro': {
+              name: 'DeepSeek V4 Pro',
+              modalities: { input: ['text'], output: ['text', 'image'] },
+              tool_call: true,
+              reasoning: true,
+              limit: { context: 262_144, output: 16_384 }
+            },
+            'deepseek-extra': {
+              name: 'DeepSeek Extra',
+              tool_call: true
             }
           }
-        })
-      )
+        }
+      })
+    )
     vi.stubGlobal('fetch', fetchMock)
 
-    await service.fetchProviderModels(createFetchProviderModelsInput({ provider: 'deepseek' }))
+    await service.fetchProviderModels(
+      createFetchProviderModelsInput({ provider: 'deepseek', baseUrl: '' })
+    )
 
     const [, models, availableModels] = settingsRepository.updateProviderModels.mock.calls[0] as [
       string,
@@ -200,30 +195,65 @@ describe('SettingsService', () => {
       unknown[]
     ]
 
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledWith('https://models.dev/api.json', expect.any(Object))
     expect(models).toHaveLength(2)
     expect(availableModels).toHaveLength(2)
     expect(models).toEqual([
       expect.objectContaining({
         id: 'deepseek-v4-flash',
+        enabled: true,
         name: 'DeepSeek V4 Flash',
         supportsVision: true,
         supportsImageOutput: false,
         supportsToolCalling: true,
         supportsReasoning: false,
         contextWindow: 131_072,
-        maxOutputTokens: 8192
+        maxOutputTokens: 8192,
+        providerApi: 'openai-completions',
+        providerBaseUrl: 'https://api.deepseek.com'
       }),
       expect.objectContaining({
         id: 'deepseek-v4-pro',
+        enabled: false,
         name: 'DeepSeek V4 Pro',
         supportsVision: false,
         supportsImageOutput: true,
         supportsToolCalling: true,
         supportsReasoning: true,
         contextWindow: 262_144,
-        maxOutputTokens: 16_384
+        maxOutputTokens: 16_384,
+        providerApi: 'openai-completions',
+        providerBaseUrl: 'https://api.deepseek.com'
       })
     ])
+  })
+
+  it('uses the Pi OpenAI catalog instead of the provider models endpoint', async () => {
+    const settingsRepository = createSettingsRepositoryMock()
+    const service = new SettingsService(settingsRepository as never)
+    const fetchMock = vi.fn().mockResolvedValueOnce(createJsonResponse({}))
+    vi.stubGlobal('fetch', fetchMock)
+
+    await service.fetchProviderModels(createFetchProviderModelsInput({ provider: 'openai' }))
+
+    const [, models] = settingsRepository.updateProviderModels.mock.calls[0] as [
+      string,
+      ProviderConnectionInput['models']
+    ]
+
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(fetchMock).toHaveBeenCalledWith('https://models.dev/api.json', expect.any(Object))
+    expect(models).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: 'gpt-5',
+          providerApi: expect.stringMatching(/^openai-/u),
+          providerBaseUrl: 'https://api.openai.com/v1'
+        })
+      ])
+    )
+    expect(models.some((model) => model.id.startsWith('gpt-4'))).toBe(false)
   })
 
   it.each([
@@ -250,32 +280,29 @@ describe('SettingsService', () => {
     async ({ provider, modelsDevProvider, modelId, modelName }) => {
       const settingsRepository = createSettingsRepositoryMock()
       const service = new SettingsService(settingsRepository as never)
-      const fetchMock = vi
-        .fn()
-        .mockResolvedValueOnce(createJsonResponse({ data: [{ id: modelId }] }))
-        .mockResolvedValueOnce(
-          createJsonResponse({
-            [provider]: {
-              models: {
-                [modelId]: {
-                  name: 'Wrong Provider Model',
-                  tool_call: false
-                }
-              }
-            },
-            [modelsDevProvider]: {
-              models: {
-                [modelId]: {
-                  name: modelName,
-                  modalities: { input: ['text', 'image'], output: ['text'] },
-                  tool_call: true,
-                  reasoning: true,
-                  limit: { context: 200_000, output: 8192 }
-                }
+      const fetchMock = vi.fn().mockResolvedValueOnce(
+        createJsonResponse({
+          [provider]: {
+            models: {
+              [modelId]: {
+                name: 'Wrong Provider Model',
+                tool_call: false
               }
             }
-          })
-        )
+          },
+          [modelsDevProvider]: {
+            models: {
+              [modelId]: {
+                name: modelName,
+                modalities: { input: ['text', 'image'], output: ['text'] },
+                tool_call: true,
+                reasoning: true,
+                limit: { context: 200_000, output: 8192 }
+              }
+            }
+          }
+        })
+      )
       vi.stubGlobal('fetch', fetchMock)
 
       await service.fetchProviderModels(createFetchProviderModelsInput({ provider }))
@@ -285,46 +312,48 @@ describe('SettingsService', () => {
         unknown[]
       ]
 
-      expect(models).toEqual([
-        expect.objectContaining({
-          id: modelId,
-          name: modelName,
-          supportsVision: true,
-          supportsToolCalling: true,
-          supportsReasoning: true,
-          contextWindow: 200_000,
-          maxOutputTokens: 8192
-        })
-      ])
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+      expect(fetchMock).toHaveBeenCalledWith('https://models.dev/api.json', expect.any(Object))
+      expect(models).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            id: modelId,
+            name: modelName,
+            supportsVision: true,
+            supportsToolCalling: true,
+            supportsReasoning: true,
+            contextWindow: 200_000,
+            maxOutputTokens: 8192
+          })
+        ])
+      )
     }
   )
 
   it('keeps manual model overrides after models.dev enrichment', async () => {
     const settingsRepository = createSettingsRepositoryMock()
     const service = new SettingsService(settingsRepository as never)
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(createJsonResponse({ data: [{ id: 'deepseek-v4-flash' }] }))
-      .mockResolvedValueOnce(
-        createJsonResponse({
-          deepseek: {
-            models: {
-              'deepseek-v4-flash': {
-                name: 'DeepSeek V4 Flash',
-                modalities: { input: ['text', 'image'], output: ['text'] },
-                tool_call: true,
-                reasoning: true,
-                limit: { context: 131_072, output: 8192 }
-              }
+    const fetchMock = vi.fn().mockResolvedValueOnce(
+      createJsonResponse({
+        deepseek: {
+          models: {
+            'deepseek-v4-flash': {
+              name: 'DeepSeek V4 Flash',
+              modalities: { input: ['text', 'image'], output: ['text'] },
+              tool_call: true,
+              reasoning: true,
+              limit: { context: 131_072, output: 8192 }
             }
           }
-        })
-      )
+        }
+      })
+    )
     vi.stubGlobal('fetch', fetchMock)
 
     await service.fetchProviderModels(
       createFetchProviderModelsInput({
         provider: 'deepseek',
+        baseUrl: '',
         models: [
           {
             id: 'deepseek-v4-flash',
@@ -352,8 +381,37 @@ describe('SettingsService', () => {
         contextWindow: 42_000,
         maxOutputTokens: 8192,
         manualOverrides: ['supportsReasoning', 'contextWindow']
+      }),
+      expect.objectContaining({
+        id: 'deepseek-v4-pro',
+        name: 'DeepSeek V4 Pro',
+        providerApi: 'openai-completions'
       })
     ])
+  })
+
+  it('tests DeepSeek through its OpenAI-compatible default endpoint', async () => {
+    const settingsRepository = createSettingsRepositoryMock()
+    const service = new SettingsService(settingsRepository as never)
+    const fetchMock = vi.fn().mockResolvedValue(createJsonResponse({ content: [{ text: 'ok' }] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await service.testProvider(
+      createFetchProviderModelsInput({
+        provider: 'deepseek',
+        apiKey: 'sk-deepseek-demo',
+        baseUrl: '',
+        model: 'deepseek-v4-flash'
+      })
+    )
+
+    expect(result.success).toBe(true)
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://api.deepseek.com/chat/completions',
+      expect.objectContaining({
+        method: 'POST'
+      })
+    )
   })
 
   it('keeps official models when models.dev has no exact provider match', async () => {

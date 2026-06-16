@@ -1,3 +1,8 @@
+/**
+ * 负责定义聊天、会话、线程和 agent operation 的共享领域类型。
+ * 它只描述跨进程传输的数据结构，不包含仓储、IPC 或 renderer 状态逻辑。
+ */
+
 import type { ProviderId } from './provider'
 
 export const defaultChatUserId = 'local-user'
@@ -110,6 +115,8 @@ export type AgentOperationAppContext = ChatJsonObject & {
   defaultTaskAssigneeAgentId?: string
   documentId?: string | null
   groupId?: string | null
+  llmConnectionBackend?: string
+  llmConnectionId?: string
   scope?: string | null
   sessionId?: string
   sourceMessageId?: string
@@ -127,6 +134,7 @@ export type ChatAttachmentRecord = {
 export type SessionRecord = {
   id: string
   slug?: string
+  llmConnectionId?: string | null
   projectId: string | null
   provider: ProviderId
   title?: string | null

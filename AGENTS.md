@@ -65,7 +65,8 @@ moon/
 |       |-- build/          # Build-time assets
 |       `-- resources/      # Packaged resources
 |-- packages/
-|   |-- shared/             # Pure shared domain code and cross-process types
+|   |-- core/               # Pure session, message, usage, and agent event types
+|   |-- shared/             # Pure shared domain code, validation, agent/config boundaries
 |   `-- ui/                 # Local shadcn primitives, hooks, and utilities
 |-- docs/superpowers/       # Specs and implementation plans
 |-- package.json            # Workspace root metadata only
@@ -83,7 +84,10 @@ Moon is an Electron desktop app. Keep the process boundaries explicit.
   to IPC forwarding, bridge shape, and type mapping.
 - `apps/electron/src/ipc/` is the contract layer. Add channel constants and request/response
   contracts here before wiring main/preload/renderer behavior.
-- `packages/shared/src/` is for pure cross-process domain code. It must not depend on
+- `packages/core/src/` is for pure core session, message, usage, and agent event types. It must
+  not depend on Electron, React, Drizzle, Zod, concrete SDKs, or renderer-only modules.
+- `packages/shared/src/` is for pure cross-process domain code, validation, and
+  `agent/config` boundaries. It must not depend on
   Electron, React, Drizzle runtime code, or renderer-only modules.
 - `apps/electron/src/renderer/src/` owns React UI, renderer state, routes, and calls into main
   only through `window.api`.
@@ -211,6 +215,7 @@ pnpm --filter @moon/electron typecheck:node
 pnpm --filter @moon/electron typecheck:web
 
 # Type-check shared packages
+pnpm --filter @moon/core typecheck
 pnpm --filter @moon/shared typecheck
 pnpm --filter @moon/ui typecheck
 
@@ -245,7 +250,49 @@ tests live under `apps/electron/tests/` and shared-domain tests live under
 `*.selectors.ts`, and type modules as `*.types.ts`.
 
 Prefer configured aliases where available: `@main`, `@preload`, `@renderer`,
-`@ipc`, `@tests`, `@moon/shared`, and `@moon/ui`.
+`@ipc`, `@tests`, `@moon/core`, `@moon/shared`, and `@moon/ui`.
+
+## 代码注释与文件职责
+
+适用于 `.ts`、`.tsx`、`.js`、`.jsx`、`.mjs`、`.cjs` 源码文件。测试文件、配置文件、
+类型声明文件、生成文件可以按实际复杂度处理；除非文件内有非显然流程，否则不强制补齐
+每个辅助函数。
+
+- 每个源码文件顶部必须有一段文件级 JSDoc，1-2 句中文说明这个文件的主要职责和边界。
+- 文件级 JSDoc 放在 imports 之前；如果文件有 shebang，放在 shebang 之后；如果文件
+  需要 `'use client'` 或 `'use strict'` 指令，指令必须保持在最顶部，文件级 JSDoc 放在
+  指令之后。
+- 修改文件职责时，必须同步更新文件顶部职责说明。
+- 每个导出的函数、类、类方法、React 组件、hook、store action、事件处理函数，以及非
+  显然的私有辅助函数，都必须写简短中文 JSDoc。
+- 函数和方法的 JSDoc 重点说明它在流程中的职责、调用边界、输入输出语义、状态变化，
+  或容易误解的副作用。
+- 简单 getter 也要用一句话说明它对外暴露的业务含义。
+- 注释统一使用中文；英文只用于协议字段名、库名、类型名、错误码、命令或外部 API 原文。
+- 注释重点解释设计意图、边界条件、协议差异、异步流程、状态机、取消/重试语义、
+  Electron 进程边界、终端兼容、IME/光标等容易踩坑的地方。
+- 不要给显而易见的赋值、普通导入、简单 JSX 结构、无分支透传逻辑写注释。
+- 不写作者、日期、变更记录、版权头，避免过期维护成本。
+- IPC、SDK adapter、subprocess protocol、持久化迁移、跨进程 bridge 相关代码，必须在
+  拥有协议边界的函数或类型附近说明 wire contract 和生命周期假设。
+
+示例：
+
+```ts
+/**
+ * 负责注册设置相关 IPC handler，边界止于请求分发和事件广播。
+ * 具体业务校验和持久化由 settings service/repository 承担。
+ */
+
+import { ipcMain } from 'electron'
+
+/**
+ * 注册设置窗口需要的 IPC handler，并把 renderer 请求转交给 settings service。
+ */
+export function registerSettingsHandlers(): void {
+  // ...
+}
+```
 
 ### Testing
 

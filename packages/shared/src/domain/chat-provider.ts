@@ -1,6 +1,14 @@
+/**
+ * 负责判断聊天 provider 的可用性并解析聊天模型选择。
+ * 它只处理纯配置规则，不创建 SDK client、不访问密钥或持久化状态。
+ */
+
 import type { ProviderModel } from './provider'
 import type { AppSettings, ProviderSettings } from './settings'
 
+/**
+ * 判断 provider 是否走 OpenAI-compatible HTTP 协议。
+ */
 export function isOpenAICompatibleProvider(provider: ProviderSettings): boolean {
   return (
     provider.type === 'moonshot' ||
@@ -14,6 +22,19 @@ export function isOpenAICompatibleProvider(provider: ProviderSettings): boolean 
   )
 }
 
+/**
+ * 判断 provider 模型目录里是否包含已接入的兼容端点协议。
+ */
+function hasSupportedCompatibleModel(provider: ProviderSettings): boolean {
+  return getChatProviderModelCandidates(provider).some(
+    (model) =>
+      model.providerApi === 'openai-completions' || model.providerApi === 'anthropic-messages'
+  )
+}
+
+/**
+ * 判断当前 provider 是否能进入 Moon agent backend 主路径。
+ */
 export function isSupportedChatProvider(provider: ProviderSettings): boolean {
   if (
     provider.isACP ||
@@ -25,15 +46,32 @@ export function isSupportedChatProvider(provider: ProviderSettings): boolean {
   }
 
   return (
-    provider.type === 'openai' ||
     provider.type === 'anthropic' ||
-    provider.type === 'google' ||
     provider.apiFormat === 'anthropic' ||
-    provider.apiFormat === 'openai-responses' ||
-    (provider.apiFormat === 'openai-chat' && isOpenAICompatibleProvider(provider))
+    isOpenAICompatibleProvider(provider) ||
+    hasSupportedCompatibleModel(provider)
   )
 }
 
+/**
+ * 判断 provider 是否允许出现在首页模型选择器中。
+ */
+export function isSelectableChatProvider(provider: ProviderSettings): boolean {
+  if (
+    provider.isACP ||
+    provider.isOAuth ||
+    provider.kind === 'coding-plan' ||
+    provider.type === 'azure'
+  ) {
+    return false
+  }
+
+  return isSupportedChatProvider(provider) || getChatProviderModelCandidates(provider).length > 0
+}
+
+/**
+ * 从设置中选择第一个启用且可执行聊天的 provider。
+ */
 export function selectDefaultChatProvider(settings: AppSettings): ProviderSettings {
   const provider = Object.values(settings.providers).find(
     (candidate) => candidate.enabled && isSupportedChatProvider(candidate)
@@ -46,10 +84,38 @@ export function selectDefaultChatProvider(settings: AppSettings): ProviderSettin
   return provider
 }
 
+/**
+ * 从设置中选择第一个已启用且可在首页选择模型的 provider。
+ */
+export function selectDefaultSelectableChatProvider(settings: AppSettings): ProviderSettings {
+  const provider = Object.values(settings.providers).find(
+    (candidate) => candidate.enabled && isSelectableChatProvider(candidate)
+  )
+
+  if (provider === undefined) {
+    throw new Error('No selectable chat provider configured.')
+  }
+
+  return provider
+}
+
+/**
+ * 返回模型候选列表，优先使用远端刷新到的模型。
+ */
 export function getChatProviderModelCandidates(provider: ProviderSettings): ProviderModel[] {
   return provider.availableModels.length > 0 ? provider.availableModels : provider.models
 }
 
+/**
+ * 返回首页模型选择器可展示的模型，允许用户直接选择并启用可用模型。
+ */
+export function getSelectableChatProviderModels(provider: ProviderSettings): ProviderModel[] {
+  return getChatProviderModelCandidates(provider)
+}
+
+/**
+ * 返回可在聊天中选择的模型列表，并保留当前已选模型。
+ */
 export function getEnabledChatProviderModels(provider: ProviderSettings): ProviderModel[] {
   const selectedModelId = selectChatModelId(provider)
 
@@ -58,6 +124,9 @@ export function getEnabledChatProviderModels(provider: ProviderSettings): Provid
   )
 }
 
+/**
+ * 在 provider 的模型候选中查找指定模型。
+ */
 export function findChatProviderModel(
   provider: ProviderSettings | undefined,
   modelId: string
@@ -69,6 +138,9 @@ export function findChatProviderModel(
   return getChatProviderModelCandidates(provider).find((model) => model.id === modelId)
 }
 
+/**
+ * 返回 provider 当前选中的模型 ID，空字符串表示未选择。
+ */
 export function selectChatModelId(provider: ProviderSettings | undefined): string {
   if (provider === undefined) {
     return ''
@@ -82,6 +154,9 @@ export function selectChatModelId(provider: ProviderSettings | undefined): strin
   )
 }
 
+/**
+ * 返回 provider 当前选中的模型 ID，未配置时抛出可展示错误。
+ */
 export function selectChatModel(provider: ProviderSettings): string {
   const model = selectChatModelId(provider)
 
@@ -92,6 +167,9 @@ export function selectChatModel(provider: ProviderSettings): string {
   return model
 }
 
+/**
+ * 返回模型选择器展示文本，优先使用模型名称。
+ */
 export function selectChatModelLabel(provider: ProviderSettings | undefined): string {
   const modelId = selectChatModelId(provider)
 

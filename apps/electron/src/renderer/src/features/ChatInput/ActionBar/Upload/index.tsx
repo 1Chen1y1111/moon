@@ -1,3 +1,8 @@
+/**
+ * 负责聊天输入区附件上传入口和当前模型能力判断。
+ * 它只处理文件选择、过滤和上传状态，不直接执行模型请求。
+ */
+
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { FileUp, FolderUp, ImageUp, Paperclip } from 'lucide-react'
 import { toast } from 'sonner'
@@ -9,9 +14,9 @@ import { selectAppSettings } from '@renderer/store/settings/selectors'
 import { useSettingsStore } from '@renderer/store/settings'
 import {
   findChatProviderModel,
-  isSupportedChatProvider,
+  isSelectableChatProvider,
   selectChatModelId,
-  selectDefaultChatProvider
+  selectDefaultSelectableChatProvider
 } from '@moon/shared/domain/chat-provider'
 import { resolveAutoProviderModelCapability } from '@moon/shared/domain/provider'
 import type { ProviderSettings } from '@moon/shared/domain/settings'
@@ -66,7 +71,7 @@ function selectProviderForPage(
       ? undefined
       : providers[draftProviderId]
 
-  if (draftProvider?.enabled && isSupportedChatProvider(draftProvider)) {
+  if (draftProvider?.enabled && isSelectableChatProvider(draftProvider)) {
     return draftProvider
   }
 
@@ -75,7 +80,7 @@ function selectProviderForPage(
   }
 
   try {
-    return selectDefaultChatProvider({ appearance: { theme: 'system' }, providers })
+    return selectDefaultSelectableChatProvider({ appearance: { theme: 'system' }, providers })
   } catch {
     return undefined
   }

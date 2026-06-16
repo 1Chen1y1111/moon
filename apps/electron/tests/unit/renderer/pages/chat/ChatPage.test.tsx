@@ -1,3 +1,8 @@
+/**
+ * 负责验证聊天首页的主要交互和输入区行为。
+ * 测试通过 mock window.api 覆盖渲染端到主进程的边界。
+ */
+
 import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 
@@ -10,7 +15,7 @@ import { createDefaultAppSettings, type AppSettings } from '@moon/shared/domain/
 const session = {
   id: 'session-1',
   projectId: null,
-  provider: 'openai',
+  provider: 'claude',
   title: '计划讨论',
   status: 'active',
   createdAt: '2026-05-09T00:00:00.000Z',
@@ -73,34 +78,19 @@ const assistantMessage = {
 function createModelSwitchSettings(): AppSettings {
   const settings = createDefaultAppSettings()
 
-  settings.providers.openai = {
-    ...settings.providers.openai,
+  settings.providers.claude = {
+    ...settings.providers.claude,
     enabled: true,
     hasApiKey: true,
-    apiKey: 'openai-key',
-    model: 'gpt-5.4',
+    apiKey: 'claude-key',
+    model: 'claude-sonnet-4-5',
     models: [
-      { id: 'gpt-5.4', name: 'GPT-5.4', enabled: true, isManual: false },
-      { id: 'gpt-5.2', name: 'GPT-5.2', enabled: true, isManual: false }
+      { id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', enabled: true, isManual: false },
+      { id: 'claude-opus-4-5', name: 'Claude Opus 4.5', enabled: true, isManual: false }
     ],
     availableModels: [
-      { id: 'gpt-5.4', name: 'GPT-5.4', enabled: true, isManual: false },
-      { id: 'gpt-5.2', name: 'GPT-5.2', enabled: true, isManual: false }
-    ]
-  }
-  settings.providers.deepseek = {
-    ...settings.providers.deepseek,
-    enabled: true,
-    hasApiKey: true,
-    apiKey: 'deepseek-key',
-    model: 'deepseek-chat',
-    models: [
-      { id: 'deepseek-chat', name: 'DeepSeek Chat', enabled: true, isManual: false },
-      { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner', enabled: true, isManual: false }
-    ],
-    availableModels: [
-      { id: 'deepseek-chat', name: 'DeepSeek Chat', enabled: true, isManual: false },
-      { id: 'deepseek-reasoner', name: 'DeepSeek Reasoner', enabled: true, isManual: false }
+      { id: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', enabled: true, isManual: false },
+      { id: 'claude-opus-4-5', name: 'Claude Opus 4.5', enabled: true, isManual: false }
     ]
   }
 
@@ -356,9 +346,9 @@ describe('ChatPage', () => {
       ...appSettings,
       providers: {
         ...appSettings.providers,
-        deepseek: {
-          ...appSettings.providers.deepseek,
-          model: 'deepseek-reasoner'
+        claude: {
+          ...appSettings.providers.claude,
+          model: 'claude-opus-4-5'
         }
       }
     }
@@ -368,7 +358,7 @@ describe('ChatPage', () => {
       sentChatMessage: {
         session: {
           ...session,
-          provider: 'deepseek'
+          provider: 'claude'
         },
         messages: [userMessage, assistantMessage]
       }
@@ -381,13 +371,13 @@ describe('ChatPage', () => {
     })
 
     await user.click(screen.getByRole('button', { name: /切换模型/ }))
-    await user.click(await screen.findByRole('button', { name: '选择模型 DeepSeek Reasoner' }))
+    await user.click(await screen.findByRole('button', { name: '选择模型 Claude Opus 4.5' }))
 
     await waitFor(() =>
       expect(api.settings.saveProvider).toHaveBeenCalledWith(
         expect.objectContaining({
-          provider: 'deepseek',
-          model: 'deepseek-reasoner'
+          provider: 'claude',
+          model: 'claude-opus-4-5'
         })
       )
     )
@@ -397,25 +387,80 @@ describe('ChatPage', () => {
 
     await waitFor(() =>
       expect(api.chat.createMessageTurn).toHaveBeenCalledWith({
-        provider: 'deepseek',
+        provider: 'claude',
         content: 'hello'
       })
     )
   })
 
+  it('offers DeepSeek models from enabled selectable providers', async () => {
+    const appSettings = createDefaultAppSettings()
+    const deepseekModel = {
+      id: 'deepseek-v4-flash',
+      name: 'DeepSeek V4 Flash',
+      enabled: false,
+      isManual: false,
+      providerApi: 'openai-completions',
+      providerBaseUrl: 'https://api.deepseek.com'
+    }
+
+    appSettings.providers.deepseek = {
+      ...appSettings.providers.deepseek,
+      enabled: true,
+      hasApiKey: true,
+      apiKey: 'sk-deepseek-demo',
+      model: '',
+      models: [],
+      availableModels: [deepseekModel]
+    }
+
+    const { user } = renderWithProviders(<ChatPage />, {
+      preloadedSettings: {
+        appSettings,
+        loadStatus: 'succeeded'
+      }
+    })
+
+    await screen.findByText('我们该做什么？')
+
+    await user.click(screen.getByRole('button', { name: /切换模型/ }))
+    await user.click(await screen.findByRole('button', { name: '选择模型 DeepSeek V4 Flash' }))
+
+    await waitFor(() =>
+      expect(api.settings.saveProvider).toHaveBeenCalledWith(
+        expect.objectContaining({
+          provider: 'deepseek',
+          model: 'deepseek-v4-flash',
+          models: [
+            expect.objectContaining({
+              id: 'deepseek-v4-flash',
+              enabled: true
+            })
+          ],
+          availableModels: [
+            expect.objectContaining({
+              id: 'deepseek-v4-flash',
+              enabled: true
+            })
+          ]
+        })
+      )
+    )
+  })
+
   it('switches the active session provider model from the action bar', async () => {
-    const deepseekSession = {
+    const claudeSession = {
       ...session,
-      provider: 'deepseek'
+      provider: 'claude'
     } as const
     const appSettings = createModelSwitchSettings()
     const savedSettings = {
       ...appSettings,
       providers: {
         ...appSettings.providers,
-        deepseek: {
-          ...appSettings.providers.deepseek,
-          model: 'deepseek-reasoner'
+        claude: {
+          ...appSettings.providers.claude,
+          model: 'claude-opus-4-5'
         }
       }
     }
@@ -423,9 +468,9 @@ describe('ChatPage', () => {
       appSettings,
       savedSettings,
       chatMessages: [userMessage],
-      chatSessions: [deepseekSession],
+      chatSessions: [claudeSession],
       sentChatMessage: {
-        session: deepseekSession,
+        session: claudeSession,
         messages: [userMessage, assistantMessage]
       }
     })
@@ -435,7 +480,7 @@ describe('ChatPage', () => {
         activeThreadId: 'thread-1',
         activeTopicId: 'topic-1',
         messages: [userMessage],
-        sessions: [deepseekSession],
+        sessions: [claudeSession],
         sessionsStatus: 'succeeded',
         threads: [thread],
         threadsStatus: 'succeeded',
@@ -450,13 +495,13 @@ describe('ChatPage', () => {
     })
 
     await user.click(screen.getByRole('button', { name: /切换模型/ }))
-    await user.click(await screen.findByRole('button', { name: '选择模型 DeepSeek Reasoner' }))
+    await user.click(await screen.findByRole('button', { name: '选择模型 Claude Opus 4.5' }))
 
     await waitFor(() =>
       expect(api.settings.saveProvider).toHaveBeenCalledWith(
         expect.objectContaining({
-          provider: 'deepseek',
-          model: 'deepseek-reasoner'
+          provider: 'claude',
+          model: 'claude-opus-4-5'
         })
       )
     )
@@ -468,7 +513,7 @@ describe('ChatPage', () => {
       expect(api.chat.createMessageTurn).toHaveBeenCalledWith({
         sessionId: 'session-1',
         threadId: 'thread-1',
-        provider: 'deepseek',
+        provider: 'claude',
         content: 'hello'
       })
     )

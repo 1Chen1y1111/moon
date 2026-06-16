@@ -1,3 +1,8 @@
+/**
+ * 负责验证设置页的路由内容、Provider 表单和保存交互。
+ * 测试只使用 renderer mock API，不访问真实 Electron 主进程或网络。
+ */
+
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 
@@ -135,6 +140,8 @@ describe('SettingsPage', () => {
     expect(screen.getByRole('region', { name: 'OpenAI provider details' })).toBeInTheDocument()
     expect(screen.queryByLabelText('OpenAI Provider Name')).not.toBeInTheDocument()
     expect(screen.getByLabelText('OpenAI API Key')).toBeInTheDocument()
+    expect(screen.getByLabelText('OpenAI Endpoint URL')).toHaveValue('https://api.openai.com/v1')
+    expect(screen.queryByLabelText('OpenAI Endpoint Protocol')).not.toBeInTheDocument()
     expect(screen.queryByText('Models')).not.toBeInTheDocument()
     expect(screen.queryByText('暂无模型')).not.toBeInTheDocument()
 
@@ -151,18 +158,26 @@ describe('SettingsPage', () => {
     )
 
     fireEvent.change(screen.getByLabelText('搜索提供商'), { target: { value: 'deep' } })
-    expect(getProviderCatalogItem('DeepSeek')).toBeInTheDocument()
+    const deepSeekProviderButton = getProviderCatalogItem('DeepSeek')
+    expect(deepSeekProviderButton).toBeInTheDocument()
     expect(
       within(screen.getByRole('list', { name: '提供商列表' })).queryByText('OpenAI')
     ).not.toBeInTheDocument()
+    await user.click(deepSeekProviderButton)
+    expect(screen.getByLabelText('DeepSeek Endpoint URL')).toHaveValue('https://api.deepseek.com')
+    expect(screen.queryByLabelText('DeepSeek Endpoint Protocol')).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('搜索提供商'), { target: { value: '' } })
+    await user.click(getProviderCatalogItem('Azure OpenAI'))
+    expect(screen.getByLabelText('Azure OpenAI Endpoint URL')).toBeInTheDocument()
+    expect(screen.getByLabelText('Azure OpenAI Endpoint Protocol')).toBeInTheDocument()
+    await user.click(getProviderCatalogItem('OpenAI'))
 
     await user.click(screen.getByRole('button', { name: 'Add Custom Provider' }))
     expect(screen.getByLabelText('Custom Provider Name')).toBeInTheDocument()
-    expect(screen.getByLabelText('Custom Provider API Format')).toBeInTheDocument()
+    expect(screen.getByLabelText('Custom Provider Protocol')).toBeInTheDocument()
     expect(screen.getByLabelText('Custom Provider Headers')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Custom Provider Name'), { target: { value: 'My API' } })
-    fireEvent.change(screen.getByLabelText('Custom Provider Base URL'), {
+    fireEvent.change(screen.getByLabelText('Custom Provider Endpoint URL'), {
       target: { value: 'https://api.example.com/v1' }
     })
     fireEvent.change(screen.getByLabelText('Custom Provider API Key'), {
@@ -222,7 +237,7 @@ describe('SettingsPage', () => {
           hasApiKey: true,
           apiKey: 'sk-openai-demo',
           model: 'gpt-5.4',
-          baseUrl: '',
+          baseUrl: 'https://api.openai.com/v1',
           updatedAt: '2026-04-21T00:00:00.000Z'
         }
       }
@@ -242,10 +257,12 @@ describe('SettingsPage', () => {
     })
 
     expect(screen.getByLabelText('OpenAI API Key')).toHaveValue('sk-openai-demo')
+    expect(screen.getByLabelText('OpenAI Endpoint URL')).toHaveValue('https://api.openai.com/v1')
+    expect(screen.queryByLabelText('OpenAI Endpoint Protocol')).not.toBeInTheDocument()
     expect(screen.queryByText(/^当前密钥：/)).not.toBeInTheDocument()
 
-    fireEvent.change(screen.getByLabelText('OpenAI Base URL'), {
-      target: { value: 'https://api.openai.com/v1' }
+    fireEvent.change(screen.getByLabelText('OpenAI Endpoint URL'), {
+      target: { value: 'https://proxy.openai.example/v1' }
     })
     const saveButton = screen.getByRole('button', { name: '保存' })
     await waitFor(() => {
@@ -259,7 +276,7 @@ describe('SettingsPage', () => {
           provider: 'openai',
           apiKey: 'sk-openai-demo',
           model: 'gpt-5.4',
-          baseUrl: 'https://api.openai.com/v1'
+          baseUrl: 'https://proxy.openai.example/v1'
         })
       )
     })
@@ -644,9 +661,6 @@ describe('SettingsPage', () => {
     fireEvent.change(screen.getByLabelText('OpenAI API Key'), {
       target: { value: 'sk-openai-demo' }
     })
-    fireEvent.change(screen.getByLabelText('OpenAI Base URL'), {
-      target: { value: 'https://api.openai.com/v1' }
-    })
     await user.click(getProviderCatalogItem('Anthropic'))
     fireEvent.change(screen.getByLabelText('Anthropic API Key'), {
       target: { value: 'sk-ant-demo' }
@@ -669,6 +683,6 @@ describe('SettingsPage', () => {
     })
     await user.click(getProviderCatalogItem('OpenAI'))
     expect(screen.getByLabelText('OpenAI API Key')).toHaveValue('sk-openai-demo')
-    expect(screen.getByLabelText('OpenAI Base URL')).toHaveValue('https://api.openai.com/v1')
+    expect(screen.getByLabelText('OpenAI Endpoint URL')).toHaveValue('https://api.openai.com/v1')
   }, 10000)
 })
