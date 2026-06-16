@@ -12,14 +12,18 @@ import type { ConversationContext } from '@renderer/features/Conversation'
 import type { MessageRecord } from '@moon/shared/domain/chat'
 
 const context: ConversationContext = {
+  draftLlmConnectionId: null,
   draftProviderId: null,
+  projectId: null,
   sessionId: 'session-1',
   threadId: 'thread-1',
   topicId: 'topic-1'
 }
 
 const nextContext: ConversationContext = {
+  draftLlmConnectionId: null,
   draftProviderId: null,
+  projectId: null,
   sessionId: 'session-2',
   threadId: 'thread-2',
   topicId: 'topic-2'

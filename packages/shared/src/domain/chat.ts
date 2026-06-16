@@ -117,6 +117,9 @@ export type AgentOperationAppContext = ChatJsonObject & {
   groupId?: string | null
   llmConnectionBackend?: string
   llmConnectionId?: string
+  projectId?: string
+  projectName?: string
+  projectPath?: string
   scope?: string | null
   sessionId?: string
   sourceMessageId?: string

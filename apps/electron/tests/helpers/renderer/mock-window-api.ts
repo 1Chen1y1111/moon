@@ -1,3 +1,8 @@
+/**
+ * 负责为 renderer 单元测试安装 typed window.api mock。
+ * 它只提供跨进程桥的测试替身，不触发真实 Electron IPC。
+ */
+
 import { vi } from 'vitest'
 
 import type { MoonApi } from '@ipc/contracts'
@@ -29,6 +34,8 @@ import type {
   RunChatOperationInput,
   SendChatMessageInput
 } from '@moon/shared/domain/chat-validation'
+import type { ProjectRecord, ProjectsChangeEvent } from '@moon/shared/domain/project'
+import type { SetActiveProjectInput } from '@moon/shared/domain/project-validation'
 import {
   createDefaultAppSettings,
   type AppSettings,
@@ -74,6 +81,13 @@ export type MockMoonApi = {
     testProvider: MockFn<(input: ProviderConnectionInput) => Promise<ProviderTestResult>>
     onChange: MockFn<(listener: (settings: AppSettings) => void) => () => void>
   }
+  projects: {
+    list: MockFn<() => Promise<ProjectRecord[]>>
+    getActive: MockFn<() => Promise<ProjectRecord | null>>
+    useExistingFolder: MockFn<() => Promise<ProjectRecord | null>>
+    setActive: MockFn<(input: SetActiveProjectInput) => Promise<ProjectRecord | null>>
+    onChange: MockFn<(listener: (event: ProjectsChangeEvent) => void) => () => void>
+  }
   windowControls: {
     close: MockFn<() => Promise<void>>
     minimize: MockFn<() => Promise<void>>
@@ -91,6 +105,8 @@ type MockWindowApiOptions = {
   chatThreads?: ThreadRecord[]
   chatTopics?: TopicRecord[]
   createdChatSession?: SessionRecord
+  activeProject?: ProjectRecord | null
+  projects?: ProjectRecord[]
   sentChatMessage?: SendMessageResult
   savedSettings?: AppSettings
   windowState?: WindowState
@@ -98,6 +114,9 @@ type MockWindowApiOptions = {
 
 function createMockWindowApi(options: MockWindowApiOptions = {}): MockMoonApi {
   const appSettings = options.appSettings ?? createDefaultAppSettings()
+  const projects = options.projects ?? []
+  const activeProject =
+    options.activeProject === undefined ? (projects[0] ?? null) : options.activeProject
   const savedSettings = options.savedSettings ?? appSettings
   const windowState = options.windowState ?? { isMaximized: false }
   const chatSessions = options.chatSessions ?? []
@@ -342,6 +361,25 @@ function createMockWindowApi(options: MockWindowApiOptions = {}): MockMoonApi {
         .mockResolvedValue({ success: true, message: 'Connection succeeded.' }),
       onChange: vi
         .fn<(listener: (settings: AppSettings) => void) => () => void>()
+        .mockReturnValue(() => undefined)
+    },
+    projects: {
+      list: vi.fn<() => Promise<ProjectRecord[]>>().mockResolvedValue(projects),
+      getActive: vi.fn<() => Promise<ProjectRecord | null>>().mockResolvedValue(activeProject),
+      useExistingFolder: vi
+        .fn<() => Promise<ProjectRecord | null>>()
+        .mockResolvedValue(activeProject),
+      setActive: vi
+        .fn<(input: SetActiveProjectInput) => Promise<ProjectRecord | null>>()
+        .mockImplementation(async (input) => {
+          if (input.projectId === null) {
+            return null
+          }
+
+          return projects.find((project) => project.id === input.projectId) ?? activeProject
+        }),
+      onChange: vi
+        .fn<(listener: (event: ProjectsChangeEvent) => void) => () => void>()
         .mockReturnValue(() => undefined)
     },
     windowControls: {

@@ -20,6 +20,7 @@ import type {
   TopicRecord
 } from '@moon/shared/domain/chat'
 import type { SessionRecord } from '@moon/shared/domain/chat'
+import type { ProjectRecord } from '@moon/shared/domain/project'
 import {
   createDefaultAppSettings,
   createDefaultProviderSettings
@@ -289,9 +290,36 @@ class ToolInvocationsRepositoryMock {
   }
 }
 
+class ProjectsRepositoryMock {
+  readonly projects: ProjectRecord[]
+  private activeProjectId: string | null
+
+  constructor(projects: ProjectRecord[] = [], activeProjectId: string | null = null) {
+    this.projects = projects
+    this.activeProjectId = activeProjectId
+  }
+
+  async list(): Promise<ProjectRecord[]> {
+    return this.projects
+  }
+
+  async findById(id: string): Promise<ProjectRecord | null> {
+    return this.projects.find((project) => project.id === id) ?? null
+  }
+
+  async getActiveProject(): Promise<ProjectRecord | null> {
+    return this.activeProjectId === null ? null : this.findById(this.activeProjectId)
+  }
+
+  async setActiveProjectId(projectId: string | null): Promise<void> {
+    this.activeProjectId = projectId
+  }
+}
+
 type CreateServiceResult = {
   createAgentBackend: ReturnType<typeof vi.fn>
   messagesRepository: MessagesRepositoryMock
+  projectsRepository: ProjectsRepositoryMock
   service: ChatService
   sessionsRepository: SessionsRepositoryMock
   settingsRepository: {
@@ -324,8 +352,10 @@ function createService(input: {
   agentEvents?: AgentEvent[]
   attachmentsDirectory?: string
   createAgentBackend?: ReturnType<typeof vi.fn>
+  activeProjectId?: string | null
   llmConnections?: NormalizedLlmConnection[]
   messages?: MessageRecord[]
+  projects?: ProjectRecord[]
   sessions?: SessionRecord[]
   settings: AppSettings
 }): CreateServiceResult {
@@ -353,6 +383,10 @@ function createService(input: {
   )
   const agentOperationsRepository = new AgentOperationsRepositoryMock()
   const toolInvocationsRepository = new ToolInvocationsRepositoryMock()
+  const projectsRepository = new ProjectsRepositoryMock(
+    input.projects,
+    input.activeProjectId ?? null
+  )
   const llmConnections = [...(input.llmConnections ?? [])]
   const settingsRepository = {
     findLlmConnectionById: vi.fn(
@@ -388,6 +422,7 @@ function createService(input: {
       attachmentsDirectory: input.attachmentsDirectory,
       createAgentBackend: createAgentBackend as never,
       messagesRepository: messagesRepository as never,
+      projectsRepository: projectsRepository as never,
       sessionsRepository: sessionsRepository as never,
       settingsRepository: settingsRepository as never,
       threadsRepository: threadsRepository as never,
@@ -395,6 +430,7 @@ function createService(input: {
       topicsRepository: topicsRepository as never
     }),
     sessionsRepository,
+    projectsRepository,
     settingsRepository,
     toolInvocationsRepository
   }
@@ -521,6 +557,45 @@ describe('ChatService.sendMessage', () => {
     expect(sessionsRepository.sessions[0].provider).toBe('openrouter')
   })
 
+  it('binds new sessions to the active project and injects project context', async () => {
+    const project = {
+      id: 'project-1',
+      name: 'moon',
+      path: '/workspace/moon',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:00.000Z'
+    }
+    const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
+      void config
+      return createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
+    })
+    const { service, sessionsRepository } = createService({
+      activeProjectId: project.id,
+      createAgentBackend,
+      projects: [project],
+      settings: createClaudeSettings()
+    })
+
+    const result = await service.sendMessage({ content: 'hello' })
+
+    expect(sessionsRepository.sessions[0].projectId).toBe(project.id)
+    expect(result.operation.appContext).toMatchObject({
+      projectId: project.id,
+      projectName: project.name,
+      projectPath: project.path
+    })
+    expect(createAgentBackend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        messages: expect.arrayContaining([
+          expect.objectContaining({
+            role: 'system',
+            content: expect.stringContaining('/workspace/moon')
+          })
+        ])
+      })
+    )
+  })
+
   it('passes Anthropic-compatible providers through pi_compat connection config', async () => {
     const openrouter = createAnthropicCompatibleProvider({
       provider: 'openrouter',
@@ -529,9 +604,10 @@ describe('ChatService.sendMessage', () => {
       defaultBaseUrl: 'https://compat.example.com',
       model: 'anthropic/claude-sonnet'
     })
-    const createAgentBackend = vi.fn((_config: AgentBackendConfig) =>
-      createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
-    )
+    const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
+      void config
+      return createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
+    })
     const { service } = createService({
       createAgentBackend,
       settings: createSettings([openrouter])
@@ -576,9 +652,10 @@ describe('ChatService.sendMessage', () => {
         }
       ]
     })
-    const createAgentBackend = vi.fn((_config: AgentBackendConfig) =>
-      createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
-    )
+    const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
+      void config
+      return createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
+    })
     const { service, sessionsRepository } = createService({
       createAgentBackend,
       settings: createSettings([deepseek])
@@ -604,9 +681,10 @@ describe('ChatService.sendMessage', () => {
       type: 'deepseek',
       model: 'deepseek-v4-flash'
     })
-    const createAgentBackend = vi.fn((_config: AgentBackendConfig) =>
-      createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
-    )
+    const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
+      void config
+      return createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
+    })
     const { service, sessionsRepository } = createService({
       createAgentBackend,
       llmConnections: [createDeepSeekCompatConnection()],
@@ -631,9 +709,10 @@ describe('ChatService.sendMessage', () => {
   })
 
   it('uses an explicit LLM connection before the requested provider', async () => {
-    const createAgentBackend = vi.fn((_config: AgentBackendConfig) =>
-      createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
-    )
+    const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
+      void config
+      return createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
+    })
     const { service, sessionsRepository } = createService({
       createAgentBackend,
       llmConnections: [createDeepSeekCompatConnection()],
@@ -661,9 +740,10 @@ describe('ChatService.sendMessage', () => {
   })
 
   it('uses the persisted default LLM connection before provider fallback', async () => {
-    const createAgentBackend = vi.fn((_config: AgentBackendConfig) =>
-      createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
-    )
+    const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
+      void config
+      return createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
+    })
     const { service, sessionsRepository } = createService({
       createAgentBackend,
       llmConnections: [createAnthropicCompatConnection()],
@@ -697,9 +777,10 @@ describe('ChatService.sendMessage', () => {
       createdAt: '2026-05-09T00:00:00.000Z',
       updatedAt: '2026-05-09T00:00:00.000Z'
     }
-    const createAgentBackend = vi.fn((_config: AgentBackendConfig) =>
-      createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
-    )
+    const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
+      void config
+      return createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
+    })
     const { service } = createService({
       createAgentBackend,
       llmConnections: [createAnthropicCompatConnection({ isDefault: false })],

@@ -1,3 +1,8 @@
+/**
+ * 负责定义 preload 暴露给 renderer 的 typed IPC 合同。
+ * 类型只描述跨进程 wire contract，不直接调用 Electron 或主进程服务。
+ */
+
 import type {
   AgentOperationRecord,
   ChatOperationEvent,
@@ -26,6 +31,8 @@ import type {
   SendChatMessageInput
 } from '@moon/shared/domain/chat-validation'
 import type { AppSettings, ProviderTestResult } from '@moon/shared/domain/settings'
+import type { ProjectRecord, ProjectsChangeEvent } from '@moon/shared/domain/project'
+import type { SetActiveProjectInput } from '@moon/shared/domain/project-validation'
 import type {
   CreateCustomAcpProviderInput,
   CreateCustomProviderInput,
@@ -37,6 +44,9 @@ import type {
 import { ipcChannels } from './channels'
 import type { OpenSettingsInput, WindowState } from './window-contracts'
 
+/**
+ * 每个 IPC channel 的请求与响应类型映射，供 main/preload 双侧复用。
+ */
 export type AppIpcContractMap = {
   [ipcChannels.chat.listSessions]: {
     request: undefined
@@ -122,6 +132,22 @@ export type AppIpcContractMap = {
     request: SaveAppearanceInput
     response: AppSettings
   }
+  [ipcChannels.projects.list]: {
+    request: undefined
+    response: ProjectRecord[]
+  }
+  [ipcChannels.projects.getActive]: {
+    request: undefined
+    response: ProjectRecord | null
+  }
+  [ipcChannels.projects.useExistingFolder]: {
+    request: undefined
+    response: ProjectRecord | null
+  }
+  [ipcChannels.projects.setActive]: {
+    request: SetActiveProjectInput
+    response: ProjectRecord | null
+  }
   [ipcChannels.window.close]: {
     request: undefined
     response: void
@@ -144,6 +170,9 @@ export type AppIpcContractMap = {
   }
 }
 
+/**
+ * preload 注入到 renderer 的最小 API surface，renderer 只能通过该对象跨进程通信。
+ */
 export type MoonApi = {
   chat: {
     listSessions: () => Promise<SessionRecord[]>
@@ -172,6 +201,13 @@ export type MoonApi = {
     testProvider: (input: ProviderConnectionInput) => Promise<ProviderTestResult>
     saveAppearance: (input: SaveAppearanceInput) => Promise<AppSettings>
     onChange: (listener: (settings: AppSettings) => void) => () => void
+  }
+  projects: {
+    list: () => Promise<ProjectRecord[]>
+    getActive: () => Promise<ProjectRecord | null>
+    useExistingFolder: () => Promise<ProjectRecord | null>
+    setActive: (input: SetActiveProjectInput) => Promise<ProjectRecord | null>
+    onChange: (listener: (event: ProjectsChangeEvent) => void) => () => void
   }
   windowControls: {
     close: () => Promise<void>

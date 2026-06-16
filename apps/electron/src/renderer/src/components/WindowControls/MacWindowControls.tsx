@@ -1,3 +1,8 @@
+/**
+ * 负责渲染仿 macOS 的窗口交通灯按钮。
+ * 组件只把点击事件交给调用方，不直接访问 Electron API。
+ */
+
 import { Minus, Plus, X } from 'lucide-react'
 
 type MacWindowControlsProps = {
@@ -12,13 +17,16 @@ const trafficLightButtonClassName =
 const trafficLightGlyphClassName =
   'pointer-events-none absolute inset-0 size-full p-0.5 opacity-0 transition-opacity group-hover:opacity-70'
 
+/**
+ * 渲染关闭、最小化和缩放三个窗口控制按钮。
+ */
 export function MacWindowControls({
   onClose,
   onMinimize,
   onToggleMaximize
 }: MacWindowControlsProps): React.JSX.Element {
   return (
-    <div className="[-webkit-app-region:no-drag] relative z-20 flex items-center gap-3">
+    <div className="[-webkit-app-region:no-drag] relative z-20 flex items-center gap-2.5">
       <button
         type="button"
         aria-label="关闭窗口"

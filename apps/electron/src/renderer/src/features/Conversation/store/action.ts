@@ -1,6 +1,15 @@
+/**
+ * 负责实现会话局部 store 的输入、消息加载和发送动作。
+ * 它只编排 renderer 状态与 chat IPC 调用，不直接访问主进程实现细节。
+ */
+
 import type { ChatInputRuntimeInfo } from '@renderer/features/ChatInput'
 import type { StoreSetter } from '@renderer/store/types'
-import type { AgentOperationRecord, ChatAttachmentRecord, MessageRecord } from '@moon/shared/domain/chat'
+import type {
+  AgentOperationRecord,
+  ChatAttachmentRecord,
+  MessageRecord
+} from '@moon/shared/domain/chat'
 import type {
   CancelAgentOperationInput,
   SendChatMessageInput
@@ -111,6 +120,7 @@ export class ConversationActionImpl {
       const result = await sendChatMessage({
         ...(context.sessionId === null ? {} : { sessionId: context.sessionId }),
         ...(context.threadId === null ? {} : { threadId: context.threadId }),
+        projectId: context.projectId,
         ...(activeLlmConnectionId !== undefined ? { llmConnectionId: activeLlmConnectionId } : {}),
         ...((context.sessionId === null || context.draftProviderId !== null) &&
         activeLlmConnectionId === undefined &&

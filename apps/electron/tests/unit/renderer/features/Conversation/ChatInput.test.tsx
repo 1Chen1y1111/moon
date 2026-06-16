@@ -11,7 +11,9 @@ import { renderWithProviders } from '@tests/helpers/renderer/render-with-provide
 import { installMockWindowApi, type MockMoonApi } from '@tests/helpers/renderer/mock-window-api'
 
 const context: ConversationContext = {
+  draftLlmConnectionId: null,
   draftProviderId: null,
+  projectId: null,
   sessionId: null,
   threadId: null,
   topicId: null

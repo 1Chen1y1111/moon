@@ -5,11 +5,13 @@ import { SWRConfig } from 'swr'
 
 import { AppRouterContextStore, type AppRouteState } from '@renderer/app/router/router-context'
 import { resetChatStore, type ChatState } from '@renderer/store/chat'
+import { resetProjectsStore, type ProjectsStoreState } from '@renderer/store/projects/store'
 import { resetSettingsStore, type SettingsState } from '@renderer/store/settings'
 import { TooltipProvider } from '@moon/ui/ui/tooltip'
 
 type RenderWithProvidersOptions = Omit<RenderOptions, 'wrapper'> & {
   preloadedChat?: Partial<ChatState>
+  preloadedProjects?: Partial<ProjectsStoreState>
   preloadedSettings?: Partial<SettingsState>
   routeState?: AppRouteState
 }
@@ -18,6 +20,7 @@ export function renderWithProviders(
   ui: ReactElement,
   {
     preloadedChat,
+    preloadedProjects,
     preloadedSettings,
     routeState = { activeChatId: null },
     ...renderOptions
@@ -26,6 +29,7 @@ export function renderWithProviders(
   user: ReturnType<typeof userEvent.setup>
 } {
   resetChatStore(preloadedChat)
+  resetProjectsStore(preloadedProjects)
   resetSettingsStore(preloadedSettings)
 
   function Wrapper({ children }: PropsWithChildren): ReactElement {

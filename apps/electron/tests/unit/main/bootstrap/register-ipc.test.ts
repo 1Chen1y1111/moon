@@ -43,6 +43,13 @@ describe('registerIpcHandlers', () => {
     saveAppearance: vi.fn(),
     saveProvider: vi.fn()
   }
+  const projectsService = {
+    createChangeEvent: vi.fn(),
+    getActiveProject: vi.fn(),
+    listProjects: vi.fn(),
+    setActiveProject: vi.fn(),
+    useExistingFolder: vi.fn()
+  }
   const openSettingsWindow = vi.fn()
 
   beforeEach(() => {
@@ -67,6 +74,11 @@ describe('registerIpcHandlers', () => {
     settingsService.getSettings.mockReset()
     settingsService.saveAppearance.mockReset()
     settingsService.saveProvider.mockReset()
+    projectsService.createChangeEvent.mockReset()
+    projectsService.getActiveProject.mockReset()
+    projectsService.listProjects.mockReset()
+    projectsService.setActiveProject.mockReset()
+    projectsService.useExistingFolder.mockReset()
     openSettingsWindow.mockReset()
   })
 
@@ -89,6 +101,7 @@ describe('registerIpcHandlers', () => {
     registerIpcHandlers({
       chatService: chatService as never,
       openSettingsWindow,
+      projectsService: projectsService as never,
       settingsService: settingsService as never
     })
 
@@ -213,6 +226,7 @@ describe('registerIpcHandlers', () => {
     registerIpcHandlers({
       chatService: chatService as never,
       openSettingsWindow,
+      projectsService: projectsService as never,
       settingsService: settingsService as never
     })
 
@@ -370,6 +384,7 @@ describe('registerIpcHandlers', () => {
     registerIpcHandlers({
       chatService: chatService as never,
       openSettingsWindow,
+      projectsService: projectsService as never,
       settingsService: settingsService as never
     })
 
@@ -378,6 +393,61 @@ describe('registerIpcHandlers', () => {
     expect(await saveAppearanceHandler?.({ sender: {} }, { theme: 'dark' })).toBe(settings)
     expect(firstWebContents.send).toHaveBeenCalledWith(ipcChannels.settings.onChange, settings)
     expect(secondWebContents.send).toHaveBeenCalledWith(ipcChannels.settings.onChange, settings)
+  })
+
+  it('registers project handlers and broadcasts project changes', async () => {
+    const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
+    const { ipcChannels } = await import('@ipc/channels')
+    const project = {
+      id: 'project-1',
+      name: 'moon',
+      path: '/workspace/moon',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:00.000Z'
+    }
+    const event = {
+      activeProject: project,
+      projects: [project]
+    }
+    const firstWebContents = { send: vi.fn() }
+    const secondWebContents = { send: vi.fn() }
+
+    projectsService.listProjects.mockResolvedValue([project])
+    projectsService.getActiveProject.mockResolvedValue(project)
+    projectsService.useExistingFolder.mockResolvedValue(project)
+    projectsService.setActiveProject.mockResolvedValue(project)
+    projectsService.createChangeEvent.mockResolvedValue(event)
+    getAllWindowsMock.mockReturnValue([
+      { webContents: firstWebContents },
+      { webContents: secondWebContents }
+    ])
+
+    registerIpcHandlers({
+      chatService: chatService as never,
+      openSettingsWindow,
+      projectsService: projectsService as never,
+      settingsService: settingsService as never
+    })
+
+    expect(await getRegisteredHandler(ipcChannels.projects.list)?.({ sender: {} })).toEqual([
+      project
+    ])
+    expect(await getRegisteredHandler(ipcChannels.projects.getActive)?.({ sender: {} })).toBe(
+      project
+    )
+    expect(
+      await getRegisteredHandler(ipcChannels.projects.useExistingFolder)?.({ sender: {} })
+    ).toBe(project)
+    expect(
+      await getRegisteredHandler(ipcChannels.projects.setActive)?.(
+        { sender: {} },
+        { projectId: 'project-1' }
+      )
+    ).toBe(project)
+
+    expect(projectsService.setActiveProject).toHaveBeenCalledWith({ projectId: 'project-1' })
+    expect(firstWebContents.send).toHaveBeenCalledWith(ipcChannels.projects.onChange, event)
+    expect(secondWebContents.send).toHaveBeenCalledWith(ipcChannels.projects.onChange, event)
   })
 
   it('registers window control handlers that operate on the sender window', async () => {
@@ -397,6 +467,7 @@ describe('registerIpcHandlers', () => {
     registerIpcHandlers({
       chatService: chatService as never,
       openSettingsWindow,
+      projectsService: projectsService as never,
       settingsService: settingsService as never
     })
 
@@ -427,6 +498,7 @@ describe('registerIpcHandlers', () => {
 
     registerIpcHandlers({
       chatService: chatService as never,
+      projectsService: projectsService as never,
       settingsService: settingsService as never,
       openSettingsWindow
     })
@@ -449,6 +521,7 @@ describe('registerIpcHandlers', () => {
 
     registerIpcHandlers({
       chatService: chatService as never,
+      projectsService: projectsService as never,
       settingsService: settingsService as never,
       openSettingsWindow
     })
@@ -471,6 +544,7 @@ describe('registerIpcHandlers', () => {
 
     registerIpcHandlers({
       chatService: chatService as never,
+      projectsService: projectsService as never,
       settingsService: settingsService as never,
       openSettingsWindow
     })

@@ -297,6 +297,7 @@ export const sendChatMessageInputSchema = z
     sessionId: z.string().trim().min(1, 'Session ID is required.').optional(),
     topicId: z.string().trim().min(1, 'Topic ID is required.').optional(),
     threadId: z.string().trim().min(1, 'Thread ID is required.').optional(),
+    projectId: z.string().trim().min(1, 'Project ID is required.').nullable().optional(),
     llmConnectionId: z.string().trim().min(1, 'LLM connection ID is required.').optional(),
     provider: providerIdSchema.optional(),
     content: z.string().trim(),

@@ -66,12 +66,18 @@ describe('WorkspaceSidebar', () => {
     const sidebarShell = screen.getByRole('complementary', { name: 'Workspace navigation' })
 
     expect(sidebarShell).toBeInTheDocument()
-    expect(sidebarShell.firstElementChild).toHaveClass('border-border', 'bg-card', 'rounded-xl')
+    expect(sidebarShell.firstElementChild).toHaveClass('border-border', 'bg-card', 'rounded-lg')
     expect(screen.getByTestId('window-chrome-collapse-trigger')).toBeInTheDocument()
     expect(screen.getByTestId('window-chrome-search-trigger')).toBeInTheDocument()
     expect(screen.getByTestId('window-chrome-compose-trigger')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: '更新' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: '新建聊天' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '项目' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '项目更多操作' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '添加项目' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '对话' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '对话更多操作' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '新建对话' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: '未绑定聊天' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '清除历史' })).not.toBeInTheDocument()
     expect(await screen.findByRole('button', { name: '计划讨论' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '设置' })).not.toBeInTheDocument()
@@ -95,8 +101,9 @@ describe('WorkspaceSidebar', () => {
     expect(within(shellMain).getByRole('region', { name: 'Test route stage' })).toBeInTheDocument()
     expect(sessionButton).toHaveAttribute('aria-current', 'page')
 
-    await user.click(within(rail).getByRole('button', { name: '新建聊天' }))
+    await user.click(within(rail).getByRole('button', { name: '新建对话' }))
     expect(api.chat.createSession).not.toHaveBeenCalled()
+    expect(api.projects.setActive).toHaveBeenCalledWith({ projectId: null })
     expect(window.location.hash).toBe('#/')
     expect(sessionButton).not.toHaveAttribute('aria-current')
   })
@@ -113,7 +120,7 @@ describe('WorkspaceSidebar', () => {
 
     expect(sessionButton).toHaveAttribute('aria-current', 'page')
 
-    await user.click(within(rail).getByRole('button', { name: '新建聊天' }))
+    await user.click(within(rail).getByRole('button', { name: '新建对话' }))
     expect(window.location.hash).toBe('#/')
     expect(api.chat.createSession).not.toHaveBeenCalled()
     expect(sessionButton).not.toHaveAttribute('aria-current')
@@ -135,7 +142,7 @@ describe('WorkspaceSidebar', () => {
     const textbox = screen.getByRole('textbox', { name: '消息内容' })
     await user.type(textbox, '旧会话草稿')
 
-    await user.click(screen.getByRole('button', { name: '新建聊天' }))
+    await user.click(screen.getByRole('button', { name: '新建对话' }))
 
     expect(api.chat.createSession).not.toHaveBeenCalled()
     expect(window.location.hash).toBe('#/')
@@ -172,6 +179,37 @@ describe('WorkspaceSidebar', () => {
     expect(api.windowControls.openSettings).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('dialog', { name: 'Configure Provider' })).not.toBeInTheDocument()
     expect(screen.queryByRole('dialog', { name: '设置' })).not.toBeInTheDocument()
+  })
+
+  it('opens the project add menu and uses an existing folder', async () => {
+    const project = {
+      id: 'project-1',
+      name: 'moon',
+      path: '/workspace/moon',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:00.000Z'
+    }
+    const user = userEvent.setup()
+
+    api = installMockWindowApi({
+      activeProject: project,
+      chatSessions: [],
+      projects: [project]
+    })
+
+    renderRail()
+
+    const sidebar = screen.getByRole('complementary', { name: 'Workspace navigation' })
+
+    await user.click(screen.getByRole('button', { name: '添加项目' }))
+    const useFolderButton = await screen.findByRole('button', { name: '使用现有文件夹' })
+
+    expect(sidebar.contains(useFolderButton)).toBe(false)
+
+    await user.click(useFolderButton)
+
+    expect(api.projects.useExistingFolder).toHaveBeenCalledTimes(1)
+    expect(await screen.findByRole('button', { name: 'moon' })).toBeInTheDocument()
   })
 
   it('keeps the more actions menu open long enough to move into it', () => {

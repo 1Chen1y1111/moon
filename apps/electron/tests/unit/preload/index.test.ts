@@ -80,6 +80,10 @@ describe('preload api', () => {
     await api.chat.rejectToolCall({ toolInvocationId: 'tool-1' })
     await api.settings.saveAppearance({ theme: 'dark' })
     await api.settings.saveProvider(input)
+    await api.projects.list()
+    await api.projects.getActive()
+    await api.projects.useExistingFolder()
+    await api.projects.setActive({ projectId: 'project-1' })
     await api.windowControls.openSettings({ section: 'providers' })
 
     expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.settings.get)
@@ -123,6 +127,12 @@ describe('preload api', () => {
       theme: 'dark'
     })
     expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.settings.saveProvider, input)
+    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.projects.list)
+    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.projects.getActive)
+    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.projects.useExistingFolder)
+    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.projects.setActive, {
+      projectId: 'project-1'
+    })
     expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.window.openSettings, {
       section: 'providers'
     })
@@ -197,6 +207,30 @@ describe('preload api', () => {
 
     expect(listener).toHaveBeenCalledWith(event)
     expect(ipcOffMock).toHaveBeenCalledWith(ipcChannels.chat.operationEvent, handler)
+  })
+
+  it('cleans up the projects change event subscription', async () => {
+    await import('@preload/index')
+
+    const api = getExposedApi()
+    const listener = vi.fn()
+    const event = {
+      activeProject: null,
+      projects: []
+    }
+
+    const unsubscribe = api.projects.onChange(listener)
+    const handler = ipcOnMock.mock.calls.find(
+      ([channel]) => channel === ipcChannels.projects.onChange
+    )?.[1]
+
+    expect(handler).toBeTypeOf('function')
+
+    handler?.({}, event)
+    unsubscribe()
+
+    expect(listener).toHaveBeenCalledWith(event)
+    expect(ipcOffMock).toHaveBeenCalledWith(ipcChannels.projects.onChange, handler)
   })
 
   it('cleans up the legacy chat send message event subscription', async () => {

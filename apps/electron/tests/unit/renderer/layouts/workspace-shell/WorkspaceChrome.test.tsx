@@ -18,7 +18,7 @@ describe('WorkspaceChrome', () => {
 
     renderWithProviders(<WorkspaceChrome />)
 
-    expect(screen.getByRole('banner')).toHaveClass('[-webkit-app-region:drag]', 'p-3')
+    expect(screen.getByRole('banner')).toHaveClass('[-webkit-app-region:drag]', 'px-2.5', 'py-2')
     expect(screen.getByRole('banner')).not.toHaveClass('h-moon-chrome')
 
     await user.click(screen.getByRole('button', { name: '关闭窗口' }))

@@ -22,6 +22,7 @@ import {
 import type { NormalizedLlmConnection } from '@moon/shared/config'
 import type { AgentOperationsRepository } from '../repositories/agent-operations-repository'
 import type { MessagesRepository } from '../repositories/messages-repository'
+import type { ProjectsRepository } from '../repositories/projects-repository'
 import type { SessionsRepository } from '../repositories/sessions-repository'
 import type { ThreadsRepository } from '../repositories/threads-repository'
 import type { ToolInvocationsRepository } from '../repositories/tool-invocations-repository'
@@ -42,6 +43,7 @@ import type {
   TopicRecord
 } from '@moon/shared/domain/chat'
 import { defaultChatUserId } from '@moon/shared/domain/chat'
+import type { ProjectRecord } from '@moon/shared/domain/project'
 import {
   approveToolCallInputSchema,
   cancelAgentOperationInputSchema,
@@ -87,6 +89,7 @@ type ChatServiceDependencies = {
   attachmentsDirectory?: string
   createAgentBackend?: AgentBackendFactory
   messagesRepository: MessagesRepository
+  projectsRepository?: ProjectsRepository
   sessionsRepository: SessionsRepository
   settingsRepository: SettingsRepository
   threadsRepository: ThreadsRepository
@@ -113,6 +116,7 @@ type ResolvedAgentTarget = {
 }
 
 type ConversationScope = {
+  project: ProjectRecord | null
   session: SessionRecord
   topic: TopicRecord
   thread: ThreadRecord
@@ -197,6 +201,20 @@ function normalizeToolResult(value: unknown): Record<string, unknown> {
   }
 
   return { value }
+}
+
+/**
+ * 生成只存在于本轮 backend 调用里的项目上下文消息，不持久化为聊天消息。
+ */
+function createProjectContextMessage(project: ProjectRecord): AgentBackendMessage {
+  return {
+    role: 'system',
+    content: [
+      `当前项目：${project.name}`,
+      `项目根目录：${project.path}`,
+      '回答和后续工具使用应把该目录视为当前工作区边界。'
+    ].join('\n')
+  }
 }
 
 /**
@@ -362,6 +380,7 @@ export class ChatService {
   private readonly attachmentsDirectory: string
   private readonly createAgentBackend: AgentBackendFactory
   private readonly messagesRepository: MessagesRepository
+  private readonly projectsRepository?: ProjectsRepository
   private readonly sessionsRepository: SessionsRepository
   private readonly settingsRepository: SettingsRepository
   private readonly threadsRepository: ThreadsRepository
@@ -374,6 +393,7 @@ export class ChatService {
     attachmentsDirectory,
     createAgentBackend,
     messagesRepository,
+    projectsRepository,
     sessionsRepository,
     settingsRepository,
     threadsRepository,
@@ -385,6 +405,7 @@ export class ChatService {
       createAgentBackend ?? ((config) => agentBackend ?? createAgent(config))
     this.attachmentsDirectory = attachmentsDirectory ?? join(process.cwd(), '.moon-attachments')
     this.messagesRepository = messagesRepository
+    this.projectsRepository = projectsRepository
     this.sessionsRepository = sessionsRepository
     this.settingsRepository = settingsRepository
     this.threadsRepository = threadsRepository
@@ -422,10 +443,12 @@ export class ChatService {
 
   async createSession(): Promise<SessionRecord> {
     const target = await this.resolveDefaultAgentTarget()
+    const project = await this.resolveInputProject({}, null)
     const scope = await this.createConversationScope(
       target.providerId,
       target.persistedLlmConnectionId,
-      newChatTitle
+      newChatTitle,
+      project
     )
 
     return scope.session
@@ -462,12 +485,14 @@ export class ChatService {
     const persistedLlmConnectionId = target.persistedLlmConnectionId
     const providerId = target.providerId
     const modelId = connection.model
+    const project = await this.resolveInputProject(parsedInput, target.session)
 
     const scope = await this.resolveConversationScope(
       parsedInput,
       target.session,
       providerId,
-      persistedLlmConnectionId
+      persistedLlmConnectionId,
+      project
     )
     const operation = await this.createOperation(
       scope,
@@ -721,6 +746,7 @@ export class ChatService {
     scope: ConversationScope
   }): Promise<SendMessageResult> {
     const eventScope = {
+      project: scope.project,
       session: scope.session,
       topic: scope.topic,
       thread: scope.thread
@@ -736,10 +762,14 @@ export class ChatService {
           .map((message) => toAgentBackendMessage(message, this.attachmentsDirectory))
       )
     ).filter((message): message is AgentBackendMessage => message !== null)
+    const scopedBackendMessages =
+      scope.project === null
+        ? backendMessages
+        : [createProjectContextMessage(scope.project), ...backendMessages]
     const currentUserMessage =
       [...previousMessages].reverse().find((message) => message.role === 'user')?.content ?? ''
     const agentBackend = this.createAgentBackend(
-      createConnectionAgentBackendConfig(connection, backendMessages)
+      createConnectionAgentBackendConfig(connection, scopedBackendMessages)
     )
 
     try {
@@ -1283,13 +1313,15 @@ export class ChatService {
     input: SendChatMessageInput,
     session: SessionRecord | null,
     providerId: ProviderId,
-    persistedLlmConnectionId: string | null
+    persistedLlmConnectionId: string | null,
+    project: ProjectRecord | null
   ): Promise<ConversationScope> {
     if (session === null) {
       return this.createConversationScope(
         providerId,
         persistedLlmConnectionId,
-        createChatTitle(input.content || input.attachments?.[0]?.name || '')
+        createChatTitle(input.content || input.attachments?.[0]?.name || ''),
+        project
       )
     }
 
@@ -1305,7 +1337,7 @@ export class ChatService {
         throw new Error('Chat topic not found.')
       }
 
-      return { session, topic, thread }
+      return { project, session, topic, thread }
     }
 
     const topic =
@@ -1314,16 +1346,20 @@ export class ChatService {
         : await this.topicsRepository.findById(input.topicId)
 
     if (topic === null) {
-      return this.createTopicAndThread(session, defaultTopicTitle, defaultThreadTitle)
+      return this.createTopicAndThread(session, defaultTopicTitle, defaultThreadTitle, project)
     }
 
     return {
+      project,
       session,
       topic,
       thread: await this.createThread(topic, defaultThreadTitle)
     }
   }
 
+  /**
+   * 从 operation appContext 还原会话作用域，保证恢复运行时仍绑定原项目。
+   */
   private async resolveOperationScope(operation: AgentOperationRecord): Promise<ConversationScope> {
     const sessionId =
       typeof operation.appContext?.sessionId === 'string'
@@ -1342,19 +1378,23 @@ export class ChatService {
       throw new Error('Agent operation context not found.')
     }
 
-    return { session, topic, thread }
+    return { project: await this.resolveSessionProject(session), session, topic, thread }
   }
 
+  /**
+   * 创建会话、默认 topic 和默认 thread，并把会话绑定到当前项目。
+   */
   private async createConversationScope(
     providerId: ProviderId,
     persistedLlmConnectionId: string | null,
-    title: string
+    title: string,
+    project: ProjectRecord | null
   ): Promise<ConversationScope> {
     const timestamp = createTimestamp()
     const session = await this.sessionsRepository.save({
       id: randomUUID(),
       llmConnectionId: persistedLlmConnectionId,
-      projectId: null,
+      projectId: project?.id ?? null,
       provider: providerId,
       title,
       status: 'active',
@@ -1363,13 +1403,17 @@ export class ChatService {
       updatedAt: timestamp
     })
 
-    return this.createTopicAndThread(session, title, defaultThreadTitle)
+    return this.createTopicAndThread(session, title, defaultThreadTitle, project)
   }
 
+  /**
+   * 为会话创建默认 topic/thread，并沿用调用方解析好的项目上下文。
+   */
   private async createTopicAndThread(
     session: SessionRecord,
     topicTitle: string,
-    threadTitle: string
+    threadTitle: string,
+    project: ProjectRecord | null
   ): Promise<ConversationScope> {
     const timestamp = createTimestamp()
     const topic = await this.topicsRepository.save({
@@ -1395,9 +1439,12 @@ export class ChatService {
       updatedAt: timestamp
     })
 
-    return { session, topic, thread }
+    return { project, session, topic, thread }
   }
 
+  /**
+   * 在现有 topic 下创建新的 continuation thread。
+   */
   private async createThread(topic: TopicRecord, title: string): Promise<ThreadRecord> {
     const timestamp = createTimestamp()
 
@@ -1414,6 +1461,9 @@ export class ChatService {
     })
   }
 
+  /**
+   * 创建 agent operation，并把项目上下文写入 appContext 供恢复和审计使用。
+   */
   private async createOperation(
     scope: ConversationScope,
     providerId: ProviderId,
@@ -1436,25 +1486,41 @@ export class ChatService {
       appContext: {
         sessionId: scope.session.id,
         ...(persistedLlmConnectionId === null ? {} : { llmConnectionId: persistedLlmConnectionId }),
-        llmConnectionBackend: connection.backend
+        llmConnectionBackend: connection.backend,
+        ...(scope.project === null
+          ? {}
+          : {
+              projectId: scope.project.id,
+              projectName: scope.project.name,
+              projectPath: scope.project.path
+            })
       },
       createdAt: timestamp,
       updatedAt: timestamp
     })
   }
 
+  /**
+   * 读取会话默认 topic，当前策略使用列表首项作为默认值。
+   */
   private async getDefaultTopic(sessionId: string): Promise<TopicRecord | null> {
     const topics = await this.topicsRepository.listBySession(sessionId)
 
     return topics[0] ?? null
   }
 
+  /**
+   * 读取会话默认 thread，当前策略使用列表首项作为默认值。
+   */
   private async getDefaultThread(sessionId: string): Promise<ThreadRecord | null> {
     const threads = await this.threadsRepository.listBySession(sessionId)
 
     return threads[0] ?? null
   }
 
+  /**
+   * 用户首条消息后按内容刷新新会话标题，已有自定义标题保持不变。
+   */
   private async touchSessionWithTitle(
     session: SessionRecord,
     title: string
@@ -1468,6 +1534,9 @@ export class ChatService {
     })
   }
 
+  /**
+   * 用户首条消息后按内容刷新默认 topic 标题。
+   */
   private async touchTopicTitle(topic: TopicRecord, title: string): Promise<TopicRecord> {
     const shouldUpdateTitle = topic.title === defaultTopicTitle || topic.title === newChatTitle
 
@@ -1478,6 +1547,9 @@ export class ChatService {
     })
   }
 
+  /**
+   * 用户首条消息后按内容刷新默认 thread 标题并更新时间。
+   */
   private async touchThreadTitle(thread: ThreadRecord, title: string): Promise<ThreadRecord> {
     const shouldUpdateTitle = thread.title === defaultThreadTitle || thread.title === newChatTitle
     const timestamp = createTimestamp()
@@ -1490,6 +1562,9 @@ export class ChatService {
     })
   }
 
+  /**
+   * 读取持久化 API key 并合并进 provider 设置，避免 renderer 接触密钥。
+   */
   private async withStoredApiKey(provider: ProviderSettings): Promise<ProviderSettings> {
     const apiKey = await this.settingsRepository.getProviderApiKey(provider.provider)
 
@@ -1497,5 +1572,51 @@ export class ChatService {
       ...provider,
       apiKey
     }
+  }
+
+  /**
+   * 解析新消息归属项目；已有 session 优先使用 session 绑定，空输入回退 active project。
+   */
+  private async resolveInputProject(
+    input: Pick<SendChatMessageInput, 'projectId'>,
+    session: SessionRecord | null
+  ): Promise<ProjectRecord | null> {
+    if (session !== null) {
+      return this.resolveSessionProject(session)
+    }
+
+    if (input.projectId === null) {
+      return null
+    }
+
+    if (input.projectId !== undefined) {
+      return this.resolveProjectById(input.projectId)
+    }
+
+    return this.projectsRepository?.getActiveProject() ?? null
+  }
+
+  /**
+   * 根据 session.projectId 查找项目，null 表示历史未绑定会话。
+   */
+  private async resolveSessionProject(session: SessionRecord): Promise<ProjectRecord | null> {
+    return session.projectId === null ? null : this.resolveProjectById(session.projectId)
+  }
+
+  /**
+   * 按 id 读取项目，避免输入引用不存在项目时静默降级。
+   */
+  private async resolveProjectById(projectId: string): Promise<ProjectRecord> {
+    if (this.projectsRepository === undefined) {
+      throw new Error('Project repository is not available.')
+    }
+
+    const project = await this.projectsRepository.findById(projectId)
+
+    if (project === null) {
+      throw new Error('Project not found.')
+    }
+
+    return project
   }
 }

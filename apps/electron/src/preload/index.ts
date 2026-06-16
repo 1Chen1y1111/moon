@@ -1,8 +1,16 @@
+/**
+ * 负责把受限的 typed IPC bridge 暴露到 renderer。
+ * 该文件只做 channel 转发和事件订阅清理，不包含主进程业务实现。
+ */
+
 import { contextBridge, ipcRenderer } from 'electron'
 
 import { ipcChannels } from '@ipc/channels'
 import type { AppIpcContractMap, MoonApi } from '@ipc/contracts'
 
+/**
+ * 调用指定 IPC channel，并在无请求体时避免传递额外 undefined 参数。
+ */
 function invokeIpcChannel<TChannel extends keyof AppIpcContractMap>(
   channel: TChannel,
   request?: AppIpcContractMap[TChannel]['request']
@@ -66,6 +74,23 @@ const api: MoonApi = {
     saveAppearance: (input) => invokeIpcChannel(ipcChannels.settings.saveAppearance, input),
     onChange: (listener) => {
       const channel = ipcChannels.settings.onChange
+      const handler = (_event: unknown, payload: Parameters<typeof listener>[0]): void =>
+        listener(payload)
+
+      ipcRenderer.on(channel, handler)
+
+      return () => {
+        ipcRenderer.off(channel, handler)
+      }
+    }
+  },
+  projects: {
+    list: () => invokeIpcChannel(ipcChannels.projects.list),
+    getActive: () => invokeIpcChannel(ipcChannels.projects.getActive),
+    useExistingFolder: () => invokeIpcChannel(ipcChannels.projects.useExistingFolder),
+    setActive: (input) => invokeIpcChannel(ipcChannels.projects.setActive, input),
+    onChange: (listener) => {
+      const channel = ipcChannels.projects.onChange
       const handler = (_event: unknown, payload: Parameters<typeof listener>[0]): void =>
         listener(payload)
 

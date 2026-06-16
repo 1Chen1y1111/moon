@@ -1,7 +1,14 @@
+/**
+ * 负责渲染聊天路由并把全局 chat/project 状态注入 Conversation。
+ * 页面只做路由级组合，聊天发送和持久化由下层 store 与 IPC 处理。
+ */
+
 import { useEffect, useMemo } from 'react'
 
 import { useAppRouterContext } from '@renderer/app/router/router-context'
 import { ChatInput, ChatList, ConversationProvider } from '@renderer/features/Conversation'
+import { useProjectsStore } from '@renderer/store/projects'
+import { selectActiveProject } from '@renderer/store/projects/selectors'
 import { useChatStore } from '@renderer/store/chat'
 import {
   selectChatActiveSessionId,
@@ -18,6 +25,9 @@ import {
   selectChatTopics
 } from '@renderer/store/chat/selectors'
 
+/**
+ * 渲染当前聊天页面，并根据 active project/session 生成发送消息所需上下文。
+ */
 export function ChatPage(): React.JSX.Element {
   const { routeState } = useAppRouterContext()
   const sessions = useChatStore(selectChatSessions)
@@ -32,6 +42,7 @@ export function ChatPage(): React.JSX.Element {
   const messages = useChatStore(selectChatMessages)
   const messagesStatus = useChatStore(selectChatMessagesStatus)
   const error = useChatStore(selectChatError)
+  const activeProject = useProjectsStore(selectActiveProject)
   const loadChatSessions = useChatStore((state) => state.loadChatSessions)
   const loadChatTopics = useChatStore((state) => state.loadChatTopics)
   const loadChatThreads = useChatStore((state) => state.loadChatThreads)
@@ -51,11 +62,14 @@ export function ChatPage(): React.JSX.Element {
     () => ({
       draftLlmConnectionId: routeState.draftLlmConnectionId ?? null,
       draftProviderId: routeState.draftProviderId ?? null,
+      projectId: activeSession?.projectId ?? activeProject?.id ?? null,
       sessionId: routeState.activeChatId,
       threadId: activeSessionId === routeState.activeChatId ? activeThreadId : null,
       topicId: activeSessionId === routeState.activeChatId ? activeTopicId : null
     }),
     [
+      activeProject?.id,
+      activeSession?.projectId,
       activeSessionId,
       activeThreadId,
       activeTopicId,
@@ -88,7 +102,7 @@ export function ChatPage(): React.JSX.Element {
   const hasInitMessages = routeState.activeChatId === null || visibleMessages !== undefined
   const conversationKey =
     routeState.activeChatId === null
-      ? `new:${routeState.newChatRequestId ?? 'initial'}`
+      ? `new:${conversationContext.projectId ?? 'unbound'}:${routeState.newChatRequestId ?? 'initial'}`
       : `session:${routeState.activeChatId}:topic:${conversationContext.topicId ?? 'none'}:thread:${conversationContext.threadId ?? 'none'}`
   const isEmptyChatEntry = routeState.activeChatId === null
   const errorAlert =

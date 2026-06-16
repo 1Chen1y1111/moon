@@ -10,6 +10,7 @@ import { ChatPage } from '@renderer/pages/chat'
 import { renderWithProviders } from '@tests/helpers/renderer/render-with-providers'
 import { installMockWindowApi, type MockMoonApi } from '@tests/helpers/renderer/mock-window-api'
 import type { MessageRecord } from '@moon/shared/domain/chat'
+import type { ProjectRecord } from '@moon/shared/domain/project'
 import { createDefaultAppSettings, type AppSettings } from '@moon/shared/domain/settings'
 
 const session = {
@@ -74,6 +75,14 @@ const assistantMessage = {
   createdAt: '2026-05-09T00:00:01.000Z',
   updatedAt: '2026-05-09T00:00:01.000Z'
 } as const
+
+const project = {
+  id: 'project-1',
+  name: 'moon',
+  path: '/workspace/moon',
+  createdAt: '2026-05-09T00:00:00.000Z',
+  updatedAt: '2026-05-09T00:00:00.000Z'
+} satisfies ProjectRecord
 
 function createModelSwitchSettings(): AppSettings {
   const settings = createDefaultAppSettings()
@@ -240,9 +249,29 @@ describe('ChatPage', () => {
     await user.click(screen.getByRole('button', { name: '发送' }))
 
     await waitFor(() =>
-      expect(api.chat.createMessageTurn).toHaveBeenCalledWith({ content: '你好' })
+      expect(api.chat.createMessageTurn).toHaveBeenCalledWith({ content: '你好', projectId: null })
     )
     expect(await screen.findByText('你好，我在。')).toBeInTheDocument()
+  })
+
+  it('sends a new chat message with the active project id', async () => {
+    const { user } = renderWithProviders(<ChatPage />, {
+      preloadedProjects: {
+        activeProject: project,
+        loadStatus: 'succeeded',
+        projects: [project]
+      }
+    })
+
+    await user.type(screen.getByRole('textbox', { name: '消息内容' }), '项目任务')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+
+    await waitFor(() =>
+      expect(api.chat.createMessageTurn).toHaveBeenCalledWith({
+        content: '项目任务',
+        projectId: 'project-1'
+      })
+    )
   })
 
   it('renders assistant markdown and reasoning content', () => {
@@ -286,6 +315,7 @@ describe('ChatPage', () => {
     await waitFor(() =>
       expect(api.chat.createMessageTurn).toHaveBeenCalledWith({
         content: '',
+        projectId: null,
         attachments: [
           expect.objectContaining({
             id: 'attachment-1',
@@ -329,6 +359,7 @@ describe('ChatPage', () => {
     await waitFor(() =>
       expect(api.chat.createMessageTurn).toHaveBeenCalledWith({
         content: '',
+        projectId: null,
         attachments: [
           expect.objectContaining({
             name: 'docs/note.md',
@@ -388,6 +419,7 @@ describe('ChatPage', () => {
     await waitFor(() =>
       expect(api.chat.createMessageTurn).toHaveBeenCalledWith({
         provider: 'claude',
+        projectId: null,
         content: 'hello'
       })
     )
@@ -514,6 +546,7 @@ describe('ChatPage', () => {
     await waitFor(() =>
       expect(api.chat.createMessageTurn).toHaveBeenCalledWith({
         llmConnectionId: 'deepseek',
+        projectId: null,
         content: 'hello'
       })
     )
@@ -585,6 +618,7 @@ describe('ChatPage', () => {
         sessionId: 'session-1',
         threadId: 'thread-1',
         provider: 'claude',
+        projectId: null,
         content: 'hello'
       })
     )
@@ -683,6 +717,7 @@ describe('ChatPage', () => {
     await waitFor(() =>
       expect(api.chat.createMessageTurn).toHaveBeenCalledWith({
         content: '继续',
+        projectId: null,
         sessionId: 'session-1',
         threadId: 'thread-1'
       })

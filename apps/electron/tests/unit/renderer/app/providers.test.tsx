@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 
 import { AppProviders } from '@renderer/app/providers'
 import { resetChatStore } from '@renderer/store/chat'
+import { resetProjectsStore } from '@renderer/store/projects'
 import { selectActiveSettingsSection } from '@renderer/store/settings/selectors'
 import { resetSettingsStore, useSettingsStore } from '@renderer/store/settings'
 import { createDefaultAppSettings } from '@moon/shared/domain/settings'
@@ -18,6 +19,7 @@ describe('AppProviders', () => {
     document.documentElement.classList.remove('dark')
     document.documentElement.style.colorScheme = ''
     resetChatStore()
+    resetProjectsStore()
     resetSettingsStore()
     installMockWindowApi()
   })

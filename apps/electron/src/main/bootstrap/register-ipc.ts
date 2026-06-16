@@ -1,26 +1,51 @@
+/**
+ * 负责注册主进程 IPC handler，并把 renderer 请求分发到对应 service。
+ * 这里是跨进程 wire contract 的主进程入口，不直接实现业务持久化细节。
+ */
+
 import { BrowserWindow, ipcMain } from 'electron'
 
 import { ipcChannels } from '@ipc/channels'
 import { openSettingsInputSchema } from '@ipc/window-contracts'
 import type { AppSettings } from '@moon/shared/domain/settings'
 import type { ChatService } from '../services/chat-service'
+import type { ProjectsService } from '../services/projects-service'
 import type { SettingsService } from '../services/settings-service'
 
 type RegisterIpcDependencies = {
   chatService: ChatService
   settingsService: SettingsService
+  projectsService: ProjectsService
   openSettingsWindow: (input?: { section?: 'providers' }) => BrowserWindow
 }
 
+/**
+ * 向所有已打开窗口广播最新设置快照。
+ */
 function broadcastSettingsChange(settings: AppSettings): void {
   BrowserWindow.getAllWindows().forEach((window) => {
     window.webContents.send(ipcChannels.settings.onChange, settings)
   })
 }
 
+/**
+ * 生成项目快照并广播给所有 renderer 窗口。
+ */
+async function broadcastProjectsChange(projectsService: ProjectsService): Promise<void> {
+  const event = await projectsService.createChangeEvent()
+
+  BrowserWindow.getAllWindows().forEach((window) => {
+    window.webContents.send(ipcChannels.projects.onChange, event)
+  })
+}
+
+/**
+ * 注册 Moon renderer 可调用的全部 IPC handler；重复注册前会清理旧 handler。
+ */
 export function registerIpcHandlers({
   chatService,
   openSettingsWindow,
+  projectsService,
   settingsService
 }: RegisterIpcDependencies): void {
   ipcMain.removeHandler(ipcChannels.chat.listSessions)
@@ -44,6 +69,10 @@ export function registerIpcHandlers({
   ipcMain.removeHandler(ipcChannels.settings.fetchProviderModels)
   ipcMain.removeHandler(ipcChannels.settings.testProvider)
   ipcMain.removeHandler(ipcChannels.settings.saveAppearance)
+  ipcMain.removeHandler(ipcChannels.projects.list)
+  ipcMain.removeHandler(ipcChannels.projects.getActive)
+  ipcMain.removeHandler(ipcChannels.projects.useExistingFolder)
+  ipcMain.removeHandler(ipcChannels.projects.setActive)
   ipcMain.removeHandler(ipcChannels.window.close)
   ipcMain.removeHandler(ipcChannels.window.minimize)
   ipcMain.removeHandler(ipcChannels.window.toggleMaximize)
@@ -128,6 +157,22 @@ export function registerIpcHandlers({
     broadcastSettingsChange(settings)
 
     return settings
+  })
+  ipcMain.handle(ipcChannels.projects.list, () => projectsService.listProjects())
+  ipcMain.handle(ipcChannels.projects.getActive, () => projectsService.getActiveProject())
+  ipcMain.handle(ipcChannels.projects.useExistingFolder, async () => {
+    const project = await projectsService.useExistingFolder()
+
+    await broadcastProjectsChange(projectsService)
+
+    return project
+  })
+  ipcMain.handle(ipcChannels.projects.setActive, async (_event, input) => {
+    const project = await projectsService.setActiveProject(input)
+
+    await broadcastProjectsChange(projectsService)
+
+    return project
   })
   ipcMain.handle(ipcChannels.window.close, (event) => {
     BrowserWindow.fromWebContents(event.sender)?.close()

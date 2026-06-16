@@ -1,3 +1,8 @@
+/**
+ * 负责为会话 UI 创建并同步局部 Zustand store。
+ * 它把路由/项目/消息上下文同步进会话组件树，不直接发起业务 IPC。
+ */
+
 import { useEffect, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react'
 
 import type { MessageRecord } from '@moon/shared/domain/chat'
@@ -15,16 +20,23 @@ export interface ConversationProviderProps {
   skipFetch?: boolean
 }
 
+/**
+ * 根据会话、线程、项目和草稿 provider 信息生成 store 重建 key。
+ */
 function getConversationContextKey(context: ConversationContext): string {
   return [
     context.sessionId ?? 'new',
     context.topicId ?? 'no-topic',
     context.threadId ?? 'no-thread',
+    context.projectId ?? 'no-project',
     context.draftLlmConnectionId ?? 'no-draft-connection',
     context.draftProviderId ?? 'no-draft-provider'
   ].join(':')
 }
 
+/**
+ * 把外部 props 同步进 Conversation 局部 store。
+ */
 function StoreUpdater({
   context,
   hasInitMessages,
@@ -91,6 +103,9 @@ function StoreUpdater({
   return null
 }
 
+/**
+ * 为会话组件树提供独立 store，并在项目/会话上下文变化时重建局部状态。
+ */
 export function ConversationProvider({
   children,
   context,
