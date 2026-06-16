@@ -2,6 +2,7 @@ import { createContext, useContext } from 'react'
 
 export type AppRouteState = {
   activeChatId: string | null
+  draftLlmConnectionId?: string | null
   draftProviderId?: string | null
   newChatRequestId?: string
 }

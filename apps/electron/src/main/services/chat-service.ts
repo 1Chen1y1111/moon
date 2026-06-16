@@ -1041,7 +1041,7 @@ export class ChatService {
   }
 
   /**
-   * 解析新消息应使用的 agent target，显式 provider 选择优先于 session/default connection。
+   * 解析新消息应使用的 agent target，显式 connection 优先于 provider 和会话默认值。
    */
   private async resolveAgentTarget(input: SendChatMessageInput): Promise<ResolvedAgentTarget> {
     const settings = await this.settingsRepository.getSettings()
@@ -1051,6 +1051,20 @@ export class ChatService {
 
       if (session === null) {
         throw new Error('Chat session not found.')
+      }
+
+      if (input.llmConnectionId !== undefined) {
+        const inputConnection = await this.resolveInputLlmConnection(input.llmConnectionId)
+
+        return this.createConnectionAgentTarget(
+          inputConnection,
+          {
+            ...session,
+            provider: inputConnection.providerId ?? input.provider ?? session.provider,
+            llmConnectionId: inputConnection.id
+          },
+          input.provider ?? session.provider
+        )
       }
 
       if (input.provider !== undefined) {
@@ -1082,6 +1096,12 @@ export class ChatService {
       }
 
       return this.createProviderAgentTarget(settings.providers[session.provider], session)
+    }
+
+    if (input.llmConnectionId !== undefined) {
+      const inputConnection = await this.resolveInputLlmConnection(input.llmConnectionId)
+
+      return this.createConnectionAgentTarget(inputConnection, null, input.provider)
     }
 
     if (input.provider !== undefined) {
@@ -1153,6 +1173,19 @@ export class ChatService {
     return session.llmConnectionId === undefined || session.llmConnectionId === null
       ? null
       : this.settingsRepository.findLlmConnectionById(session.llmConnectionId)
+  }
+
+  /**
+   * 解析用户显式指定的 connection，缺失时抛错避免静默切到其它模型。
+   */
+  private async resolveInputLlmConnection(id: string): Promise<NormalizedLlmConnection> {
+    const connection = await this.settingsRepository.findLlmConnectionById(id)
+
+    if (connection === null) {
+      throw new Error('LLM connection not found.')
+    }
+
+    return connection
   }
 
   /**

@@ -49,6 +49,7 @@ export function ChatPage(): React.JSX.Element {
     topics.every((topic) => topic.sessionId === routeState.activeChatId)
   const conversationContext = useMemo(
     () => ({
+      draftLlmConnectionId: routeState.draftLlmConnectionId ?? null,
       draftProviderId: routeState.draftProviderId ?? null,
       sessionId: routeState.activeChatId,
       threadId: activeSessionId === routeState.activeChatId ? activeThreadId : null,
@@ -59,6 +60,7 @@ export function ChatPage(): React.JSX.Element {
       activeThreadId,
       activeTopicId,
       routeState.activeChatId,
+      routeState.draftLlmConnectionId,
       routeState.draftProviderId
     ]
   )

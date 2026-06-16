@@ -165,7 +165,7 @@ describe('ChatService integration', () => {
 
         const syncedConnection = await settingsRepository.findLlmConnectionById('deepseek')
         const result = await chatService.createMessageTurn({
-          provider: 'deepseek',
+          llmConnectionId: 'deepseek',
           content: '你好'
         })
         const sessions = await sessionsRepository.list()

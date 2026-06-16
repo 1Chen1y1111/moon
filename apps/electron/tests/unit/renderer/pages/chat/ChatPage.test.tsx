@@ -495,15 +495,25 @@ describe('ChatPage', () => {
 
     await user.click(screen.getByRole('button', { name: /切换模型/ }))
 
-    expect(await screen.findByRole('button', { name: '选择模型 DeepSeek V4 Flash' })).toBeVisible()
-    expect(screen.queryByRole('button', { name: '选择模型 Claude Sonnet 4.5' })).not.toBeInTheDocument()
+    const deepseekOption = await screen.findByRole('button', {
+      name: '选择模型 DeepSeek V4 Flash'
+    })
+
+    expect(deepseekOption).toBeVisible()
+    expect(
+      screen.queryByRole('button', { name: '选择模型 Claude Sonnet 4.5' })
+    ).not.toBeInTheDocument()
+
+    await user.click(deepseekOption)
+
+    expect(api.settings.saveProvider).not.toHaveBeenCalled()
 
     await user.type(screen.getByRole('textbox', { name: '消息内容' }), 'hello')
     await user.click(screen.getByRole('button', { name: '发送' }))
 
     await waitFor(() =>
       expect(api.chat.createMessageTurn).toHaveBeenCalledWith({
-        provider: 'deepseek',
+        llmConnectionId: 'deepseek',
         content: 'hello'
       })
     )

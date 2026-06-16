@@ -90,6 +90,7 @@ export default function Upload(): React.JSX.Element {
   const selectedModel = selectChatTarget(appSettings, {
     activeSessionConnectionId: activeSession?.llmConnectionId,
     activeSessionProvider: activeSession?.provider,
+    draftLlmConnectionId: routeState.draftLlmConnectionId,
     draftProviderId: routeState.draftProviderId
   }).model
   const canUploadImage =

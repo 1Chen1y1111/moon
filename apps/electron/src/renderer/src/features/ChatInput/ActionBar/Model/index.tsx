@@ -25,6 +25,7 @@ import type { SaveProviderInput } from '@moon/shared/domain/settings-validation'
 import {
   createChatProviderGroups,
   selectChatTarget,
+  type ChatModelOption,
   type ChatProviderGroup
 } from '../../chat-target-selection'
 
@@ -79,6 +80,15 @@ function createSaveProviderInput(
   }
 }
 
+/**
+ * 为模型选项生成稳定 key；有 connection 时优先使用 connection 身份。
+ */
+function createModelOptionKey(provider: ProviderSettings, option: ChatModelOption): string {
+  return option.connection === undefined
+    ? `${provider.provider}:${option.model.id}`
+    : `connection:${option.connection.id}`
+}
+
 function filterProviderGroups(
   groups: ChatProviderGroup[],
   searchQuery: string
@@ -94,7 +104,9 @@ function filterProviderGroups(
       const providerMatches = `${provider.name} ${provider.provider}`.toLowerCase().includes(query)
       const filteredModels = providerMatches
         ? models
-        : models.filter((model) => `${model.id} ${model.name}`.toLowerCase().includes(query))
+        : models.filter(({ model }) =>
+            `${model.id} ${model.name}`.toLowerCase().includes(query)
+          )
 
       return {
         provider,
@@ -144,7 +156,7 @@ function ModelSwitchPanel({
   pendingModelKey: string | null
   searchQuery: string
   selectedModelKey: string
-  onModelSelect: (provider: ProviderSettings, model: ProviderModel) => void
+  onModelSelect: (provider: ProviderSettings, option: ChatModelOption) => void
   onSearchChange: (value: string) => void
 }): React.JSX.Element {
   const visibleGroups = filterProviderGroups(groups, searchQuery)
@@ -194,14 +206,15 @@ function ModelSwitchPanel({
                   </div>
                 ) : (
                   <div className="space-y-1">
-                    {models.map((model) => {
-                      const modelKey = `${provider.provider}:${model.id}`
+                    {models.map((option) => {
+                      const { model } = option
+                      const modelKey = createModelOptionKey(provider, option)
                       const selected = modelKey === selectedModelKey
                       const pending = modelKey === pendingModelKey
 
                       return (
                         <button
-                          key={model.id}
+                          key={modelKey}
                           type="button"
                           aria-current={selected}
                           aria-label={`选择模型 ${model.name || model.id}`}
@@ -212,7 +225,7 @@ function ModelSwitchPanel({
                             selected && 'bg-primary/10 text-primary',
                             pendingModelKey !== null && !pending && 'opacity-60'
                           )}
-                          onClick={() => onModelSelect(provider, model)}
+                          onClick={() => onModelSelect(provider, option)}
                         >
                           <span className="min-w-0 flex-1 ml-6">
                             <span className="block truncate text-sm leading-5">
@@ -312,6 +325,7 @@ export default function Model(): React.JSX.Element {
   const activeTarget = selectChatTarget(appSettings, {
     activeSessionConnectionId: activeSession?.llmConnectionId,
     activeSessionProvider: activeSession?.provider,
+    draftLlmConnectionId: routeState.draftLlmConnectionId,
     draftProviderId: routeState.draftProviderId
   })
   const activeProvider = activeTarget.provider
@@ -320,7 +334,9 @@ export default function Model(): React.JSX.Element {
   const selectedModelKey =
     activeProvider === undefined || selectedModelId.length === 0
       ? ''
-      : `${activeProvider.provider}:${selectedModelId}`
+      : activeTarget.connection === undefined
+        ? `${activeProvider.provider}:${selectedModelId}`
+        : `connection:${activeTarget.connection.id}`
   const providerGroups = useMemo<ChatProviderGroup[]>(
     () => createChatProviderGroups(appSettings),
     [appSettings]
@@ -332,17 +348,20 @@ export default function Model(): React.JSX.Element {
 
   async function handleModelSelect(
     provider: ProviderSettings,
-    model: ProviderModel
+    option: ChatModelOption
   ): Promise<void> {
-    const modelKey = `${provider.provider}:${model.id}`
+    const modelKey = createModelOptionKey(provider, option)
 
     setPendingModelKey(modelKey)
 
     try {
-      await saveProviderSettings(createSaveProviderInput(provider, model))
+      if (option.connection === undefined) {
+        await saveProviderSettings(createSaveProviderInput(provider, option.model))
+      }
 
       setRouteState((state) => ({
         ...state,
+        draftLlmConnectionId: option.connection?.id ?? null,
         draftProviderId: provider.provider
       }))
 
@@ -378,8 +397,8 @@ export default function Model(): React.JSX.Element {
               pendingModelKey={pendingModelKey}
               searchQuery={searchQuery}
               selectedModelKey={selectedModelKey}
-              onModelSelect={(provider, model) => {
-                void handleModelSelect(provider, model)
+              onModelSelect={(provider, option) => {
+                void handleModelSelect(provider, option)
               }}
               onSearchChange={setSearchQuery}
             />

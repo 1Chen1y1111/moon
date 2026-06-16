@@ -65,6 +65,7 @@ export function ChatInput(): React.JSX.Element {
   const activeTarget = selectChatTarget(appSettings, {
     activeSessionConnectionId: activeSession?.llmConnectionId,
     activeSessionProvider: activeSession?.provider,
+    draftLlmConnectionId: context.draftLlmConnectionId,
     draftProviderId: context.draftProviderId
   })
   const activeProvider = activeTarget.provider
@@ -102,6 +103,7 @@ export function ChatInput(): React.JSX.Element {
       onAttachmentRemove={removeChatDraftAttachment}
       onSend={() => {
         void sendMessage({
+          activeLlmConnectionId: activeTarget.connection?.id,
           activeProvider,
           clearContent: clearInputMessage,
           clearDraftAttachments: clearChatDraftAttachments,
@@ -111,6 +113,7 @@ export function ChatInput(): React.JSX.Element {
             setRouteState((state) => ({
               ...state,
               activeChatId: sessionId,
+              draftLlmConnectionId: null,
               draftProviderId: null
             }))
           },

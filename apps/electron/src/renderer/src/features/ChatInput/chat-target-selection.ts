@@ -18,8 +18,13 @@ import type { ProviderModel } from '@moon/shared/domain/provider'
 import type { AppSettings, ProviderSettings } from '@moon/shared/domain/settings'
 
 export type ChatProviderGroup = {
-  models: ProviderModel[]
+  models: ChatModelOption[]
   provider: ProviderSettings
+}
+
+export type ChatModelOption = {
+  connection?: NormalizedLlmConnection
+  model: ProviderModel
 }
 
 export type SelectedChatTarget = {
@@ -33,6 +38,7 @@ export type SelectedChatTarget = {
 type ChatTargetInput = {
   activeSessionConnectionId?: string | null
   activeSessionProvider?: string
+  draftLlmConnectionId?: string | null
   draftProviderId?: string | null
 }
 
@@ -91,6 +97,10 @@ function selectActiveConnection(
 
   if (enabledConnections.length === 0) {
     return undefined
+  }
+
+  if (input.draftLlmConnectionId !== undefined && input.draftLlmConnectionId !== null) {
+    return enabledConnections.find((connection) => connection.id === input.draftLlmConnectionId)
   }
 
   if (input.draftProviderId !== undefined && input.draftProviderId !== null) {
@@ -205,7 +215,7 @@ export function createChatProviderGroups(settings: AppSettings): ChatProviderGro
     .filter((provider) => provider.enabled && isSelectableChatProvider(provider))
     .map((provider) => ({
       provider,
-      models: getSelectableChatProviderModels(provider)
+      models: getSelectableChatProviderModels(provider).map((model) => ({ model }))
     }))
 }
 
@@ -232,13 +242,13 @@ function createConnectionProviderGroups(settings: AppSettings): ChatProviderGrou
     if (existingGroup === undefined) {
       groups.set(provider.provider, {
         provider,
-        models: [model]
+        models: [{ connection, model }]
       })
       continue
     }
 
-    if (!existingGroup.models.some((candidate) => candidate.id === model.id)) {
-      existingGroup.models.push(model)
+    if (!existingGroup.models.some((candidate) => candidate.connection?.id === connection.id)) {
+      existingGroup.models.push({ connection, model })
     }
   }
 

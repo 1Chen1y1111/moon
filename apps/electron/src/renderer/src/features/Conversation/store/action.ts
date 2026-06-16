@@ -51,6 +51,7 @@ function mergeFetchedMessagesWithLocalState(
 }
 
 export type SendConversationMessageParams = {
+  activeLlmConnectionId?: string
   activeProvider?: ProviderSettings
   clearContent: () => void
   clearDraftAttachments: () => void
@@ -81,6 +82,7 @@ export class ConversationActionImpl {
   }
 
   sendMessage = async ({
+    activeLlmConnectionId,
     activeProvider,
     clearContent,
     clearDraftAttachments,
@@ -109,7 +111,9 @@ export class ConversationActionImpl {
       const result = await sendChatMessage({
         ...(context.sessionId === null ? {} : { sessionId: context.sessionId }),
         ...(context.threadId === null ? {} : { threadId: context.threadId }),
+        ...(activeLlmConnectionId !== undefined ? { llmConnectionId: activeLlmConnectionId } : {}),
         ...((context.sessionId === null || context.draftProviderId !== null) &&
+        activeLlmConnectionId === undefined &&
         activeProvider !== undefined
           ? { provider: activeProvider.provider }
           : {}),

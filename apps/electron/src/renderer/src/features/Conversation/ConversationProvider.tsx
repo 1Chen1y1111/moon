@@ -20,6 +20,7 @@ function getConversationContextKey(context: ConversationContext): string {
     context.sessionId ?? 'new',
     context.topicId ?? 'no-topic',
     context.threadId ?? 'no-thread',
+    context.draftLlmConnectionId ?? 'no-draft-connection',
     context.draftProviderId ?? 'no-draft-provider'
   ].join(':')
 }

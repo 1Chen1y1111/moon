@@ -630,6 +630,36 @@ describe('ChatService.sendMessage', () => {
     )
   })
 
+  it('uses an explicit LLM connection before the requested provider', async () => {
+    const createAgentBackend = vi.fn((_config: AgentBackendConfig) =>
+      createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
+    )
+    const { service, sessionsRepository } = createService({
+      createAgentBackend,
+      llmConnections: [createDeepSeekCompatConnection()],
+      settings: createClaudeSettings()
+    })
+
+    await service.sendMessage({
+      llmConnectionId: 'deepseek',
+      provider: 'claude',
+      content: 'hello'
+    })
+
+    expect(sessionsRepository.sessions[0]).toMatchObject({
+      provider: 'deepseek',
+      llmConnectionId: 'deepseek'
+    })
+    expect(createAgentBackend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'pi_compat',
+        model: 'deepseek-v4-flash',
+        apiKey: 'stored-connection-key',
+        customEndpoint: { api: 'openai-completions' }
+      })
+    )
+  })
+
   it('uses the persisted default LLM connection before provider fallback', async () => {
     const createAgentBackend = vi.fn((_config: AgentBackendConfig) =>
       createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])

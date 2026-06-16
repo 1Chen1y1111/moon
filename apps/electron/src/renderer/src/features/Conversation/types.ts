@@ -1,6 +1,7 @@
 import type { MessageRecord } from '@moon/shared/domain/chat'
 
 export interface ConversationContext {
+  draftLlmConnectionId: string | null
   draftProviderId: string | null
   sessionId: string | null
   threadId: string | null

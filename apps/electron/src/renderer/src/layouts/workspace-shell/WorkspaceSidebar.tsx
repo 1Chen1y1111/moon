@@ -92,6 +92,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
     setRouteState((state) => ({
       ...state,
       activeChatId: null,
+      draftLlmConnectionId: null,
       draftProviderId: null,
       newChatRequestId: createNewChatRequestId()
     }))
@@ -118,6 +119,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
       setRouteState((state) => ({
         ...state,
         activeChatId: null,
+        draftLlmConnectionId: null,
         draftProviderId: null
       }))
     }
