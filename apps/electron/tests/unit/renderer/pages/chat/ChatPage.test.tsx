@@ -448,6 +448,67 @@ describe('ChatPage', () => {
     )
   })
 
+  it('prefers synchronized LLM connection models in the action bar', async () => {
+    const appSettings = createModelSwitchSettings()
+    const deepseekModel = {
+      id: 'deepseek-v4-flash',
+      name: 'DeepSeek V4 Flash',
+      enabled: true,
+      isManual: false,
+      providerApi: 'openai-completions',
+      providerBaseUrl: 'https://api.deepseek.com'
+    }
+
+    appSettings.providers.deepseek = {
+      ...appSettings.providers.deepseek,
+      enabled: true,
+      hasApiKey: true,
+      apiKey: 'sk-deepseek-demo',
+      model: deepseekModel.id,
+      models: [deepseekModel],
+      availableModels: [deepseekModel]
+    }
+    appSettings.llmConnections = [
+      {
+        id: 'deepseek',
+        name: 'DeepSeek',
+        providerId: 'deepseek',
+        backend: 'pi_compat',
+        model: 'deepseek-v4-flash',
+        apiKey: 'sk-deepseek-demo',
+        baseUrl: 'https://api.deepseek.com',
+        customEndpoint: { api: 'openai-completions' },
+        enabled: true,
+        isDefault: true,
+        thinkingLevel: 'medium'
+      }
+    ]
+
+    const { user } = renderWithProviders(<ChatPage />, {
+      preloadedSettings: {
+        appSettings,
+        loadStatus: 'succeeded'
+      }
+    })
+
+    await screen.findByText('我们该做什么？')
+
+    await user.click(screen.getByRole('button', { name: /切换模型/ }))
+
+    expect(await screen.findByRole('button', { name: '选择模型 DeepSeek V4 Flash' })).toBeVisible()
+    expect(screen.queryByRole('button', { name: '选择模型 Claude Sonnet 4.5' })).not.toBeInTheDocument()
+
+    await user.type(screen.getByRole('textbox', { name: '消息内容' }), 'hello')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+
+    await waitFor(() =>
+      expect(api.chat.createMessageTurn).toHaveBeenCalledWith({
+        provider: 'deepseek',
+        content: 'hello'
+      })
+    )
+  })
+
   it('switches the active session provider model from the action bar', async () => {
     const claudeSession = {
       ...session,

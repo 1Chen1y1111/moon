@@ -1,6 +1,6 @@
 /**
  * 负责首页聊天输入区的模型切换弹层。
- * 它只读写 provider 设置，不直接调用模型运行时或持久化实现。
+ * 它优先展示可用 LLM connection，并在缺少 connection 时回退 provider 模型。
  */
 
 import { useMemo, useState } from 'react'
@@ -19,24 +19,16 @@ import { Badge } from '@moon/ui/ui/badge'
 import { Button } from '@moon/ui/ui/button'
 import { Input } from '@moon/ui/ui/input'
 import { ScrollArea } from '@moon/ui/ui/scroll-area'
-import {
-  findChatProviderModel,
-  getSelectableChatProviderModels,
-  isSelectableChatProvider,
-  selectChatModelId,
-  selectChatModelLabel,
-  selectDefaultSelectableChatProvider
-} from '@moon/shared/domain/chat-provider'
 import { formatProviderModelContextWindow, type ProviderModel } from '@moon/shared/domain/provider'
 import type { ProviderSettings } from '@moon/shared/domain/settings'
 import type { SaveProviderInput } from '@moon/shared/domain/settings-validation'
+import {
+  createChatProviderGroups,
+  selectChatTarget,
+  type ChatProviderGroup
+} from '../../chat-target-selection'
 
 import Action from '../components/Action'
-
-type ProviderGroup = {
-  models: ProviderModel[]
-  provider: ProviderSettings
-}
 
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
@@ -87,32 +79,10 @@ function createSaveProviderInput(
   }
 }
 
-function selectProviderForPage(
-  providers: Record<string, ProviderSettings>,
-  activeSessionProvider: string | undefined,
-  draftProviderId: string | null | undefined
-): ProviderSettings | undefined {
-  const draftProvider =
-    draftProviderId === undefined || draftProviderId === null
-      ? undefined
-      : providers[draftProviderId]
-
-  if (draftProvider?.enabled && isSelectableChatProvider(draftProvider)) {
-    return draftProvider
-  }
-
-  if (activeSessionProvider !== undefined) {
-    return providers[activeSessionProvider]
-  }
-
-  try {
-    return selectDefaultSelectableChatProvider({ appearance: { theme: 'system' }, providers })
-  } catch {
-    return undefined
-  }
-}
-
-function filterProviderGroups(groups: ProviderGroup[], searchQuery: string): ProviderGroup[] {
+function filterProviderGroups(
+  groups: ChatProviderGroup[],
+  searchQuery: string
+): ChatProviderGroup[] {
   const query = searchQuery.trim().toLowerCase()
 
   if (query.length === 0) {
@@ -170,7 +140,7 @@ function ModelSwitchPanel({
   onModelSelect,
   onSearchChange
 }: {
-  groups: ProviderGroup[]
+  groups: ChatProviderGroup[]
   pendingModelKey: string | null
   searchQuery: string
   selectedModelKey: string
@@ -339,31 +309,26 @@ export default function Model(): React.JSX.Element {
     () => sessions.find((session) => session.id === routeState.activeChatId),
     [routeState.activeChatId, sessions]
   )
-  const activeProvider = selectProviderForPage(
-    appSettings.providers,
-    activeSession?.provider,
-    routeState.draftProviderId
-  )
-  const selectedModelId = selectChatModelId(activeProvider)
-  const selectedModel = findChatProviderModel(activeProvider, selectedModelId)
+  const activeTarget = selectChatTarget(appSettings, {
+    activeSessionConnectionId: activeSession?.llmConnectionId,
+    activeSessionProvider: activeSession?.provider,
+    draftProviderId: routeState.draftProviderId
+  })
+  const activeProvider = activeTarget.provider
+  const selectedModelId = activeTarget.modelId
+  const selectedModel = activeTarget.model
   const selectedModelKey =
     activeProvider === undefined || selectedModelId.length === 0
       ? ''
       : `${activeProvider.provider}:${selectedModelId}`
-  const providerGroups = useMemo<ProviderGroup[]>(() => {
-    const providers = Object.values(appSettings.providers).filter(
-      (provider) => provider.enabled && isSelectableChatProvider(provider)
-    )
-
-    return providers.map((provider) => ({
-      provider,
-      models: getSelectableChatProviderModels(provider)
-    }))
-  }, [appSettings.providers])
+  const providerGroups = useMemo<ChatProviderGroup[]>(
+    () => createChatProviderGroups(appSettings),
+    [appSettings]
+  )
   const switchTitle =
     activeProvider === undefined
       ? '选择模型'
-      : `切换模型：${activeProvider.name} · ${selectChatModelLabel(activeProvider)}`
+      : `切换模型：${activeProvider.name} · ${activeTarget.modelLabel}`
 
   async function handleModelSelect(
     provider: ProviderSettings,

@@ -1,5 +1,5 @@
 /**
- * 负责应用设置的本地持久化读写和 provider 配置归一化。
+ * 负责应用设置、provider 配置和 LLM connection 的本地持久化读写。
  * 它只处理数据库结构与领域设置对象转换，不创建 SDK client 或访问外部网络。
  */
 
@@ -377,6 +377,8 @@ export class SettingsRepository {
   async getSettings(): Promise<AppSettings> {
     const settings = createDefaultAppSettings()
     const appearanceTheme = await this.getSettingValue(appearanceThemeKey)
+
+    settings.llmConnections = await this.listLlmConnections()
 
     if (appearanceTheme !== null && appearanceThemeSet.has(appearanceTheme as AppearanceTheme)) {
       settings.appearance.theme = appearanceTheme as AppearanceTheme

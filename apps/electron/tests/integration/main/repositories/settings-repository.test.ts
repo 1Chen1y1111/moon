@@ -160,6 +160,14 @@ describe('SettingsRepository', () => {
           isDefault: true
         })
       ])
+      expect((await secondRepository.getSettings()).llmConnections).toEqual([
+        expect.objectContaining({
+          id: 'compat-main',
+          providerId: 'openrouter',
+          backend: 'pi_compat',
+          model: 'anthropic/claude-sonnet'
+        })
+      ])
 
       await secondConnection.close()
     },

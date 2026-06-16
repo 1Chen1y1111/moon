@@ -27,6 +27,8 @@ import {
   type AppSettings,
   type ProviderTestResult
 } from '@moon/shared/domain/settings'
+import { assertProviderReadyForAgent, createProviderLlmConnection } from '@moon/shared/agent'
+import { isSupportedChatProvider, selectChatModelId } from '@moon/shared/domain/chat-provider'
 import {
   isBuiltInProviderId,
   providerMetadata,
@@ -606,14 +608,18 @@ export class SettingsService {
 
   async saveProvider(input: SaveProviderInput): Promise<AppSettings> {
     const parsedInput = saveProviderInputSchema.parse(this.withProviderDefaults(input))
+    const settings = await this.settingsRepository.saveProvider(parsedInput.provider, parsedInput)
 
-    return this.settingsRepository.saveProvider(parsedInput.provider, parsedInput)
+    return this.syncProviderLlmConnection(settings, parsedInput.provider)
   }
 
   async deleteProvider(input: DeleteProviderInput): Promise<AppSettings> {
     const parsedInput = deleteProviderInputSchema.parse(input)
+    await this.settingsRepository.deleteProvider(parsedInput.provider)
 
-    return this.settingsRepository.deleteProvider(parsedInput.provider)
+    await this.disableProviderLlmConnection(parsedInput.provider)
+
+    return this.settingsRepository.getSettings()
   }
 
   /**
@@ -623,13 +629,13 @@ export class SettingsService {
     const config = await this.resolveConnectionConfig(input)
 
     if (config.isACP || config.isOAuth) {
-      return this.settingsRepository.updateProviderModels(config.provider, config.models, [])
+      return this.updateProviderModelsAndSync(config.provider, config.models, [])
     }
 
     const modelDiscovery = resolveProviderModelDiscovery(config.provider)
 
     if (modelDiscovery === 'none') {
-      return this.settingsRepository.updateProviderModels(
+      return this.updateProviderModelsAndSync(
         config.provider,
         config.models,
         config.availableModels
@@ -641,7 +647,7 @@ export class SettingsService {
     if (piModels.length > 0) {
       await this.settingsRepository.saveProvider(config.provider, config)
 
-      return this.settingsRepository.updateProviderModels(config.provider, piModels, piModels)
+      return this.updateProviderModelsAndSync(config.provider, piModels, piModels)
     }
 
     if (modelDiscovery === 'static') {
@@ -649,11 +655,7 @@ export class SettingsService {
 
       await this.settingsRepository.saveProvider(config.provider, config)
 
-      return this.settingsRepository.updateProviderModels(
-        config.provider,
-        staticModels,
-        staticModels
-      )
+      return this.updateProviderModelsAndSync(config.provider, staticModels, staticModels)
     }
 
     ensureReadyForHttp(config)
@@ -685,7 +687,7 @@ export class SettingsService {
 
     await this.settingsRepository.saveProvider(config.provider, config)
 
-    return this.settingsRepository.updateProviderModels(config.provider, mergedModels, mergedModels)
+    return this.updateProviderModelsAndSync(config.provider, mergedModels, mergedModels)
   }
 
   /**
@@ -775,6 +777,81 @@ export class SettingsService {
     const parsedInput = saveAppearanceInputSchema.parse(input)
 
     return this.settingsRepository.saveAppearance(parsedInput)
+  }
+
+  /**
+   * 更新模型目录后同步同名 LLM connection，保证刷新出的协议信息能进入聊天运行路径。
+   */
+  private async updateProviderModelsAndSync(
+    provider: ProviderId,
+    models: ProviderModel[],
+    availableModels: ProviderModel[]
+  ): Promise<AppSettings> {
+    const settings = await this.settingsRepository.updateProviderModels(
+      provider,
+      models,
+      availableModels
+    )
+
+    return this.syncProviderLlmConnection(settings, provider)
+  }
+
+  /**
+   * 把可执行 provider 保存为同名 LLM connection，配置不可执行时禁用旧连接避免被默认聊天选中。
+   */
+  private async syncProviderLlmConnection(
+    settings: AppSettings,
+    providerId: ProviderId
+  ): Promise<AppSettings> {
+    const provider = settings.providers[providerId]
+
+    if (provider === undefined || !provider.enabled || !isSupportedChatProvider(provider)) {
+      return (await this.disableProviderLlmConnection(providerId))
+        ? this.settingsRepository.getSettings()
+        : settings
+    }
+
+    const model = selectChatModelId(provider)
+
+    if (model.length === 0) {
+      return (await this.disableProviderLlmConnection(providerId))
+        ? this.settingsRepository.getSettings()
+        : settings
+    }
+
+    try {
+      assertProviderReadyForAgent(provider, model)
+    } catch {
+      return (await this.disableProviderLlmConnection(providerId))
+        ? this.settingsRepository.getSettings()
+        : settings
+    }
+
+    await this.settingsRepository.saveLlmConnection(createProviderLlmConnection(provider, model))
+
+    return this.settingsRepository.getSettings()
+  }
+
+  /**
+   * 禁用 provider 派生出的同名 connection，保留历史记录但阻止默认选择继续使用它。
+   */
+  private async disableProviderLlmConnection(providerId: ProviderId): Promise<boolean> {
+    const existingConnection = await this.settingsRepository.findLlmConnectionById(providerId)
+
+    if (
+      existingConnection === null ||
+      (!existingConnection.enabled && !existingConnection.isDefault)
+    ) {
+      return false
+    }
+
+    await this.settingsRepository.saveLlmConnection({
+      ...existingConnection,
+      enabled: false,
+      isDefault: false
+    })
+
+    return true
   }
 
   /**

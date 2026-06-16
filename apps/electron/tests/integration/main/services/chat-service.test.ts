@@ -21,6 +21,7 @@ import { ThreadsRepository } from '@main/repositories/threads-repository'
 import { ToolInvocationsRepository } from '@main/repositories/tool-invocations-repository'
 import { TopicsRepository } from '@main/repositories/topics-repository'
 import { ChatService } from '@main/services/chat-service'
+import { SettingsService } from '@main/services/settings-service'
 import type { AgentBackend, AgentBackendConfig } from '@moon/shared/agent'
 import type { ProviderModel } from '@moon/shared/domain/provider'
 
@@ -112,6 +113,85 @@ describe('ChatService integration', () => {
             id: result.session.id,
             provider: 'deepseek',
             llmConnectionId: null
+          })
+        ])
+      } finally {
+        await connection.close()
+      }
+    },
+    pgliteTestTimeout
+  )
+
+  it(
+    'binds a DeepSeek turn to the LLM connection synchronized from provider settings',
+    async () => {
+      const directoryPath = mkdtempSync(join(tmpdir(), 'moon-chat-service-'))
+      const databasePath = join(directoryPath, 'moon-pglite')
+      tempDirectories.push(directoryPath)
+
+      const connection = await createBootstrappedConnection(databasePath)
+      const settingsRepository = new SettingsRepository(connection)
+      const settingsService = new SettingsService(settingsRepository)
+      const sessionsRepository = new SessionsRepository(connection)
+      const deepseekModel: ProviderModel = {
+        id: 'deepseek-v4-flash',
+        name: 'DeepSeek V4 Flash',
+        enabled: true,
+        isManual: false,
+        providerApi: 'openai-completions',
+        providerBaseUrl: 'https://api.deepseek.com'
+      }
+      const chatService = new ChatService({
+        agentOperationsRepository: new AgentOperationsRepository(connection),
+        attachmentsDirectory: join(directoryPath, 'attachments'),
+        createAgentBackend: vi.fn(createUnusedAgentBackend),
+        messagesRepository: new MessagesRepository(connection),
+        sessionsRepository,
+        settingsRepository,
+        threadsRepository: new ThreadsRepository(connection),
+        toolInvocationsRepository: new ToolInvocationsRepository(connection),
+        topicsRepository: new TopicsRepository(connection)
+      })
+
+      try {
+        await settingsService.saveProvider({
+          provider: 'deepseek',
+          apiKey: 'sk-deepseek-demo',
+          model: deepseekModel.id,
+          models: [deepseekModel],
+          availableModels: [deepseekModel],
+          enabled: true
+        })
+
+        const syncedConnection = await settingsRepository.findLlmConnectionById('deepseek')
+        const result = await chatService.createMessageTurn({
+          provider: 'deepseek',
+          content: '你好'
+        })
+        const sessions = await sessionsRepository.list()
+
+        expect(syncedConnection).toMatchObject({
+          id: 'deepseek',
+          providerId: 'deepseek',
+          backend: 'pi_compat',
+          model: 'deepseek-v4-flash',
+          customEndpoint: { api: 'openai-completions' },
+          enabled: true
+        })
+        expect(result.session).toMatchObject({
+          provider: 'deepseek',
+          llmConnectionId: 'deepseek'
+        })
+        expect(result.operation.appContext).toMatchObject({
+          sessionId: result.session.id,
+          llmConnectionId: 'deepseek',
+          llmConnectionBackend: 'pi_compat'
+        })
+        expect(sessions).toEqual([
+          expect.objectContaining({
+            id: result.session.id,
+            provider: 'deepseek',
+            llmConnectionId: 'deepseek'
           })
         ])
       } finally {

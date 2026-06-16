@@ -98,6 +98,28 @@ function createAnthropicCompatConnection(
   })
 }
 
+/**
+ * 创建 DeepSeek OpenAI-compatible connection fixture。
+ */
+function createDeepSeekCompatConnection(
+  input: Partial<NormalizedLlmConnection> = {}
+): NormalizedLlmConnection {
+  return llmConnectionSchema.parse({
+    id: 'deepseek',
+    name: 'DeepSeek',
+    providerId: 'deepseek',
+    backend: 'pi_compat',
+    model: 'deepseek-v4-flash',
+    apiKey: 'stored-connection-key',
+    baseUrl: 'https://api.deepseek.com',
+    customEndpoint: { api: 'openai-completions' },
+    enabled: true,
+    isDefault: false,
+    thinkingLevel: 'medium',
+    ...input
+  })
+}
+
 class SessionsRepositoryMock {
   readonly sessions: SessionRecord[]
 
@@ -570,6 +592,38 @@ describe('ChatService.sendMessage', () => {
         provider: 'pi_compat',
         model: 'deepseek-v4-flash',
         apiKey: 'stored-key',
+        baseUrl: 'https://api.deepseek.com',
+        customEndpoint: { api: 'openai-completions' }
+      })
+    )
+  })
+
+  it('binds a requested provider to its synchronized same-id LLM connection', async () => {
+    const deepseek = createProviderSettings({
+      provider: 'deepseek',
+      type: 'deepseek',
+      model: 'deepseek-v4-flash'
+    })
+    const createAgentBackend = vi.fn((_config: AgentBackendConfig) =>
+      createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
+    )
+    const { service, sessionsRepository } = createService({
+      createAgentBackend,
+      llmConnections: [createDeepSeekCompatConnection()],
+      settings: createSettings([deepseek])
+    })
+
+    await service.sendMessage({ provider: 'deepseek', content: 'hello' })
+
+    expect(sessionsRepository.sessions[0]).toMatchObject({
+      provider: 'deepseek',
+      llmConnectionId: 'deepseek'
+    })
+    expect(createAgentBackend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'pi_compat',
+        model: 'deepseek-v4-flash',
+        apiKey: 'stored-connection-key',
         baseUrl: 'https://api.deepseek.com',
         customEndpoint: { api: 'openai-completions' }
       })

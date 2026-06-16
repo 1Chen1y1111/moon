@@ -3,7 +3,14 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { SettingsService } from '@main/services/settings-service'
-import { createDefaultAppSettings } from '@moon/shared/domain/settings'
+import { llmConnectionSchema } from '@moon/shared/config'
+import {
+  createDefaultAppSettings,
+  createDefaultProviderSettings,
+  type AppSettings,
+  type ProviderSettings
+} from '@moon/shared/domain/settings'
+import type { ProviderModel } from '@moon/shared/domain/provider'
 import type { ProviderConnectionInput } from '@moon/shared/domain/settings-validation'
 
 function createJsonResponse(payload: unknown): Response {
@@ -30,18 +37,35 @@ function createFetchProviderModelsInput(
 }
 
 function createSettingsRepositoryMock(appSettings = createDefaultAppSettings()): {
+  findLlmConnectionById: ReturnType<typeof vi.fn>
   getSettings: ReturnType<typeof vi.fn>
   getProviderApiKey: ReturnType<typeof vi.fn>
   saveAppearance: ReturnType<typeof vi.fn>
+  saveLlmConnection: ReturnType<typeof vi.fn>
   saveProvider: ReturnType<typeof vi.fn>
   updateProviderModels: ReturnType<typeof vi.fn>
 } {
   return {
+    findLlmConnectionById: vi.fn().mockResolvedValue(null),
     getSettings: vi.fn().mockResolvedValue(appSettings),
     getProviderApiKey: vi.fn().mockResolvedValue(''),
     saveAppearance: vi.fn().mockResolvedValue(appSettings),
+    saveLlmConnection: vi.fn().mockImplementation(async (connection) => connection),
     saveProvider: vi.fn().mockResolvedValue(appSettings),
     updateProviderModels: vi.fn().mockResolvedValue(appSettings)
+  }
+}
+
+/**
+ * 创建只覆盖单个 provider 的设置 fixture，便于验证服务层同步逻辑。
+ */
+function createSettingsWithProvider(provider: ProviderSettings): AppSettings {
+  return {
+    ...createDefaultAppSettings(),
+    providers: {
+      ...createDefaultAppSettings().providers,
+      [provider.provider]: provider
+    }
   }
 }
 
@@ -89,6 +113,87 @@ describe('SettingsService', () => {
         baseUrl: 'https://ignored.example.com',
         apiFormat: 'openai-chat',
         useMaxCompletionTokens: true
+      })
+    )
+  })
+
+  it('syncs an enabled provider into a same-id LLM connection after saving', async () => {
+    const deepseekModel: ProviderModel = {
+      id: 'deepseek-v4-flash',
+      name: 'DeepSeek V4 Flash',
+      enabled: true,
+      isManual: false,
+      providerApi: 'openai-completions',
+      providerBaseUrl: 'https://api.deepseek.com'
+    }
+    const appSettings = createSettingsWithProvider({
+      ...createDefaultProviderSettings('deepseek'),
+      enabled: true,
+      hasApiKey: true,
+      apiKey: 'sk-deepseek-demo',
+      model: deepseekModel.id,
+      models: [deepseekModel],
+      availableModels: [deepseekModel]
+    })
+    const settingsRepository = createSettingsRepositoryMock(appSettings)
+    const service = new SettingsService(settingsRepository as never)
+
+    await service.saveProvider({
+      provider: 'deepseek',
+      apiKey: 'sk-deepseek-demo',
+      model: deepseekModel.id,
+      models: [deepseekModel],
+      availableModels: [deepseekModel],
+      enabled: true
+    })
+
+    expect(settingsRepository.saveLlmConnection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'deepseek',
+        providerId: 'deepseek',
+        backend: 'pi_compat',
+        model: 'deepseek-v4-flash',
+        apiKey: 'sk-deepseek-demo',
+        baseUrl: 'https://api.deepseek.com',
+        customEndpoint: { api: 'openai-completions' },
+        enabled: true,
+        isDefault: false
+      })
+    )
+  })
+
+  it('disables the synchronized LLM connection when the provider is no longer runnable', async () => {
+    const appSettings = createSettingsWithProvider({
+      ...createDefaultProviderSettings('deepseek'),
+      enabled: false
+    })
+    const existingConnection = llmConnectionSchema.parse({
+      id: 'deepseek',
+      name: 'DeepSeek',
+      providerId: 'deepseek',
+      backend: 'pi_compat',
+      model: 'deepseek-v4-flash',
+      apiKey: 'sk-deepseek-demo',
+      baseUrl: 'https://api.deepseek.com',
+      customEndpoint: { api: 'openai-completions' },
+      enabled: true,
+      isDefault: true,
+      thinkingLevel: 'medium'
+    })
+    const settingsRepository = createSettingsRepositoryMock(appSettings)
+    settingsRepository.findLlmConnectionById.mockResolvedValue(existingConnection)
+    const service = new SettingsService(settingsRepository as never)
+
+    await service.saveProvider({
+      provider: 'deepseek',
+      enabled: false
+    })
+
+    expect(settingsRepository.saveLlmConnection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'deepseek',
+        enabled: false,
+        isDefault: false
       })
     )
   })

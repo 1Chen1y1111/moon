@@ -1,5 +1,5 @@
 /**
- * 负责创建应用设置和 provider 设置的默认结构。
+ * 负责创建应用设置、provider 设置和默认 LLM connection 列表结构。
  * 它只组合共享 provider 元数据，不读取持久化数据或运行时密钥。
  */
 
@@ -11,6 +11,7 @@ import {
   type ProviderModel,
   type ProviderType
 } from './provider'
+import type { NormalizedLlmConnection } from '../config'
 
 export const appearanceThemes = ['light', 'dark', 'system'] as const
 
@@ -61,6 +62,7 @@ export type ProviderTestResult = {
 
 export type AppSettings = {
   appearance: AppearanceSettings
+  llmConnections: NormalizedLlmConnection[]
   providers: Record<ProviderId, ProviderSettings>
 }
 
@@ -138,6 +140,7 @@ export function createDefaultAppSettings(): AppSettings {
     appearance: {
       theme: 'system'
     },
+    llmConnections: [],
     providers: Object.fromEntries(
       providerCatalog.map((provider) => [
         provider.provider,

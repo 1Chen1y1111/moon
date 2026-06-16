@@ -1054,6 +1054,20 @@ export class ChatService {
       }
 
       if (input.provider !== undefined) {
+        const providerConnection = await this.resolveProviderLlmConnection(input.provider)
+
+        if (providerConnection !== null) {
+          return this.createConnectionAgentTarget(
+            providerConnection,
+            {
+              ...session,
+              provider: input.provider,
+              llmConnectionId: providerConnection.id
+            },
+            input.provider
+          )
+        }
+
         return this.createProviderAgentTarget(settings.providers[input.provider], {
           ...session,
           provider: input.provider,
@@ -1071,6 +1085,12 @@ export class ChatService {
     }
 
     if (input.provider !== undefined) {
+      const providerConnection = await this.resolveProviderLlmConnection(input.provider)
+
+      if (providerConnection !== null) {
+        return this.createConnectionAgentTarget(providerConnection, null, input.provider)
+      }
+
       return this.createProviderAgentTarget(settings.providers[input.provider], null)
     }
 
@@ -1133,6 +1153,25 @@ export class ChatService {
     return session.llmConnectionId === undefined || session.llmConnectionId === null
       ? null
       : this.settingsRepository.findLlmConnectionById(session.llmConnectionId)
+  }
+
+  /**
+   * 按 provider id 查找同步出来的同名 connection，仅在仍启用且归属匹配时使用。
+   */
+  private async resolveProviderLlmConnection(
+    provider: ProviderId
+  ): Promise<NormalizedLlmConnection | null> {
+    const connection = await this.settingsRepository.findLlmConnectionById(provider)
+
+    if (connection === null || !connection.enabled) {
+      return null
+    }
+
+    if (connection.providerId !== undefined && connection.providerId !== provider) {
+      return null
+    }
+
+    return connection
   }
 
   /**

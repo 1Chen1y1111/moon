@@ -1,6 +1,6 @@
 /**
  * 负责聊天输入区附件上传入口和当前模型能力判断。
- * 它只处理文件选择、过滤和上传状态，不直接执行模型请求。
+ * 它基于当前聊天目标判断附件能力，不直接执行模型请求。
  */
 
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -12,15 +12,9 @@ import { selectChatSessions } from '@renderer/store/chat/selectors'
 import { useChatStore } from '@renderer/store/chat'
 import { selectAppSettings } from '@renderer/store/settings/selectors'
 import { useSettingsStore } from '@renderer/store/settings'
-import {
-  findChatProviderModel,
-  isSelectableChatProvider,
-  selectChatModelId,
-  selectDefaultSelectableChatProvider
-} from '@moon/shared/domain/chat-provider'
 import { resolveAutoProviderModelCapability } from '@moon/shared/domain/provider'
-import type { ProviderSettings } from '@moon/shared/domain/settings'
 import { maxChatAttachmentsPerMessage } from '@moon/shared/domain/chat-validation'
+import { selectChatTarget } from '../../chat-target-selection'
 
 import Action from '../components/Action'
 
@@ -61,31 +55,6 @@ const textFileAccept = [
   '.yaml'
 ].join(',')
 
-function selectProviderForPage(
-  providers: Record<string, ProviderSettings>,
-  activeSessionProvider: string | undefined,
-  draftProviderId: string | null | undefined
-): ProviderSettings | undefined {
-  const draftProvider =
-    draftProviderId === undefined || draftProviderId === null
-      ? undefined
-      : providers[draftProviderId]
-
-  if (draftProvider?.enabled && isSelectableChatProvider(draftProvider)) {
-    return draftProvider
-  }
-
-  if (activeSessionProvider !== undefined) {
-    return providers[activeSessionProvider]
-  }
-
-  try {
-    return selectDefaultSelectableChatProvider({ appearance: { theme: 'system' }, providers })
-  } catch {
-    return undefined
-  }
-}
-
 function isSupportedTextFile(file: File): boolean {
   if (file.type.startsWith('text/') || file.type === 'application/json') {
     return true
@@ -118,13 +87,11 @@ export default function Upload(): React.JSX.Element {
     () => sessions.find((session) => session.id === routeState.activeChatId),
     [routeState.activeChatId, sessions]
   )
-  const activeProvider = selectProviderForPage(
-    appSettings.providers,
-    activeSession?.provider,
-    routeState.draftProviderId
-  )
-  const selectedModelId = selectChatModelId(activeProvider)
-  const selectedModel = findChatProviderModel(activeProvider, selectedModelId)
+  const selectedModel = selectChatTarget(appSettings, {
+    activeSessionConnectionId: activeSession?.llmConnectionId,
+    activeSessionProvider: activeSession?.provider,
+    draftProviderId: routeState.draftProviderId
+  }).model
   const canUploadImage =
     selectedModel !== undefined &&
     resolveAutoProviderModelCapability(selectedModel, 'supportsVision')

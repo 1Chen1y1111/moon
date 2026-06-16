@@ -9,41 +9,14 @@ import { useAppRouterContext } from '@renderer/app/router/router-context'
 import { ActionBar } from '@renderer/features/ChatInput/ActionBar'
 import { ChatInput as BaseChatInput } from '@renderer/features/ChatInput'
 import type { ChatInputAttachment, ChatInputRuntimeInfo } from '@renderer/features/ChatInput'
+import { selectChatTarget } from '@renderer/features/ChatInput/chat-target-selection'
 import { useChatStore } from '@renderer/store/chat'
 import { selectChatDraftAttachments, selectChatSessions } from '@renderer/store/chat/selectors'
 import { useSettingsStore } from '@renderer/store/settings'
 import { selectAppSettings } from '@renderer/store/settings/selectors'
-import {
-  isSelectableChatProvider,
-  selectChatModelLabel,
-  selectDefaultSelectableChatProvider
-} from '@moon/shared/domain/chat-provider'
 import type { ChatAttachmentRecord } from '@moon/shared/domain/chat'
-import type { ProviderSettings } from '@moon/shared/domain/settings'
 
 import { conversationSelectors, useConversationStore } from './store'
-
-function selectConversationProvider(
-  providers: Record<string, ProviderSettings>,
-  activeSessionProvider: string | undefined,
-  draftProviderId: string | null
-): ProviderSettings | undefined {
-  const draftProvider = draftProviderId === null ? undefined : providers[draftProviderId]
-
-  if (draftProvider?.enabled && isSelectableChatProvider(draftProvider)) {
-    return draftProvider
-  }
-
-  if (activeSessionProvider !== undefined) {
-    return providers[activeSessionProvider]
-  }
-
-  try {
-    return selectDefaultSelectableChatProvider({ appearance: { theme: 'system' }, providers })
-  } catch {
-    return undefined
-  }
-}
 
 function toInputAttachments(attachments: ReturnType<typeof selectChatDraftAttachments>) {
   return attachments.map((attachment) => ({
@@ -89,11 +62,12 @@ export function ChatInput(): React.JSX.Element {
     () => sessions.find((session) => session.id === context.sessionId),
     [context.sessionId, sessions]
   )
-  const activeProvider = selectConversationProvider(
-    appSettings.providers,
-    activeSession?.provider,
-    context.draftProviderId
-  )
+  const activeTarget = selectChatTarget(appSettings, {
+    activeSessionConnectionId: activeSession?.llmConnectionId,
+    activeSessionProvider: activeSession?.provider,
+    draftProviderId: context.draftProviderId
+  })
+  const activeProvider = activeTarget.provider
   const isSending = operationState.isSending
   const hasUnreadyDraftAttachments = draftAttachments.some(
     (attachment) => attachment.status !== 'success'
@@ -106,11 +80,11 @@ export function ChatInput(): React.JSX.Element {
   const runtimeInfo = useMemo<ChatInputRuntimeInfo>(
     () => ({
       providerLabel: activeProvider?.name ?? '未选择提供商',
-      modelLabel: selectChatModelLabel(activeProvider),
+      modelLabel: activeTarget.modelLabel,
       shortcutLabel: 'Enter 发送，Shift+Enter 换行',
       statusLabel: isSending ? '发送中' : undefined
     }),
-    [activeProvider, isSending]
+    [activeProvider, activeTarget.modelLabel, isSending]
   )
 
   useEffect(() => {
