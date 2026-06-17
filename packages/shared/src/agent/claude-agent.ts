@@ -69,7 +69,7 @@ export class ClaudeAgent implements AgentBackend {
     message: string,
     attachments?: MessageAttachment[],
     options: AgentChatOptions = {}
-  ): AsyncGenerator<AgentEvent> {
+  ): AsyncGenerator<AgentEvent, void, void> {
     void attachments
 
     this.processing = true
@@ -120,6 +120,15 @@ export class ClaudeAgent implements AgentBackend {
       this.abortController = null
       this.processing = false
     }
+  }
+
+  /**
+   * 响应权限请求；当前 Claude SDK 适配层尚未把工具审批挂接到该入口。
+   */
+  respondToPermission(requestId: string, allowed: boolean, alwaysAllow?: boolean): void {
+    void requestId
+    void allowed
+    void alwaysAllow
   }
 
   /**

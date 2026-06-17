@@ -30,6 +30,21 @@ export type AgentPermissionRequest = {
   impact?: string
 }
 
+/**
+ * 表示宿主应用对某个 agent 权限请求的人工决策，由会话编排层转交给 backend。
+ */
+export type AgentPermissionDecision =
+  | {
+      requestId: string
+      approved: true
+      alwaysAllow?: boolean
+    }
+  | {
+      requestId: string
+      approved: false
+      reason?: string
+    }
+
 export type AgentTypedError = {
   code: string
   title: string

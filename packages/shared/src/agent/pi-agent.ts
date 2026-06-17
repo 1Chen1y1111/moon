@@ -3,7 +3,12 @@
  * 当前文件不直接接入 Pi SDK，避免在子进程协议落地前扩大运行时依赖。
  */
 
-import type { AgentBackend, AgentChatOptions, AgentEvent, MessageAttachment } from './backend/types'
+import type {
+  AgentBackend,
+  AgentChatOptions,
+  AgentEvent,
+  MessageAttachment
+} from './backend/types'
 import { createPiNotWiredEvent } from './backend/pi/event-adapter'
 
 export type PiAgentInput = {
@@ -31,7 +36,7 @@ export class PiAgent implements AgentBackend {
     message: string,
     attachments?: MessageAttachment[],
     options?: AgentChatOptions
-  ): AsyncGenerator<AgentEvent> {
+  ): AsyncGenerator<AgentEvent, void, void> {
     void message
     void attachments
     void options
@@ -45,6 +50,15 @@ export class PiAgent implements AgentBackend {
     }
 
     yield createPiNotWiredEvent(this.notWiredMessage)
+  }
+
+  /**
+   * 响应权限请求；Pi backend 尚未接入运行时权限协议，因此当前不会产生待处理请求。
+   */
+  respondToPermission(requestId: string, allowed: boolean, alwaysAllow?: boolean): void {
+    void requestId
+    void allowed
+    void alwaysAllow
   }
 
   /**

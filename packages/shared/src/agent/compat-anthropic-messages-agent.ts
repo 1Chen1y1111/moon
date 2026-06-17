@@ -336,7 +336,7 @@ export class CompatAnthropicMessagesAgent implements AgentBackend {
     message: string,
     attachments?: MessageAttachment[],
     options: AgentChatOptions = {}
-  ): AsyncGenerator<AgentEvent> {
+  ): AsyncGenerator<AgentEvent, void, void> {
     void attachments
 
     this.processing = true
@@ -401,6 +401,15 @@ export class CompatAnthropicMessagesAgent implements AgentBackend {
       this.abortController = null
       this.processing = false
     }
+  }
+
+  /**
+   * 响应权限请求；Anthropic-compatible 流式接口当前不会在本层产生待审批工具调用。
+   */
+  respondToPermission(requestId: string, allowed: boolean, alwaysAllow?: boolean): void {
+    void requestId
+    void allowed
+    void alwaysAllow
   }
 
   /**

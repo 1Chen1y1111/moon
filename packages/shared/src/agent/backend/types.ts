@@ -9,7 +9,7 @@ import type {
 } from '@moon/core/types'
 import type { AgentBackendProvider, CustomEndpointApi, ThinkingLevel } from '../../config'
 
-export type { AgentEvent, MessageAttachment } from '@moon/core/types'
+export type { AgentEvent, AgentPermissionDecision, MessageAttachment } from '@moon/core/types'
 
 export type AgentChatOptions = {
   isRetry?: boolean
@@ -42,7 +42,12 @@ export interface AgentBackend {
     message: string,
     attachments?: CoreMessageAttachment[],
     options?: AgentChatOptions
-  ): AsyncGenerator<CoreAgentEvent>
+  ): AsyncGenerator<CoreAgentEvent, void, void>
+
+  /**
+   * 响应一个等待中的权限请求，backend 负责把该决策转交给 SDK、子进程或内部挂起流程。
+   */
+  respondToPermission(requestId: string, allowed: boolean, alwaysAllow?: boolean): void
 
   /**
    * 请求中止当前执行，具体 backend 决定是软中断、硬中断还是转发给子进程。

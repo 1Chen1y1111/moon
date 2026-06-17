@@ -26,7 +26,14 @@ import {
   createDefaultProviderSettings
 } from '@moon/shared/domain/settings'
 import type { AppSettings, ProviderSettings } from '@moon/shared/domain/settings'
-import type { AgentBackend, AgentBackendConfig, AgentEvent } from '@moon/shared/agent'
+import type {
+  AgentBackend,
+  AgentBackendConfig,
+  AgentChatOptions,
+  AgentEvent,
+  AgentPermissionDecision,
+  MessageAttachment
+} from '@moon/shared/agent'
 import {
   llmConnectionSchema,
   selectDefaultLlmConnection,
@@ -335,7 +342,7 @@ type CreateServiceResult = {
 
 function createMockAgentBackend(events: AgentEvent[]): AgentBackend {
   return {
-    async *chat(): AsyncGenerator<AgentEvent> {
+    async *chat(): AsyncGenerator<AgentEvent, void, void> {
       for (const event of events) {
         yield event
       }
@@ -344,6 +351,74 @@ function createMockAgentBackend(events: AgentEvent[]): AgentBackend {
     destroy: vi.fn(),
     getModel: vi.fn(() => 'test-model'),
     isProcessing: vi.fn(() => false),
+    respondToPermission: vi.fn(),
+    setModel: vi.fn()
+  }
+}
+
+/**
+ * 创建会等待权限决策的 backend fixture，用来验证 ChatService 能通过 respondToPermission 恢复执行。
+ */
+function createPermissionAgentBackend(
+  decisions: AgentPermissionDecision[],
+  options: { throwWhenAborted?: boolean } = {}
+): AgentBackend {
+  let resolvePermission: ((decision: AgentPermissionDecision) => void) | null = null
+  const respondToPermission = vi.fn(
+    (requestId: string, allowed: boolean, alwaysAllow: boolean = false): void => {
+      const decision: AgentPermissionDecision = allowed
+        ? {
+            requestId,
+            approved: true,
+            ...(alwaysAllow ? { alwaysAllow } : {})
+          }
+        : {
+            requestId,
+            approved: false
+          }
+
+      decisions.push(decision)
+      resolvePermission?.(decision)
+    }
+  )
+
+  return {
+    async *chat(
+      _message: string,
+      _attachments?: MessageAttachment[],
+      chatOptions?: AgentChatOptions
+    ): AsyncGenerator<AgentEvent, void, void> {
+      void _message
+      void _attachments
+
+      const permissionDecisionPromise = new Promise<AgentPermissionDecision>((resolve) => {
+        resolvePermission = resolve
+      })
+
+      yield {
+        type: 'permission_request',
+        request: {
+          requestId: 'permission-tool-1',
+          toolName: 'Bash',
+          description: '需要执行测试命令',
+          command: 'pnpm test',
+          type: 'bash',
+          reason: '验证权限闭环'
+        }
+      }
+      const decision = await permissionDecisionPromise
+
+      if (options.throwWhenAborted === true && chatOptions?.abortSignal?.aborted === true) {
+        throw new Error('Cancelled by user.')
+      }
+
+      yield { type: 'text_delta', text: decision?.approved === true ? 'allowed' : 'rejected' }
+    },
+    abort: vi.fn(async () => {}),
+    destroy: vi.fn(),
+    getModel: vi.fn(() => 'test-model'),
+    isProcessing: vi.fn(() => false),
+    respondToPermission,
     setModel: vi.fn()
   }
 }
@@ -1029,6 +1104,110 @@ describe('ChatService.sendMessage', () => {
     ])
     expect(events.map((event) => (event as { type: string }).type)).toContain('tool-start')
     expect(events.map((event) => (event as { type: string }).type)).toContain('tool-finish')
+  })
+
+  it('waits for permission approval and resumes the backend through respondToPermission', async () => {
+    const settings = createClaudeSettings()
+    const decisions: AgentPermissionDecision[] = []
+    const events: unknown[] = []
+    const agentBackend = createPermissionAgentBackend(decisions)
+    const { service, toolInvocationsRepository } = createService({
+      createAgentBackend: vi.fn(() => agentBackend),
+      settings
+    })
+
+    const result = await service.sendMessage({ content: '需要工具权限' }, (event) => {
+      events.push(event)
+
+      if (event.type === 'tool-waiting-approval') {
+        void service.approveToolCall({ toolInvocationId: event.toolInvocation.id })
+      }
+    })
+
+    expect(decisions).toEqual([{ requestId: 'permission-tool-1', approved: true }])
+    expect(agentBackend.respondToPermission).toHaveBeenCalledWith('permission-tool-1', true, false)
+    expect(result.messages.map((message) => message.content)).toEqual(['需要工具权限', 'allowed'])
+    expect(toolInvocationsRepository.invocations).toEqual([
+      expect.objectContaining({
+        id: 'permission-tool-1',
+        name: 'Bash',
+        arguments: expect.objectContaining({
+          command: 'pnpm test',
+          description: '需要执行测试命令'
+        }),
+        result: { approved: true },
+        status: 'done'
+      })
+    ])
+    expect(events.map((event) => (event as { type: string }).type)).toEqual([
+      'message-created',
+      'message-created',
+      'operation-started',
+      'tool-waiting-approval',
+      'tool-finish',
+      'message-delta',
+      'operation-done'
+    ])
+  })
+
+  it('sends rejected permission decisions back through respondToPermission', async () => {
+    const settings = createClaudeSettings()
+    const decisions: AgentPermissionDecision[] = []
+    const agentBackend = createPermissionAgentBackend(decisions)
+    const { service, toolInvocationsRepository } = createService({
+      createAgentBackend: vi.fn(() => agentBackend),
+      settings
+    })
+
+    const result = await service.sendMessage({ content: '拒绝工具权限' }, (event) => {
+      if (event.type === 'tool-waiting-approval') {
+        void service.rejectToolCall({
+          toolInvocationId: event.toolInvocation.id,
+          reason: '不允许执行测试命令'
+        })
+      }
+    })
+
+    expect(decisions).toEqual([{ requestId: 'permission-tool-1', approved: false }])
+    expect(agentBackend.respondToPermission).toHaveBeenCalledWith('permission-tool-1', false, false)
+    expect(result.messages.map((message) => message.content)).toEqual(['拒绝工具权限', 'rejected'])
+    expect(toolInvocationsRepository.invocations).toEqual([
+      expect.objectContaining({
+        id: 'permission-tool-1',
+        error: '不允许执行测试命令',
+        result: null,
+        status: 'rejected'
+      })
+    ])
+  })
+
+  it('rejects pending permissions when cancelling an operation', async () => {
+    const settings = createClaudeSettings()
+    const decisions: AgentPermissionDecision[] = []
+    const agentBackend = createPermissionAgentBackend(decisions, { throwWhenAborted: true })
+    const { service, toolInvocationsRepository } = createService({
+      createAgentBackend: vi.fn(() => agentBackend),
+      settings
+    })
+
+    await expect(
+      service.sendMessage({ content: '取消工具权限' }, (event) => {
+        if (event.type === 'tool-waiting-approval') {
+          void service.cancelOperation({ operationId: event.operationId })
+        }
+      })
+    ).rejects.toThrow('Cancelled by user.')
+
+    expect(decisions).toEqual([{ requestId: 'permission-tool-1', approved: false }])
+    expect(agentBackend.respondToPermission).toHaveBeenCalledWith('permission-tool-1', false, false)
+    expect(toolInvocationsRepository.invocations).toEqual([
+      expect.objectContaining({
+        id: 'permission-tool-1',
+        error: 'Cancelled by user.',
+        result: null,
+        status: 'rejected'
+      })
+    ])
   })
 
   it('sends stored attachments as model message parts', async () => {

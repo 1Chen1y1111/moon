@@ -1,3 +1,8 @@
+/**
+ * 负责把聊天 IPC 事件和用户动作归约成 renderer chat store 状态。
+ * 它只处理本地状态转换，不直接调用 preload API 或主进程服务。
+ */
+
 import type {
   AgentOperationRecord,
   ChatOperationEvent,
@@ -556,6 +561,9 @@ function applyChatOperationEvent(state: ChatState, event: ChatOperationEvent): C
   )
 }
 
+/**
+ * 根据聊天动作生成下一份 chat store 状态。
+ */
 export function chatReducer(state: ChatState, action: ChatReducerAction): ChatState {
   if (action.type === 'clearChatMessages') {
     return {
@@ -1017,7 +1025,19 @@ export function chatReducer(state: ChatState, action: ChatReducerAction): ChatSt
     }))
   }
 
-  return updateMessageById(state, action.toolInvocation.messageId, (message) =>
+  const withToolInvocation = updateMessageById(state, action.toolInvocation.messageId, (message) =>
     updateToolInvocation(message, action.toolInvocation)
   )
+  const pendingToolInvocations =
+    action.toolInvocation.status === 'waiting_for_human'
+      ? upsertById(withToolInvocation.pendingToolInvocations, action.toolInvocation)
+      : removePendingToolInvocation(
+          withToolInvocation.pendingToolInvocations,
+          action.toolInvocation.id
+        )
+
+  return {
+    ...withToolInvocation,
+    pendingToolInvocations
+  }
 }

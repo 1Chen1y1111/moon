@@ -17,7 +17,8 @@ import {
   type AgentBackend,
   type AgentBackendConfig,
   type AgentBackendMessage,
-  type AgentEvent
+  type AgentEvent,
+  type AgentPermissionDecision
 } from '@moon/shared/agent'
 import type { NormalizedLlmConnection } from '@moon/shared/config'
 import type { AgentOperationsRepository } from '../repositories/agent-operations-repository'
@@ -100,12 +101,17 @@ type ChatServiceDependencies = {
 type ChatOperationEventListener = (event: ChatOperationEvent) => void
 
 type AgentInfoPayload = Extract<AgentEvent, { type: 'info' }>
+type AgentPermissionPayload = Extract<AgentEvent, { type: 'permission_request' }>
 type AgentStatusPayload = Extract<AgentEvent, { type: 'status' }>
 type AgentEventUsagePayload = Extract<AgentEvent, { type: 'usage_update' }>['usage']
 
 type AgentEventApplicationResult = {
   message: MessageRecord
   operation: AgentOperationRecord
+}
+
+type PendingToolPermission = {
+  operationId: string
 }
 
 type ResolvedAgentTarget = {
@@ -201,6 +207,28 @@ function normalizeToolResult(value: unknown): Record<string, unknown> {
   }
 
   return { value }
+}
+
+/**
+ * 把权限请求转换成工具参数，便于 UI 在不理解 SDK 私有结构时仍能展示风险信息。
+ */
+function createPermissionRequestArguments(
+  request: AgentPermissionPayload['request']
+): ChatJsonObject {
+  return {
+    description: request.description,
+    ...(request.command === undefined ? {} : { command: request.command }),
+    ...(request.type === undefined ? {} : { type: request.type }),
+    ...(request.reason === undefined ? {} : { reason: request.reason }),
+    ...(request.impact === undefined ? {} : { impact: request.impact })
+  }
+}
+
+/**
+ * 为拒绝类工具决策生成统一文案，避免 renderer 和 main 对默认文案各自发散。
+ */
+function resolveRejectedToolReason(reason?: string): string {
+  return reason?.trim() || 'Rejected by user.'
 }
 
 /**
@@ -338,6 +366,9 @@ export {
   selectDefaultChatProvider
 }
 
+/**
+ * 根据首条用户输入生成会话标题，空内容回退为默认新聊天标题。
+ */
 export function createChatTitle(content: string): string {
   const normalizedContent = content.replace(/\s+/g, ' ').trim()
 
@@ -374,12 +405,18 @@ async function toAgentBackendMessage(
   return createAgentBackendMessage({ ...message, content })
 }
 
+/**
+ * 编排聊天会话、agent operation、工具调用和消息持久化之间的主流程。
+ */
 export class ChatService {
+  private readonly activeAgentBackends = new Map<string, AgentBackend>()
   private readonly activeOperations = new Map<string, AbortController>()
   private readonly agentOperationsRepository: AgentOperationsRepository
   private readonly attachmentsDirectory: string
   private readonly createAgentBackend: AgentBackendFactory
   private readonly messagesRepository: MessagesRepository
+  private readonly operationEventListeners = new Map<string, ChatOperationEventListener>()
+  private readonly pendingToolPermissions = new Map<string, PendingToolPermission>()
   private readonly projectsRepository?: ProjectsRepository
   private readonly sessionsRepository: SessionsRepository
   private readonly settingsRepository: SettingsRepository
@@ -655,6 +692,9 @@ export class ChatService {
     }
   }
 
+  /**
+   * 取消正在运行的 operation，并拒绝该 operation 下仍在等待的权限请求。
+   */
   async cancelOperation(input: CancelAgentOperationInput): Promise<AgentOperationRecord> {
     const parsedInput = cancelAgentOperationInputSchema.parse(input)
     const abortController = this.activeOperations.get(parsedInput.operationId)
@@ -667,6 +707,8 @@ export class ChatService {
     if (operation === null) {
       throw new Error('Agent operation not found.')
     }
+
+    await this.rejectPendingToolPermissionsForOperation(operation.id, 'Cancelled by user.')
 
     const cancelledOperation = await this.agentOperationsRepository.save({
       ...operation,
@@ -692,42 +734,153 @@ export class ChatService {
     return cancelledOperation
   }
 
+  /**
+   * 批准等待中的工具权限请求，并把允许决策送回对应 backend。
+   */
   async approveToolCall(input: ApproveToolCallInput): Promise<ToolInvocationRecord> {
     const parsedInput = approveToolCallInputSchema.parse(input)
-    const toolInvocation = await this.toolInvocationsRepository.findById(
-      parsedInput.toolInvocationId
-    )
 
-    if (toolInvocation === null) {
-      throw new Error('Tool invocation not found.')
-    }
-
-    return this.toolInvocationsRepository.save({
-      ...toolInvocation,
-      status: 'done',
-      result: { approved: true },
-      error: null,
-      updatedAt: createTimestamp()
+    return this.resolveToolPermissionDecision(parsedInput.toolInvocationId, {
+      requestId: parsedInput.toolInvocationId,
+      approved: true,
+      ...(parsedInput.alwaysAllow === undefined ? {} : { alwaysAllow: parsedInput.alwaysAllow })
     })
   }
 
+  /**
+   * 拒绝等待中的工具权限请求，并把拒绝决策送回对应 backend。
+   */
   async rejectToolCall(input: RejectToolCallInput): Promise<ToolInvocationRecord> {
     const parsedInput = rejectToolCallInputSchema.parse(input)
-    const toolInvocation = await this.toolInvocationsRepository.findById(
-      parsedInput.toolInvocationId
-    )
+
+    return this.resolveToolPermissionDecision(parsedInput.toolInvocationId, {
+      requestId: parsedInput.toolInvocationId,
+      approved: false,
+      reason: resolveRejectedToolReason(parsedInput.reason)
+    })
+  }
+
+  /**
+   * 把权限请求记录为待审批状态，供用户操作或取消 operation 时定位。
+   */
+  private trackPendingToolPermission(
+    toolInvocation: ToolInvocationRecord,
+    operationId: string
+  ): void {
+    this.pendingToolPermissions.set(toolInvocation.id, { operationId })
+  }
+
+  /**
+   * 在权限审批结束后广播工具完成事件，让 renderer 从等待态恢复到运行态。
+   */
+  private emitToolPermissionResolvedEvent(
+    operation: AgentOperationRecord,
+    toolInvocation: ToolInvocationRecord
+  ): void {
+    const listener = this.operationEventListeners.get(operation.id)
+    const sessionId =
+      typeof operation.appContext?.sessionId === 'string' ? operation.appContext.sessionId : null
+
+    if (
+      listener === undefined ||
+      sessionId === null ||
+      operation.topicId == null ||
+      operation.threadId == null
+    ) {
+      return
+    }
+
+    listener({
+      type: 'tool-finish',
+      operationId: operation.id,
+      sessionId,
+      topicId: operation.topicId,
+      threadId: operation.threadId,
+      messageId: toolInvocation.messageId,
+      toolInvocation
+    })
+  }
+
+  /**
+   * 解析 UI 审批结果，更新工具状态，并把决策回传给正在等待的 agent backend。
+   */
+  private async resolveToolPermissionDecision(
+    toolInvocationId: string,
+    decision: AgentPermissionDecision,
+    options: { resumeOperation: boolean } = { resumeOperation: true }
+  ): Promise<ToolInvocationRecord> {
+    const toolInvocation = await this.toolInvocationsRepository.findById(toolInvocationId)
 
     if (toolInvocation === null) {
       throw new Error('Tool invocation not found.')
     }
 
-    return this.toolInvocationsRepository.save({
+    if (toolInvocation.status !== 'waiting_for_human') {
+      return toolInvocation
+    }
+
+    const timestamp = createTimestamp()
+    const updatedToolInvocation = await this.toolInvocationsRepository.save({
       ...toolInvocation,
-      status: 'rejected',
-      result: null,
-      error: parsedInput.reason ?? 'Rejected by user.',
-      updatedAt: createTimestamp()
+      status: decision.approved ? 'done' : 'rejected',
+      result: decision.approved ? { approved: true } : null,
+      error: decision.approved ? null : resolveRejectedToolReason(decision.reason),
+      updatedAt: timestamp
     })
+    const pendingPermission = this.pendingToolPermissions.get(toolInvocation.id)
+    const operationId = toolInvocation.operationId ?? pendingPermission?.operationId
+
+    this.pendingToolPermissions.delete(toolInvocation.id)
+
+    if (operationId !== undefined) {
+      const backend = this.activeAgentBackends.get(operationId)
+      const operation = await this.agentOperationsRepository.findById(operationId)
+
+      if (options.resumeOperation && backend !== undefined && operation !== null) {
+        const resumedOperation = await this.agentOperationsRepository.save({
+          ...operation,
+          status: 'running',
+          completionReason: null,
+          updatedAt: timestamp
+        })
+
+        this.emitToolPermissionResolvedEvent(resumedOperation, updatedToolInvocation)
+      }
+
+      backend?.respondToPermission(
+        decision.requestId,
+        decision.approved,
+        decision.approved ? (decision.alwaysAllow ?? false) : false
+      )
+    }
+
+    return updatedToolInvocation
+  }
+
+  /**
+   * operation 被取消时拒绝所有待处理权限，释放仍在等待用户决策的 backend。
+   */
+  private async rejectPendingToolPermissionsForOperation(
+    operationId: string,
+    reason: string
+  ): Promise<void> {
+    const pendingToolInvocationIds = [...this.pendingToolPermissions.entries()]
+      .filter(([, pendingPermission]) => pendingPermission.operationId === operationId)
+      .map(([toolInvocationId]) => toolInvocationId)
+
+    await Promise.all(
+      pendingToolInvocationIds.map((toolInvocationId) =>
+        this.resolveToolPermissionDecision(
+          toolInvocationId,
+          {
+            requestId: toolInvocationId,
+            approved: false,
+            reason
+          },
+          { resumeOperation: false }
+        )
+      )
+    )
   }
 
   private async executeOperation({
@@ -772,10 +925,20 @@ export class ChatService {
       createConnectionAgentBackendConfig(connection, scopedBackendMessages)
     )
 
+    this.activeAgentBackends.set(operation.id, agentBackend)
+
+    if (onEvent !== undefined) {
+      this.operationEventListeners.set(operation.id, onEvent)
+    }
+
     try {
-      for await (const agentEvent of agentBackend.chat(currentUserMessage, undefined, {
+      const agentEvents = agentBackend.chat(currentUserMessage, undefined, {
         abortSignal: abortController.signal
-      })) {
+      })
+      let agentEventResult = await agentEvents.next()
+
+      while (!agentEventResult.done) {
+        const agentEvent = agentEventResult.value
         const eventResult = await this.applyAgentEvent({
           event: agentEvent,
           message: assistantMessage,
@@ -786,6 +949,7 @@ export class ChatService {
 
         assistantMessage = eventResult.message
         currentOperation = eventResult.operation
+        agentEventResult = await agentEvents.next()
       }
 
       const completedTimestamp = createTimestamp()
@@ -863,6 +1027,9 @@ export class ChatService {
       })
 
       throw error
+    } finally {
+      this.activeAgentBackends.delete(operation.id)
+      this.operationEventListeners.delete(operation.id)
     }
   }
 
@@ -990,6 +1157,49 @@ export class ChatService {
       return { message: updatedMessage, operation }
     }
 
+    if (event.type === 'permission_request') {
+      const timestamp = createTimestamp()
+      const toolInvocation = await this.toolInvocationsRepository.save({
+        id: event.request.requestId,
+        toolCallId: event.request.requestId,
+        operationId: operation.id,
+        messageId: message.id,
+        name: event.request.toolName,
+        arguments: createPermissionRequestArguments(event.request),
+        intervention: {
+          type: 'permission_request',
+          description: event.request.description,
+          ...(event.request.command === undefined ? {} : { command: event.request.command }),
+          ...(event.request.reason === undefined ? {} : { reason: event.request.reason }),
+          ...(event.request.impact === undefined ? {} : { impact: event.request.impact })
+        },
+        status: 'waiting_for_human',
+        createdAt: timestamp,
+        updatedAt: timestamp
+      })
+      const waitingOperation = await this.agentOperationsRepository.save({
+        ...operation,
+        status: 'waiting_for_human',
+        completionReason: 'waiting_for_human',
+        humanInterventions: (operation.humanInterventions ?? 0) + 1,
+        updatedAt: timestamp
+      })
+
+      this.trackPendingToolPermission(toolInvocation, waitingOperation.id)
+
+      onEvent?.({
+        type: 'tool-waiting-approval',
+        operationId: operation.id,
+        sessionId: scope.session.id,
+        topicId: scope.topic.id,
+        threadId: scope.thread.id,
+        messageId: message.id,
+        toolInvocation
+      })
+
+      return { message, operation: waitingOperation }
+    }
+
     if (event.type === 'tool_start') {
       const status = event.status === 'waiting_for_human' ? 'waiting_for_human' : 'running'
       const timestamp = createTimestamp()
@@ -1014,6 +1224,7 @@ export class ChatService {
           humanInterventions: (operation.humanInterventions ?? 0) + 1,
           updatedAt: timestamp
         })
+        this.trackPendingToolPermission(toolInvocation, currentOperation.id)
       }
 
       onEvent?.({
@@ -1045,6 +1256,8 @@ export class ChatService {
         createdAt: currentToolInvocation?.createdAt ?? timestamp,
         updatedAt: timestamp
       })
+
+      this.pendingToolPermissions.delete(toolInvocation.id)
 
       onEvent?.({
         type: 'tool-finish',

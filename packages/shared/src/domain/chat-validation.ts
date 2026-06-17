@@ -327,7 +327,8 @@ export const cancelAgentOperationInputSchema = z.object({
 export type CancelAgentOperationInput = z.infer<typeof cancelAgentOperationInputSchema>
 
 export const approveToolCallInputSchema = z.object({
-  toolInvocationId: z.string().trim().min(1, 'Tool invocation ID is required.')
+  toolInvocationId: z.string().trim().min(1, 'Tool invocation ID is required.'),
+  alwaysAllow: z.boolean().optional()
 })
 
 export type ApproveToolCallInput = z.infer<typeof approveToolCallInputSchema>
