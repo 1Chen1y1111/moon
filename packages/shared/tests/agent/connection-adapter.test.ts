@@ -72,6 +72,28 @@ describe('createConnectionAgentBackendConfig', () => {
       messages
     })
   })
+
+  it('adds workspace context when provided by the session scope', () => {
+    const connection = llmConnectionSchema.parse({
+      id: 'anthropic-main',
+      name: 'Claude Main',
+      backend: 'anthropic',
+      model: 'claude-sonnet-4-5',
+      apiKey: 'stored-key'
+    })
+
+    expect(
+      createConnectionAgentBackendConfig(connection, [], {
+        name: 'moon',
+        path: '/workspace/moon'
+      })
+    ).toMatchObject({
+      workspace: {
+        name: 'moon',
+        path: '/workspace/moon'
+      }
+    })
+  })
 })
 
 describe('assertLlmConnectionReadyForAgent', () => {

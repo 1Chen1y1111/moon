@@ -661,6 +661,10 @@ describe('ChatService.sendMessage', () => {
     })
     expect(createAgentBackend).toHaveBeenCalledWith(
       expect.objectContaining({
+        workspace: {
+          name: project.name,
+          path: project.path
+        },
         messages: expect.arrayContaining([
           expect.objectContaining({
             role: 'system',

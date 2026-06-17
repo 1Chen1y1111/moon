@@ -18,7 +18,8 @@ export const anthropicDriver: AgentBackendDriver = {
       baseUrl: config.baseUrl,
       messages: config.messages ?? [],
       model: config.model,
-      thinkingLevel: config.thinkingLevel
+      thinkingLevel: config.thinkingLevel,
+      workspace: config.workspace
     })
   }
 }

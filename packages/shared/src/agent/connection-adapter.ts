@@ -4,7 +4,11 @@
  */
 
 import type { NormalizedLlmConnection } from '../config'
-import type { AgentBackendConfig, AgentBackendMessage } from './backend/types'
+import type {
+  AgentBackendConfig,
+  AgentBackendMessage,
+  AgentBackendWorkspace
+} from './backend/types'
 
 const piBackendNotWiredMessage =
   'Pi backend is not wired yet. Configure an Anthropic-compatible connection for now.'
@@ -33,7 +37,8 @@ export function assertLlmConnectionReadyForAgent(connection: NormalizedLlmConnec
  */
 export function createConnectionAgentBackendConfig(
   connection: NormalizedLlmConnection,
-  messages: AgentBackendMessage[]
+  messages: AgentBackendMessage[],
+  workspace?: AgentBackendWorkspace
 ): AgentBackendConfig {
   const apiKey = connection.apiKey?.trim()
 
@@ -46,6 +51,7 @@ export function createConnectionAgentBackendConfig(
       ? {}
       : { customEndpoint: connection.customEndpoint }),
     ...(apiKey === undefined ? {} : { apiKey }),
-    ...(connection.baseUrl === undefined ? {} : { baseUrl: connection.baseUrl })
+    ...(connection.baseUrl === undefined ? {} : { baseUrl: connection.baseUrl }),
+    ...(workspace === undefined ? {} : { workspace })
   }
 }

@@ -927,20 +927,20 @@ export class ChatService {
         : [createProjectContextMessage(scope.project), ...backendMessages]
     const currentUserMessage =
       [...previousMessages].reverse().find((message) => message.role === 'user')?.content ?? ''
+    const workspace =
+      scope.project === null
+        ? undefined
+        : {
+            name: scope.project.name,
+            path: scope.project.path
+          }
     const delegateBackend = this.createAgentBackend(
-      createConnectionAgentBackendConfig(connection, scopedBackendMessages)
+      createConnectionAgentBackendConfig(connection, scopedBackendMessages, workspace)
     )
     const agentBackend = createAgentRuntimeBackend({
       delegate: delegateBackend,
       permissionMode: defaultAgentPermissionMode,
-      ...(scope.project === null
-        ? {}
-        : {
-            workspace: {
-              name: scope.project.name,
-              path: scope.project.path
-            }
-          })
+      ...(workspace === undefined ? {} : { workspace })
     })
 
     this.activeAgentBackends.set(operation.id, agentBackend)

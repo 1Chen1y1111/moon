@@ -4,6 +4,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest'
+import type { Options } from '@anthropic-ai/claude-agent-sdk'
 
 import { ClaudeAgent } from '../../src/agent'
 import type { AgentEvent } from '../../src/agent'
@@ -110,5 +111,112 @@ describe('ClaudeAgent', () => {
         }
       }
     ])
+  })
+
+  it('configures Claude Code SDK tools with project workspace cwd', async () => {
+    const queryClaude = createQueryClaudeMock()
+    const agent = new ClaudeAgent({
+      model: 'claude-sonnet',
+      messages: [
+        { role: 'system', content: 'project context' },
+        { role: 'user', content: 'previous question' }
+      ],
+      queryClaude: queryClaude as never,
+      workspace: {
+        name: 'moon',
+        path: '/workspace/moon'
+      }
+    })
+
+    for await (const _event of agent.chat('inspect project')) {
+      // 消费事件流以触发 SDK query mock。
+    }
+
+    expect(queryClaude).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: expect.not.stringContaining('SYSTEM:\nproject context'),
+        options: expect.objectContaining({
+          allowDangerouslySkipPermissions: true,
+          cwd: '/workspace/moon',
+          permissionMode: 'bypassPermissions',
+          systemPrompt: expect.objectContaining({
+            append: expect.stringContaining('/workspace/moon'),
+            preset: 'claude_code',
+            type: 'preset'
+          }),
+          tools: { type: 'preset', preset: 'claude_code' }
+        })
+      })
+    )
+  })
+
+  it('allows only read-only Claude Code tools inside the workspace', async () => {
+    const queryClaude = createQueryClaudeMock()
+    const agent = new ClaudeAgent({
+      model: 'claude-sonnet',
+      messages: [],
+      queryClaude: queryClaude as never,
+      workspace: {
+        path: '/workspace/moon'
+      }
+    })
+
+    for await (const _event of agent.chat('inspect project')) {
+      // 消费事件流以触发 SDK query mock。
+    }
+
+    const queryCalls = queryClaude.mock.calls as unknown as Array<[{ options?: Options }]>
+    const options = queryCalls[0]?.[0].options
+    const hook = options?.hooks?.PreToolUse?.[0]?.hooks[0]
+
+    expect(hook).toBeDefined()
+
+    await expect(
+      hook?.(
+        {
+          hook_event_name: 'PreToolUse',
+          session_id: 'sdk-session-1',
+          transcript_path: '/tmp/transcript.jsonl',
+          cwd: '/workspace/moon',
+          tool_name: 'Read',
+          tool_input: { file_path: 'package.json' },
+          tool_use_id: 'tool-1'
+        },
+        'tool-1',
+        { signal: new AbortController().signal }
+      )
+    ).resolves.toEqual({ continue: true })
+
+    await expect(
+      hook?.(
+        {
+          hook_event_name: 'PreToolUse',
+          session_id: 'sdk-session-1',
+          transcript_path: '/tmp/transcript.jsonl',
+          cwd: '/workspace/moon',
+          tool_name: 'Bash',
+          tool_input: { command: 'pwd' },
+          tool_use_id: 'tool-2'
+        },
+        'tool-2',
+        { signal: new AbortController().signal }
+      )
+    ).resolves.toMatchObject({ continue: false, decision: 'block' })
+
+    await expect(
+      hook?.(
+        {
+          hook_event_name: 'PreToolUse',
+          session_id: 'sdk-session-1',
+          transcript_path: '/tmp/transcript.jsonl',
+          cwd: '/workspace/moon',
+          tool_name: 'Read',
+          tool_input: { file_path: '../secret.txt' },
+          tool_use_id: 'tool-3'
+        },
+        'tool-3',
+        { signal: new AbortController().signal }
+      )
+    ).resolves.toMatchObject({ continue: false, decision: 'block' })
   })
 })

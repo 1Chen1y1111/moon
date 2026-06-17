@@ -12,6 +12,7 @@ import type { ThinkingLevel } from '../config'
 import type {
   AgentBackend,
   AgentBackendMessage,
+  AgentBackendWorkspace,
   AgentChatOptions,
   AgentEvent,
   MessageAttachment
@@ -24,6 +25,7 @@ export type ClaudeAgentInput = {
   model: string
   queryClaude?: typeof query
   thinkingLevel?: ThinkingLevel
+  workspace?: AgentBackendWorkspace
 }
 
 /**
@@ -39,6 +41,7 @@ export class ClaudeAgent implements AgentBackend {
   private readonly messages: AgentBackendMessage[]
   private readonly queryClaude: typeof query
   private readonly thinkingLevel?: ThinkingLevel
+  private readonly workspace?: AgentBackendWorkspace
   private abortController: AbortController | null = null
   private model: string
   private processing = false
@@ -52,7 +55,8 @@ export class ClaudeAgent implements AgentBackend {
     messages,
     model,
     queryClaude = query,
-    thinkingLevel
+    thinkingLevel,
+    workspace
   }: ClaudeAgentInput) {
     this.apiKey = apiKey
     this.baseUrl = baseUrl
@@ -60,6 +64,7 @@ export class ClaudeAgent implements AgentBackend {
     this.model = model
     this.queryClaude = queryClaude
     this.thinkingLevel = thinkingLevel
+    this.workspace = workspace
   }
 
   /**
@@ -85,13 +90,18 @@ export class ClaudeAgent implements AgentBackend {
     }
 
     try {
-      const prompt = buildClaudePrompt(this.messages, message)
+      const promptMessages =
+        this.workspace === undefined
+          ? this.messages
+          : this.messages.filter((candidate) => candidate.role !== 'system')
+      const prompt = buildClaudePrompt(promptMessages, message)
       const queryOptions = createClaudeQueryOptions({
         abortController,
         apiKey: this.apiKey,
         baseUrl: this.baseUrl,
         model: this.model,
-        thinkingLevel: options.thinkingOverride ?? this.thinkingLevel
+        thinkingLevel: options.thinkingOverride ?? this.thinkingLevel,
+        workspace: this.workspace
       })
       let hasCompleteEvent = false
 

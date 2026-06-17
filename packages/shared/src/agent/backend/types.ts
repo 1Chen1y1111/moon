@@ -22,6 +22,11 @@ export type AgentBackendMessage = {
   content: string
 }
 
+export type AgentBackendWorkspace = {
+  name?: string
+  path: string
+}
+
 export type AgentBackendConfig = {
   provider: AgentBackendProvider
   model: string
@@ -32,6 +37,7 @@ export type AgentBackendConfig = {
   }
   messages?: AgentBackendMessage[]
   thinkingLevel?: ThinkingLevel
+  workspace?: AgentBackendWorkspace
 }
 
 export interface AgentBackend {
