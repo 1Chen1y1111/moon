@@ -98,6 +98,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
   const loadProjects = useProjectsStore((state) => state.loadProjects)
   const setActiveProject = useProjectsStore((state) => state.setActiveProject)
   const addExistingProjectFolder = useProjectsStore((state) => state.useExistingProjectFolder)
+  const deleteProject = useProjectsStore((state) => state.deleteProject)
   const { routeState, setRouteState } = useAppRouterContext()
   const [expandedProjectKeys, setExpandedProjectKeys] = useState<Set<string>>(() => new Set())
   const [collapsedProjectKeys, setCollapsedProjectKeys] = useState<Set<string>>(() => new Set())
@@ -263,33 +264,68 @@ export function WorkspaceSidebar(): React.JSX.Element {
     }
   }
 
+  const handleDeleteProject = async (
+    event: MouseEvent<HTMLButtonElement>,
+    projectId: string
+  ): Promise<void> => {
+    event.stopPropagation()
+
+    await deleteProject({ projectId })
+    await loadChatSessions()
+
+    setExpandedProjectKeys((current) => {
+      const projectKey = getProjectKey(projectId)
+
+      if (!current.has(projectKey)) {
+        return current
+      }
+
+      const next = new Set(current)
+      next.delete(projectKey)
+      return next
+    })
+    setCollapsedProjectKeys((current) => {
+      const projectKey = getProjectKey(projectId)
+
+      if (!current.has(projectKey)) {
+        return current
+      }
+
+      const next = new Set(current)
+      next.delete(projectKey)
+      return next
+    })
+  }
+
   const renderSession = (session: SessionRecord): React.JSX.Element => {
     const isActive = routeState.activeChatId === session.id
     const title = session.title ?? '未命名会话'
 
     return (
       <div key={session.id} role="listitem">
-        <div className="group/session relative">
+        <div className="group/session flex h-7 min-w-0 items-center gap-1 rounded-md transition-colors hover:bg-accent focus-within:bg-accent">
           <button
             type="button"
             aria-current={isActive ? 'page' : undefined}
-            className="flex h-7 w-full min-w-0 rounded-md py-1 pl-2 pr-7 text-left text-xs leading-5 text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-current:bg-accent"
+            className="flex h-full min-w-0 flex-1 items-center rounded-md py-1 pl-2 text-left text-xs leading-5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-current:bg-accent"
             onClick={() => {
               void handleSelectSession(session)
             }}
           >
             <span className="truncate">{title}</span>
           </button>
-          <button
-            type="button"
-            aria-label={`删除会话 ${title}`}
-            className="absolute right-0.5 top-1/2 flex size-5 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[background-color,color,opacity] hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/session:opacity-100"
-            onClick={(event) => {
-              void handleDeleteSession(event, session.id)
-            }}
-          >
-            <Trash2 aria-hidden="true" className="size-3" strokeWidth={1.75} />
-          </button>
+          <div className="flex h-full shrink-0 items-center justify-end pr-0.5">
+            <button
+              type="button"
+              aria-label={`删除会话 ${title}`}
+              className="flex size-5 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[background-color,color,opacity] hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/session:opacity-100"
+              onClick={(event) => {
+                void handleDeleteSession(event, session.id)
+              }}
+            >
+              <Trash2 aria-hidden="true" className="size-3" strokeWidth={1.75} />
+            </button>
+          </div>
         </div>
       </div>
     )
@@ -308,14 +344,16 @@ export function WorkspaceSidebar(): React.JSX.Element {
 
     return (
       <section key={projectKey} className="min-w-0">
-        <div className="group/project relative">
+        <div
+          className={cn(
+            'group/project flex h-8 min-w-0 items-center gap-1 rounded-md transition-colors hover:bg-accent focus-within:bg-accent',
+            isActiveProject && 'bg-accent'
+          )}
+        >
           <button
             type="button"
             aria-expanded={isExpanded}
-            className={cn(
-              'flex h-8 w-full min-w-0 items-center gap-1.5 rounded-md py-1 pl-2 pr-14 text-left text-xs leading-5 text-foreground transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-              isActiveProject && 'bg-accent'
-            )}
+            className="flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-md py-1 pl-2 text-left text-xs leading-5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={() => {
               selectProject(projectId)
             }}
@@ -334,17 +372,29 @@ export function WorkspaceSidebar(): React.JSX.Element {
               )}
             />
           </button>
-          <button
-            type="button"
-            aria-label={`在 ${title} 下新建对话`}
-            className="absolute right-7 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[background-color,color,opacity] hover:bg-background hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/project:opacity-100"
-            onClick={(event) => {
-              event.stopPropagation()
-              void handleStartNewChat(projectId)
-            }}
-          >
-            <SquarePen aria-hidden="true" className="size-3.5" strokeWidth={1.8} />
-          </button>
+          <div className="flex h-full shrink-0 items-center justify-end gap-0.5 pr-0.5">
+            <button
+              type="button"
+              aria-label={`在 ${title} 下新建对话`}
+              className="flex size-5 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[background-color,color,opacity] hover:bg-background hover:text-foreground focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/project:opacity-100"
+              onClick={(event) => {
+                event.stopPropagation()
+                void handleStartNewChat(projectId)
+              }}
+            >
+              <SquarePen aria-hidden="true" className="size-3" strokeWidth={1.8} />
+            </button>
+            <button
+              type="button"
+              aria-label={`删除项目 ${title}`}
+              className="flex size-5 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-[background-color,color,opacity] hover:bg-destructive/10 hover:text-destructive focus-visible:opacity-100 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring group-hover/project:opacity-100"
+              onClick={(event) => {
+                void handleDeleteProject(event, projectId)
+              }}
+            >
+              <Trash2 aria-hidden="true" className="size-3" strokeWidth={1.75} />
+            </button>
+          </div>
         </div>
 
         {isExpanded ? (

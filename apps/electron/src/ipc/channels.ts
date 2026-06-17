@@ -39,6 +39,7 @@ export const ipcChannels = {
     list: 'projects:list',
     getActive: 'projects:get-active',
     useExistingFolder: 'projects:use-existing-folder',
+    delete: 'projects:delete',
     setActive: 'projects:set-active',
     onChange: 'projects:on-change'
   },

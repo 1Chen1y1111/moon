@@ -83,6 +83,7 @@ describe('preload api', () => {
     await api.projects.list()
     await api.projects.getActive()
     await api.projects.useExistingFolder()
+    await api.projects.delete({ projectId: 'project-1' })
     await api.projects.setActive({ projectId: 'project-1' })
     await api.windowControls.openSettings({ section: 'providers' })
 
@@ -130,6 +131,9 @@ describe('preload api', () => {
     expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.projects.list)
     expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.projects.getActive)
     expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.projects.useExistingFolder)
+    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.projects.delete, {
+      projectId: 'project-1'
+    })
     expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.projects.setActive, {
       projectId: 'project-1'
     })

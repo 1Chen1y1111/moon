@@ -18,3 +18,9 @@ export const setActiveProjectInputSchema = z.object({
 })
 
 export type SetActiveProjectInput = z.infer<typeof setActiveProjectInputSchema>
+
+export const deleteProjectInputSchema = z.object({
+  projectId: z.string().trim().min(1)
+})
+
+export type DeleteProjectInput = z.infer<typeof deleteProjectInputSchema>

@@ -88,6 +88,7 @@ const api: MoonApi = {
     list: () => invokeIpcChannel(ipcChannels.projects.list),
     getActive: () => invokeIpcChannel(ipcChannels.projects.getActive),
     useExistingFolder: () => invokeIpcChannel(ipcChannels.projects.useExistingFolder),
+    delete: (input) => invokeIpcChannel(ipcChannels.projects.delete, input),
     setActive: (input) => invokeIpcChannel(ipcChannels.projects.setActive, input),
     onChange: (listener) => {
       const channel = ipcChannels.projects.onChange

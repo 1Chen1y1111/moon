@@ -32,7 +32,10 @@ import type {
 } from '@moon/shared/domain/chat-validation'
 import type { AppSettings, ProviderTestResult } from '@moon/shared/domain/settings'
 import type { ProjectRecord, ProjectsChangeEvent } from '@moon/shared/domain/project'
-import type { SetActiveProjectInput } from '@moon/shared/domain/project-validation'
+import type {
+  DeleteProjectInput,
+  SetActiveProjectInput
+} from '@moon/shared/domain/project-validation'
 import type {
   CreateCustomAcpProviderInput,
   CreateCustomProviderInput,
@@ -144,6 +147,10 @@ export type AppIpcContractMap = {
     request: undefined
     response: ProjectRecord | null
   }
+  [ipcChannels.projects.delete]: {
+    request: DeleteProjectInput
+    response: void
+  }
   [ipcChannels.projects.setActive]: {
     request: SetActiveProjectInput
     response: ProjectRecord | null
@@ -206,6 +213,7 @@ export type MoonApi = {
     list: () => Promise<ProjectRecord[]>
     getActive: () => Promise<ProjectRecord | null>
     useExistingFolder: () => Promise<ProjectRecord | null>
+    delete: (input: DeleteProjectInput) => Promise<void>
     setActive: (input: SetActiveProjectInput) => Promise<ProjectRecord | null>
     onChange: (listener: (event: ProjectsChangeEvent) => void) => () => void
   }

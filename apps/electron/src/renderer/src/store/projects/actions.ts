@@ -4,7 +4,10 @@
  */
 
 import type { ProjectRecord, ProjectsChangeEvent } from '@moon/shared/domain/project'
-import type { SetActiveProjectInput } from '@moon/shared/domain/project-validation'
+import type {
+  DeleteProjectInput,
+  SetActiveProjectInput
+} from '@moon/shared/domain/project-validation'
 
 import type { StoreSetter } from '@renderer/store/types'
 
@@ -53,6 +56,11 @@ export class ProjectsActionImpl {
    */
   useExistingProjectFolder = (): Promise<ProjectRecord | null> =>
     this.internal_useExistingProjectFolder()
+
+  /**
+   * 删除项目绑定；磁盘文件和聊天记录保留。
+   */
+  deleteProject = (input: DeleteProjectInput): Promise<void> => this.internal_deleteProject(input)
 
   /**
    * 设置当前激活项目；null 表示切到未绑定聊天空间。
@@ -118,6 +126,19 @@ export class ProjectsActionImpl {
       this.internal_dispatchProjects({ activeProject, saveStatus: 'succeeded' })
 
       return activeProject
+    } catch (error) {
+      this.internal_dispatchProjects({ saveStatus: 'failed', error: getErrorMessage(error) })
+      throw error
+    }
+  }
+
+  internal_deleteProject = async (input: DeleteProjectInput): Promise<void> => {
+    this.internal_dispatchProjects({ saveStatus: 'saving', error: null })
+
+    try {
+      await window.api.projects.delete(input)
+      await this.internal_loadProjects()
+      this.internal_dispatchProjects({ saveStatus: 'succeeded' })
     } catch (error) {
       this.internal_dispatchProjects({ saveStatus: 'failed', error: getErrorMessage(error) })
       throw error

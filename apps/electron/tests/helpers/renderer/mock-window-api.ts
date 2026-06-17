@@ -35,7 +35,10 @@ import type {
   SendChatMessageInput
 } from '@moon/shared/domain/chat-validation'
 import type { ProjectRecord, ProjectsChangeEvent } from '@moon/shared/domain/project'
-import type { SetActiveProjectInput } from '@moon/shared/domain/project-validation'
+import type {
+  DeleteProjectInput,
+  SetActiveProjectInput
+} from '@moon/shared/domain/project-validation'
 import {
   createDefaultAppSettings,
   type AppSettings,
@@ -85,6 +88,7 @@ export type MockMoonApi = {
     list: MockFn<() => Promise<ProjectRecord[]>>
     getActive: MockFn<() => Promise<ProjectRecord | null>>
     useExistingFolder: MockFn<() => Promise<ProjectRecord | null>>
+    delete: MockFn<(input: DeleteProjectInput) => Promise<void>>
     setActive: MockFn<(input: SetActiveProjectInput) => Promise<ProjectRecord | null>>
     onChange: MockFn<(listener: (event: ProjectsChangeEvent) => void) => () => void>
   }
@@ -369,6 +373,7 @@ function createMockWindowApi(options: MockWindowApiOptions = {}): MockMoonApi {
       useExistingFolder: vi
         .fn<() => Promise<ProjectRecord | null>>()
         .mockResolvedValue(activeProject),
+      delete: vi.fn<(input: DeleteProjectInput) => Promise<void>>().mockResolvedValue(undefined),
       setActive: vi
         .fn<(input: SetActiveProjectInput) => Promise<ProjectRecord | null>>()
         .mockImplementation(async (input) => {

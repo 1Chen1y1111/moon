@@ -8,7 +8,9 @@ import { realpath, stat } from 'node:fs/promises'
 import { basename } from 'node:path'
 
 import {
+  deleteProjectInputSchema,
   setActiveProjectInputSchema,
+  type DeleteProjectInput,
   type SetActiveProjectInput
 } from '@moon/shared/domain/project-validation'
 import type { ProjectRecord, ProjectsChangeEvent } from '@moon/shared/domain/project'
@@ -116,6 +118,20 @@ export class ProjectsService {
     await this.projectsRepository.setActiveProjectId(project.id)
 
     return project
+  }
+
+  /**
+   * 删除项目绑定；不会删除磁盘文件，也不会删除已有聊天。
+   */
+  async deleteProject(input: DeleteProjectInput): Promise<void> {
+    const parsedInput = deleteProjectInputSchema.parse(input)
+    const project = await this.projectsRepository.findById(parsedInput.projectId)
+
+    if (project === null) {
+      throw new Error('Project not found.')
+    }
+
+    await this.projectsRepository.deleteById(project.id)
   }
 
   /**

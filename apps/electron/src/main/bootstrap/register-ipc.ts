@@ -72,6 +72,7 @@ export function registerIpcHandlers({
   ipcMain.removeHandler(ipcChannels.projects.list)
   ipcMain.removeHandler(ipcChannels.projects.getActive)
   ipcMain.removeHandler(ipcChannels.projects.useExistingFolder)
+  ipcMain.removeHandler(ipcChannels.projects.delete)
   ipcMain.removeHandler(ipcChannels.projects.setActive)
   ipcMain.removeHandler(ipcChannels.window.close)
   ipcMain.removeHandler(ipcChannels.window.minimize)
@@ -166,6 +167,10 @@ export function registerIpcHandlers({
     await broadcastProjectsChange(projectsService)
 
     return project
+  })
+  ipcMain.handle(ipcChannels.projects.delete, async (_event, input) => {
+    await projectsService.deleteProject(input)
+    await broadcastProjectsChange(projectsService)
   })
   ipcMain.handle(ipcChannels.projects.setActive, async (_event, input) => {
     const project = await projectsService.setActiveProject(input)

@@ -26,6 +26,18 @@ class ProjectsRepositoryMock {
     return this.projects.find((project) => project.id === id) ?? null
   }
 
+  async deleteById(id: string): Promise<void> {
+    const index = this.projects.findIndex((project) => project.id === id)
+
+    if (index !== -1) {
+      this.projects.splice(index, 1)
+    }
+
+    if (this.activeProjectId === id) {
+      this.activeProjectId = null
+    }
+  }
+
   async upsertByPath(input: { name: string; path: string }): Promise<ProjectRecord> {
     const existing = this.projects.find((project) => project.path === input.path)
     const timestamp = '2026-05-09T00:00:00.000Z'
@@ -103,5 +115,30 @@ describe('ProjectsService', () => {
     await expect(service.useExistingFolder()).resolves.toBeNull()
     expect(repository.projects).toEqual([])
     expect(repository.activeProjectId).toBeNull()
+  })
+
+  it('deletes a project binding without deleting other projects', async () => {
+    const repository = new ProjectsRepositoryMock()
+    const service = new ProjectsService({
+      pickDirectory: vi.fn(async () => null),
+      projectsRepository: repository as never
+    })
+    const project = await repository.upsertByPath({
+      name: 'moon',
+      path: '/workspace/moon'
+    })
+    const otherProject = await repository.upsertByPath({
+      name: 'craft',
+      path: '/workspace/craft'
+    })
+
+    await repository.setActiveProjectId(project.id)
+    await service.deleteProject({ projectId: project.id })
+
+    expect(repository.projects).toEqual([otherProject])
+    expect(await service.getActiveProject()).toBeNull()
+    await expect(service.deleteProject({ projectId: project.id })).rejects.toThrow(
+      'Project not found.'
+    )
   })
 })

@@ -73,6 +73,17 @@ export class ProjectsRepository {
   }
 
   /**
+   * 按项目 id 删除本地项目记录；关联会话由数据库外键转为未绑定项目。
+   */
+  async deleteById(id: string): Promise<void> {
+    await this.database.db.delete(projects).where(eq(projects.id, id))
+
+    if ((await this.getActiveProjectId()) === id) {
+      await this.setActiveProjectId(null)
+    }
+  }
+
+  /**
    * 按路径新增或更新项目，并返回最终持久化记录。
    */
   async upsertByPath(input: ProjectSaveInput): Promise<ProjectRecord> {

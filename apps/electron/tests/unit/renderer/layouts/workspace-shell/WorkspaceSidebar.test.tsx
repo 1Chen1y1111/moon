@@ -212,6 +212,35 @@ describe('WorkspaceSidebar', () => {
     expect(await screen.findByRole('button', { name: 'moon' })).toBeInTheDocument()
   })
 
+  it('deletes a project from the project row action', async () => {
+    const project = {
+      id: 'project-1',
+      name: 'moon',
+      path: '/workspace/moon',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:00.000Z'
+    }
+    const user = userEvent.setup()
+
+    api = installMockWindowApi({
+      activeProject: project,
+      chatSessions: [],
+      projects: [project]
+    })
+
+    renderRail()
+
+    const projectButton = await screen.findByRole('button', { name: 'moon' })
+
+    await user.hover(projectButton)
+    await user.click(screen.getByRole('button', { name: '删除项目 moon' }))
+
+    await waitFor(() =>
+      expect(api.projects.delete).toHaveBeenCalledWith({ projectId: 'project-1' })
+    )
+    expect(api.chat.listSessions).toHaveBeenCalled()
+  })
+
   it('keeps the more actions menu open long enough to move into it', () => {
     vi.useFakeTimers()
 

@@ -68,6 +68,12 @@ describe('ProjectsRepository', () => {
       expect(await repository.getActiveProjectId()).toBeNull()
       expect(await repository.getActiveProject()).toBeNull()
 
+      await repository.setActiveProjectId(secondProject.id)
+      await repository.deleteById(secondProject.id)
+
+      expect(await repository.list()).toEqual([])
+      expect(await repository.getActiveProjectId()).toBeNull()
+
       await connection.close()
     },
     pgliteTestTimeout

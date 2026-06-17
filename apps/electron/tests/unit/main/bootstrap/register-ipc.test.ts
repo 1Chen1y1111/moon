@@ -45,6 +45,7 @@ describe('registerIpcHandlers', () => {
   }
   const projectsService = {
     createChangeEvent: vi.fn(),
+    deleteProject: vi.fn(),
     getActiveProject: vi.fn(),
     listProjects: vi.fn(),
     setActiveProject: vi.fn(),
@@ -75,6 +76,7 @@ describe('registerIpcHandlers', () => {
     settingsService.saveAppearance.mockReset()
     settingsService.saveProvider.mockReset()
     projectsService.createChangeEvent.mockReset()
+    projectsService.deleteProject.mockReset()
     projectsService.getActiveProject.mockReset()
     projectsService.listProjects.mockReset()
     projectsService.setActiveProject.mockReset()
@@ -416,6 +418,7 @@ describe('registerIpcHandlers', () => {
     projectsService.getActiveProject.mockResolvedValue(project)
     projectsService.useExistingFolder.mockResolvedValue(project)
     projectsService.setActiveProject.mockResolvedValue(project)
+    projectsService.deleteProject.mockResolvedValue(undefined)
     projectsService.createChangeEvent.mockResolvedValue(event)
     getAllWindowsMock.mockReturnValue([
       { webContents: firstWebContents },
@@ -444,8 +447,15 @@ describe('registerIpcHandlers', () => {
         { projectId: 'project-1' }
       )
     ).toBe(project)
+    expect(
+      await getRegisteredHandler(ipcChannels.projects.delete)?.(
+        { sender: {} },
+        { projectId: 'project-1' }
+      )
+    ).toBeUndefined()
 
     expect(projectsService.setActiveProject).toHaveBeenCalledWith({ projectId: 'project-1' })
+    expect(projectsService.deleteProject).toHaveBeenCalledWith({ projectId: 'project-1' })
     expect(firstWebContents.send).toHaveBeenCalledWith(ipcChannels.projects.onChange, event)
     expect(secondWebContents.send).toHaveBeenCalledWith(ipcChannels.projects.onChange, event)
   })
