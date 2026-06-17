@@ -14,14 +14,32 @@ const piBackendNotWiredMessage =
   'Pi backend is not wired yet. Configure an Anthropic-compatible connection for now.'
 
 /**
+ * 解析 connection 实际应使用的 agent backend，兼容早期保存的 Anthropic Messages 连接。
+ */
+export function resolveConnectionAgentBackendProvider(
+  connection: NormalizedLlmConnection
+): AgentBackendConfig['provider'] {
+  if (
+    connection.backend === 'pi_compat' &&
+    connection.customEndpoint?.api === 'anthropic-messages'
+  ) {
+    return 'anthropic'
+  }
+
+  return connection.backend
+}
+
+/**
  * 校验 LLM connection 是否具备创建 agent backend 的最小条件。
  */
 export function assertLlmConnectionReadyForAgent(connection: NormalizedLlmConnection): void {
+  const provider = resolveConnectionAgentBackendProvider(connection)
+
   if (!connection.enabled) {
     throw new Error(`${connection.name} is disabled.`)
   }
 
-  if (connection.backend === 'pi') {
+  if (provider === 'pi') {
     throw new Error(piBackendNotWiredMessage)
   }
 
@@ -41,13 +59,14 @@ export function createConnectionAgentBackendConfig(
   workspace?: AgentBackendWorkspace
 ): AgentBackendConfig {
   const apiKey = connection.apiKey?.trim()
+  const provider = resolveConnectionAgentBackendProvider(connection)
 
   return {
-    provider: connection.backend,
+    provider,
     model: connection.model,
     messages,
     thinkingLevel: connection.thinkingLevel,
-    ...(connection.customEndpoint === undefined
+    ...(provider !== 'pi_compat' || connection.customEndpoint === undefined
       ? {}
       : { customEndpoint: connection.customEndpoint }),
     ...(apiKey === undefined ? {} : { apiKey }),

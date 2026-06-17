@@ -15,6 +15,7 @@ import {
   createAgentBackendMessage,
   buildAgentRuntimeSystemPrompt,
   createProviderLlmConnection,
+  resolveConnectionAgentBackendProvider,
   type AgentBackend,
   type AgentBackendConfig,
   type AgentBackendMessage,
@@ -248,6 +249,53 @@ function createProjectContextMessage(project: ProjectRecord): AgentBackendMessag
         path: project.path
       }
     })
+  }
+}
+
+/**
+ * 判断用户是否明确要求运行一条 shell 命令，用于非 Claude SDK backend 的能力提示。
+ */
+function isShellRunRequest(content: string): boolean {
+  return /^(?:运行|执行|run)\s+\S+/i.test(content.trim())
+}
+
+/**
+ * 生成非 Claude SDK 连接下的工具能力提示；只有绑定项目并明确运行命令时才短路。
+ */
+function createUnsupportedClaudeToolMessage(
+  connection: NormalizedLlmConnection,
+  content: string,
+  workspace?: AgentBackendConfig['workspace']
+): string | null {
+  if (
+    workspace === undefined ||
+    resolveConnectionAgentBackendProvider(connection) === 'anthropic' ||
+    !isShellRunRequest(content)
+  ) {
+    return null
+  }
+
+  const endpointApi = connection.customEndpoint?.api
+  const connectionProtocol =
+    endpointApi === undefined
+      ? `backend: ${connection.backend}`
+      : `backend: ${connection.backend}, customEndpoint: ${endpointApi}`
+
+  return [
+    `当前连接「${connection.name}」不是 Claude SDK 后端，无法触发 Claude Code Bash 工具审批。`,
+    `当前连接为 ${connectionProtocol}。`,
+    '请切换到 Claude SDK 连接后再运行该命令。'
+  ].join('')
+}
+
+/**
+ * 创建只返回固定事件的 agent 事件流，用于无需调用底层模型的本地提示。
+ */
+async function* createStaticAgentEventStream(
+  events: AgentEvent[]
+): AsyncGenerator<AgentEvent, void, void> {
+  for (const event of events) {
+    yield event
   }
 }
 
@@ -934,25 +982,39 @@ export class ChatService {
             name: scope.project.name,
             path: scope.project.path
           }
-    const delegateBackend = this.createAgentBackend(
-      createConnectionAgentBackendConfig(connection, scopedBackendMessages, workspace)
+    const unsupportedClaudeToolMessage = createUnsupportedClaudeToolMessage(
+      connection,
+      currentUserMessage,
+      workspace
     )
-    const agentBackend = createAgentRuntimeBackend({
-      delegate: delegateBackend,
-      permissionMode: defaultAgentPermissionMode,
-      ...(workspace === undefined ? {} : { workspace })
-    })
+    const agentBackend =
+      unsupportedClaudeToolMessage === null
+        ? createAgentRuntimeBackend({
+            delegate: this.createAgentBackend(
+              createConnectionAgentBackendConfig(connection, scopedBackendMessages, workspace)
+            ),
+            permissionMode: defaultAgentPermissionMode,
+            ...(workspace === undefined ? {} : { workspace })
+          })
+        : null
 
-    this.activeAgentBackends.set(operation.id, agentBackend)
+    if (agentBackend !== null) {
+      this.activeAgentBackends.set(operation.id, agentBackend)
+    }
 
     if (onEvent !== undefined) {
       this.operationEventListeners.set(operation.id, onEvent)
     }
 
     try {
-      const agentEvents = agentBackend.chat(currentUserMessage, undefined, {
-        abortSignal: abortController.signal
-      })
+      const agentEvents =
+        unsupportedClaudeToolMessage === null
+          ? agentBackend!.chat(currentUserMessage, undefined, {
+              abortSignal: abortController.signal
+            })
+          : createStaticAgentEventStream([
+              { type: 'text_complete', text: unsupportedClaudeToolMessage }
+            ])
       let agentEventResult = await agentEvents.next()
 
       while (!agentEventResult.done) {
@@ -1469,19 +1531,80 @@ export class ChatService {
   }
 
   /**
+   * 对 provider 派生连接使用最新 provider 设置生成运行时连接，避免旧连接协议滞留。
+   * 旧数据可能没有 providerId，此时借助会话或输入 provider 归属兜底识别。
+   */
+  private async refreshProviderBackedConnection(
+    connection: NormalizedLlmConnection,
+    fallbackProviderId?: ProviderId
+  ): Promise<NormalizedLlmConnection> {
+    const settings = await this.settingsRepository.getSettings()
+    const providerId =
+      connection.providerId ??
+      (settings.providers[connection.id] === undefined ? fallbackProviderId : connection.id)
+
+    if (providerId === undefined) {
+      return connection
+    }
+
+    const provider = settings.providers[providerId]
+
+    if (provider === undefined || !provider.enabled || !isSupportedChatProvider(provider)) {
+      return connection
+    }
+
+    const storedProvider = await this.withStoredApiKey(provider)
+    const providerWithApiKey = storedProvider.apiKey.trim()
+      ? storedProvider
+      : {
+          ...storedProvider,
+          apiKey: connection.apiKey ?? ''
+        }
+    const model = selectChatModel(providerWithApiKey)
+
+    try {
+      assertProviderReadyForAgent(providerWithApiKey, model)
+    } catch {
+      return connection
+    }
+
+    const providerConnection = createProviderLlmConnection(providerWithApiKey, model)
+    const currentBackend = resolveConnectionAgentBackendProvider(connection)
+    const providerBackend = resolveConnectionAgentBackendProvider(providerConnection)
+
+    if (currentBackend === providerBackend) {
+      return connection
+    }
+
+    return {
+      ...providerConnection,
+      id: connection.id,
+      enabled: connection.enabled,
+      isDefault: connection.isDefault,
+      thinkingLevel: connection.thinkingLevel,
+      providerId: connection.providerId ?? providerConnection.providerId
+    }
+  }
+
+  /**
    * 基于持久化 LLM connection 创建 agent target，并完成 connection 级可执行校验。
    */
-  private createConnectionAgentTarget(
+  private async createConnectionAgentTarget(
     connection: NormalizedLlmConnection,
     session: SessionRecord | null,
     fallbackProviderId?: ProviderId
-  ): ResolvedAgentTarget {
-    assertLlmConnectionReadyForAgent(connection)
+  ): Promise<ResolvedAgentTarget> {
+    const runtimeConnection = await this.refreshProviderBackedConnection(
+      connection,
+      fallbackProviderId
+    )
+
+    assertLlmConnectionReadyForAgent(runtimeConnection)
 
     return {
-      connection,
+      connection: runtimeConnection,
       persistedLlmConnectionId: connection.id,
-      providerId: connection.providerId ?? fallbackProviderId ?? connection.id,
+      providerId: runtimeConnection.providerId ?? fallbackProviderId ?? runtimeConnection.id,
       session
     }
   }

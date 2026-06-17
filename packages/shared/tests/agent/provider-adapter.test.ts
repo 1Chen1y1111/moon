@@ -50,7 +50,7 @@ describe('provider agent adapter', () => {
     })
   })
 
-  it('maps Anthropic-compatible API format to pi_compat backend config', () => {
+  it('maps Anthropic-compatible API format to Anthropic backend config', () => {
     const provider = createProvider({
       provider: 'openrouter',
       type: 'openrouter',
@@ -58,12 +58,14 @@ describe('provider agent adapter', () => {
       baseUrl: ' https://router.example/v1 '
     })
 
-    expect(resolveAgentBackendProvider(provider)).toBe('pi_compat')
+    expect(resolveAgentBackendProvider(provider)).toBe('anthropic')
     expect(createProviderAgentBackendConfig(provider, 'anthropic/model', [])).toMatchObject({
-      provider: 'pi_compat',
-      baseUrl: 'https://router.example/v1',
-      customEndpoint: { api: 'anthropic-messages' }
+      provider: 'anthropic',
+      baseUrl: 'https://router.example/v1'
     })
+    expect(createProviderAgentBackendConfig(provider, 'anthropic/model', [])).not.toHaveProperty(
+      'customEndpoint'
+    )
   })
 
   it('maps DeepSeek OpenAI-compatible defaults to pi_compat backend config', () => {
@@ -81,6 +83,54 @@ describe('provider agent adapter', () => {
       baseUrl: 'https://api.deepseek.com',
       customEndpoint: { api: 'openai-completions' }
     })
+  })
+
+  it('maps DeepSeek Anthropic protocol to Anthropic backend config', () => {
+    const provider = createProvider({
+      provider: 'deepseek',
+      apiFormat: 'anthropic',
+      model: 'deepseek-v4-flash'
+    })
+
+    expect(resolveAgentBackendProvider(provider)).toBe('anthropic')
+    expect(createProviderAgentBackendConfig(provider, 'deepseek-v4-flash', [])).toMatchObject({
+      provider: 'anthropic',
+      model: 'deepseek-v4-flash',
+      apiKey: 'stored-key',
+      baseUrl: 'https://api.deepseek.com/anthropic'
+    })
+    expect(createProviderAgentBackendConfig(provider, 'deepseek-v4-flash', [])).not.toHaveProperty(
+      'customEndpoint'
+    )
+  })
+
+  it('lets DeepSeek Anthropic protocol override OpenAI-compatible model metadata', () => {
+    const provider = createProvider({
+      provider: 'deepseek',
+      apiFormat: 'anthropic',
+      model: 'deepseek-v4-flash',
+      availableModels: [
+        {
+          id: 'deepseek-v4-flash',
+          name: 'DeepSeek V4 Flash',
+          enabled: true,
+          isManual: false,
+          providerApi: 'openai-completions',
+          providerBaseUrl: 'https://api.deepseek.com'
+        }
+      ]
+    })
+
+    expect(resolveAgentBackendProvider(provider)).toBe('anthropic')
+    expect(createProviderAgentBackendConfig(provider, 'deepseek-v4-flash', [])).toMatchObject({
+      provider: 'anthropic',
+      model: 'deepseek-v4-flash',
+      apiKey: 'stored-key',
+      baseUrl: 'https://api.deepseek.com/anthropic'
+    })
+    expect(createProviderAgentBackendConfig(provider, 'deepseek-v4-flash', [])).not.toHaveProperty(
+      'customEndpoint'
+    )
   })
 
   it('lets selected model protocol metadata override provider defaults', () => {
@@ -101,15 +151,17 @@ describe('provider agent adapter', () => {
       ]
     })
 
-    expect(resolveAgentBackendProvider(provider, 'anthropic/claude-sonnet')).toBe('pi_compat')
+    expect(resolveAgentBackendProvider(provider, 'anthropic/claude-sonnet')).toBe('anthropic')
     expect(createProviderAgentBackendConfig(provider, 'anthropic/claude-sonnet', [])).toMatchObject(
       {
-        provider: 'pi_compat',
+        provider: 'anthropic',
         model: 'anthropic/claude-sonnet',
-        baseUrl: 'https://router.example/anthropic',
-        customEndpoint: { api: 'anthropic-messages' }
+        baseUrl: 'https://router.example/anthropic'
       }
     )
+    expect(
+      createProviderAgentBackendConfig(provider, 'anthropic/claude-sonnet', [])
+    ).not.toHaveProperty('customEndpoint')
   })
 
   it('rejects non-compatible providers while Pi is not wired', () => {

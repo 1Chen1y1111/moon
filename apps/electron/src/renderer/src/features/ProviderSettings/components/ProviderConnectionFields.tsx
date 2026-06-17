@@ -14,7 +14,11 @@ import type { ProviderSettings } from '@moon/shared/domain/settings'
 
 import { FieldHint, FieldLabel } from './ProviderField'
 import type { ProviderDraft, ProviderFormErrors } from '../types'
-import { usesEditableProviderProtocol } from '../provider-settings.utils'
+import {
+  createDraftWithProviderApiFormat,
+  resolveProviderApiFormatOptions,
+  usesEditableProviderProtocol
+} from '../provider-settings.utils'
 
 /**
  * 返回 API 协议的用户可读名称，只在自定义 endpoint 配置时展示。
@@ -138,8 +142,26 @@ export function ApiConnectionFields({
   children: React.ReactNode
 }): React.JSX.Element {
   const usesEditableProtocol = usesEditableProviderProtocol(provider)
+  const apiFormatOptions = resolveProviderApiFormatOptions(provider)
   const defaultBaseUrl =
     resolveProviderDefaultBaseUrl(provider.provider, draft.apiFormat) || provider.defaultBaseUrl
+
+  /**
+   * 切换协议时让默认 endpoint 跟随协议变化，同时保留用户手写代理地址。
+   */
+  function handleProtocolChange(value: string): void {
+    const nextDraft = createDraftWithProviderApiFormat(
+      provider,
+      draft,
+      value as ProviderApiFormat
+    )
+
+    onDraftChange('apiFormat', nextDraft.apiFormat)
+
+    if (nextDraft.baseUrl !== draft.baseUrl) {
+      onDraftChange('baseUrl', nextDraft.baseUrl)
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -156,7 +178,9 @@ export function ApiConnectionFields({
               disabled={isSaving}
               onChange={(event) => onDraftChange('apiKey', event.target.value)}
               className={cn('min-w-0 flex-1')}
-              placeholder="Enter your API key"
+              placeholder={
+                provider.hasApiKey ? '已保存 API Key，留空继续使用' : 'Enter your API key'
+              }
             />
             <Button
               type="button"
@@ -170,6 +194,8 @@ export function ApiConnectionFields({
           </div>
           {errors.apiKey ? (
             <FieldHint>{errors.apiKey}</FieldHint>
+          ) : provider.hasApiKey ? (
+            <FieldHint>已保存 API Key；输入新值才会替换。</FieldHint>
           ) : provider.apiKeyHelpUrl ? (
             <FieldHint>
               Get your API key from{' '}
@@ -210,7 +236,7 @@ export function ApiConnectionFields({
           <Select
             value={draft.apiFormat}
             disabled={isSaving}
-            onValueChange={(value) => onDraftChange('apiFormat', value as ProviderApiFormat)}
+            onValueChange={handleProtocolChange}
           >
             <SelectTrigger
               aria-label={`${provider.name} Endpoint Protocol`}
@@ -219,14 +245,18 @@ export function ApiConnectionFields({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="openai-chat">{formatApiFormatLabel('openai-chat')}</SelectItem>
-              <SelectItem value="openai-responses">
-                {formatApiFormatLabel('openai-responses')}
-              </SelectItem>
-              <SelectItem value="anthropic">{formatApiFormatLabel('anthropic')}</SelectItem>
+              {apiFormatOptions.map((apiFormat) => (
+                <SelectItem key={apiFormat} value={apiFormat}>
+                  {formatApiFormatLabel(apiFormat)}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
-          <FieldHint>自定义 endpoint 需要选择对应协议。</FieldHint>
+          <FieldHint>
+            {provider.provider === 'deepseek'
+              ? 'DeepSeek 支持 OpenAI 与 Anthropic 协议。'
+              : '自定义 endpoint 需要选择对应协议。'}
+          </FieldHint>
         </div>
       ) : null}
     </div>

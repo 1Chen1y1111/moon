@@ -6,6 +6,7 @@
 import {
   resolveProviderDefaultApiFormat,
   resolveProviderDefaultBaseUrl,
+  type ProviderApiFormat,
   type ProviderModel
 } from '@moon/shared/domain/provider'
 import type { ProviderSettings } from '@moon/shared/domain/settings'
@@ -13,12 +14,25 @@ import type { ProviderSettings } from '@moon/shared/domain/settings'
 import type { ProviderDraft } from './types'
 
 /**
- * 判断 provider 是否允许用户直接编辑协议；内置 provider 只允许覆盖 endpoint URL。
+ * 判断 provider 是否允许用户直接编辑协议；DeepSeek 暂时放出双协议切换用于 Claude SDK 测试。
  */
 export function usesEditableProviderProtocol(
-  provider: Pick<ProviderSettings, 'isCustom' | 'requiresBaseUrl'>
+  provider: Pick<ProviderSettings, 'provider' | 'isCustom' | 'requiresBaseUrl'>
 ): boolean {
-  return provider.isCustom || provider.requiresBaseUrl
+  return provider.isCustom || provider.requiresBaseUrl || provider.provider === 'deepseek'
+}
+
+/**
+ * 返回 provider 设置页允许展示的协议选项，避免 DeepSeek 暂测入口暴露未接入协议。
+ */
+export function resolveProviderApiFormatOptions(
+  provider: Pick<ProviderSettings, 'provider'>
+): ProviderApiFormat[] {
+  if (provider.provider === 'deepseek') {
+    return ['openai-chat', 'anthropic']
+  }
+
+  return ['openai-chat', 'openai-responses', 'anthropic']
 }
 
 /**
@@ -43,13 +57,11 @@ function resolveDefaultEndpointUrl(
  */
 function normalizeBuiltInEndpointOverride(
   provider: ProviderSettings,
-  draft: ProviderDraft
+  draft: ProviderDraft,
+  apiFormat: ProviderApiFormat
 ): string {
   const baseUrl = draft.baseUrl.trim()
-  const defaultBaseUrl = resolveDefaultEndpointUrl(
-    provider,
-    resolveProviderDefaultApiFormat(provider.provider, draft.apiFormat)
-  )
+  const defaultBaseUrl = resolveDefaultEndpointUrl(provider, apiFormat)
 
   if (baseUrl.length === 0) {
     return ''
@@ -74,7 +86,7 @@ export function createDraftFromProvider(provider: ProviderSettings): ProviderDra
     provider: provider.provider,
     name: provider.name,
     type: provider.type,
-    apiKey: provider.apiKey,
+    apiKey: provider.hasApiKey ? '' : provider.apiKey,
     model: provider.model,
     models: provider.models,
     availableModels: provider.availableModels,
@@ -95,20 +107,47 @@ export function createDraftFromProvider(provider: ProviderSettings): ProviderDra
 }
 
 /**
+ * 根据协议切换生成下一份草稿；默认 endpoint 跟随协议，用户自定义 endpoint 保持不变。
+ */
+export function createDraftWithProviderApiFormat(
+  provider: ProviderSettings,
+  draft: ProviderDraft,
+  apiFormat: ProviderApiFormat
+): ProviderDraft {
+  const currentBaseUrl = draft.baseUrl.trim()
+  const currentDefaultBaseUrl = resolveDefaultEndpointUrl(provider, draft.apiFormat)
+  const nextDefaultBaseUrl = resolveDefaultEndpointUrl(provider, apiFormat)
+  const shouldFollowProtocolDefault =
+    currentBaseUrl.length === 0 ||
+    normalizeBaseUrlForComparison(currentBaseUrl) ===
+      normalizeBaseUrlForComparison(currentDefaultBaseUrl)
+
+  return {
+    ...draft,
+    apiFormat,
+    baseUrl: shouldFollowProtocolDefault ? nextDefaultBaseUrl : draft.baseUrl
+  }
+}
+
+/**
  * 归一化提交给主进程的 provider 草稿，确保隐藏协议不会被旧值覆盖。
  */
 export function normalizeProviderDraftForSubmit(
   provider: ProviderSettings,
   draft: ProviderDraft
 ): ProviderDraft {
-  if (usesEditableProviderProtocol(provider)) {
+  if (provider.isCustom || provider.requiresBaseUrl) {
     return draft
   }
 
+  const apiFormat = usesEditableProviderProtocol(provider)
+    ? draft.apiFormat
+    : resolveProviderDefaultApiFormat(provider.provider, draft.apiFormat)
+
   return {
     ...draft,
-    baseUrl: normalizeBuiltInEndpointOverride(provider, draft),
-    apiFormat: resolveProviderDefaultApiFormat(provider.provider, draft.apiFormat)
+    baseUrl: normalizeBuiltInEndpointOverride(provider, draft, apiFormat),
+    apiFormat
   }
 }
 

@@ -25,6 +25,7 @@ import {
 import {
   createDefaultProviderSettings,
   type AppSettings,
+  type ProviderSettings,
   type ProviderTestResult
 } from '@moon/shared/domain/settings'
 import { assertProviderReadyForAgent, createProviderLlmConnection } from '@moon/shared/agent'
@@ -72,6 +73,27 @@ type ModelsDevProviderModel = Partial<
     | 'maxOutputTokens'
   >
 >
+
+/**
+ * 返回给 renderer 前移除密钥字段，renderer 只依赖 hasApiKey 判断是否已有凭据。
+ */
+function redactAppSettingsSecrets(settings: AppSettings): AppSettings {
+  const providers = Object.fromEntries(
+    Object.entries(settings.providers).map(([provider, providerSettings]) => [
+      provider,
+      {
+        ...providerSettings,
+        apiKey: ''
+      }
+    ])
+  ) as Record<ProviderId, ProviderSettings>
+
+  return {
+    ...settings,
+    llmConnections: settings.llmConnections.map(({ apiKey: _apiKey, ...connection }) => connection),
+    providers
+  }
+}
 
 function joinEndpoint(baseUrl: string, path: string): string {
   return `${baseUrl.replace(/\/+$/g, '')}/${path.replace(/^\/+/g, '')}`
@@ -591,26 +613,28 @@ export class SettingsService {
    * 读取完整应用设置，供 IPC handler 返回给 renderer。
    */
   async getSettings(): Promise<AppSettings> {
-    return this.settingsRepository.getSettings()
+    return redactAppSettingsSecrets(await this.settingsRepository.getSettings())
   }
 
   async createCustomProvider(input: CreateCustomProviderInput): Promise<AppSettings> {
     const parsedInput = createCustomProviderInputSchema.parse(input)
 
-    return this.settingsRepository.createCustomProvider(parsedInput)
+    return redactAppSettingsSecrets(await this.settingsRepository.createCustomProvider(parsedInput))
   }
 
   async createCustomAcpProvider(input: CreateCustomAcpProviderInput): Promise<AppSettings> {
     const parsedInput = createCustomAcpProviderInputSchema.parse(input)
 
-    return this.settingsRepository.createCustomAcpProvider(parsedInput)
+    return redactAppSettingsSecrets(await this.settingsRepository.createCustomAcpProvider(parsedInput))
   }
 
   async saveProvider(input: SaveProviderInput): Promise<AppSettings> {
     const parsedInput = saveProviderInputSchema.parse(this.withProviderDefaults(input))
     const settings = await this.settingsRepository.saveProvider(parsedInput.provider, parsedInput)
 
-    return this.syncProviderLlmConnection(settings, parsedInput.provider)
+    return redactAppSettingsSecrets(
+      await this.syncProviderLlmConnection(settings, parsedInput.provider)
+    )
   }
 
   async deleteProvider(input: DeleteProviderInput): Promise<AppSettings> {
@@ -619,7 +643,7 @@ export class SettingsService {
 
     await this.disableProviderLlmConnection(parsedInput.provider)
 
-    return this.settingsRepository.getSettings()
+    return redactAppSettingsSecrets(await this.settingsRepository.getSettings())
   }
 
   /**
@@ -629,16 +653,20 @@ export class SettingsService {
     const config = await this.resolveConnectionConfig(input)
 
     if (config.isACP || config.isOAuth) {
-      return this.updateProviderModelsAndSync(config.provider, config.models, [])
+      return redactAppSettingsSecrets(
+        await this.updateProviderModelsAndSync(config.provider, config.models, [])
+      )
     }
 
     const modelDiscovery = resolveProviderModelDiscovery(config.provider)
 
     if (modelDiscovery === 'none') {
-      return this.updateProviderModelsAndSync(
-        config.provider,
-        config.models,
-        config.availableModels
+      return redactAppSettingsSecrets(
+        await this.updateProviderModelsAndSync(
+          config.provider,
+          config.models,
+          config.availableModels
+        )
       )
     }
 
@@ -647,7 +675,9 @@ export class SettingsService {
     if (piModels.length > 0) {
       await this.settingsRepository.saveProvider(config.provider, config)
 
-      return this.updateProviderModelsAndSync(config.provider, piModels, piModels)
+      return redactAppSettingsSecrets(
+        await this.updateProviderModelsAndSync(config.provider, piModels, piModels)
+      )
     }
 
     if (modelDiscovery === 'static') {
@@ -655,7 +685,9 @@ export class SettingsService {
 
       await this.settingsRepository.saveProvider(config.provider, config)
 
-      return this.updateProviderModelsAndSync(config.provider, staticModels, staticModels)
+      return redactAppSettingsSecrets(
+        await this.updateProviderModelsAndSync(config.provider, staticModels, staticModels)
+      )
     }
 
     ensureReadyForHttp(config)
@@ -687,7 +719,9 @@ export class SettingsService {
 
     await this.settingsRepository.saveProvider(config.provider, config)
 
-    return this.updateProviderModelsAndSync(config.provider, mergedModels, mergedModels)
+    return redactAppSettingsSecrets(
+      await this.updateProviderModelsAndSync(config.provider, mergedModels, mergedModels)
+    )
   }
 
   /**
@@ -776,7 +810,7 @@ export class SettingsService {
   async saveAppearance(input: SaveAppearanceInput): Promise<AppSettings> {
     const parsedInput = saveAppearanceInputSchema.parse(input)
 
-    return this.settingsRepository.saveAppearance(parsedInput)
+    return redactAppSettingsSecrets(await this.settingsRepository.saveAppearance(parsedInput))
   }
 
   /**

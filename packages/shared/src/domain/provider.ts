@@ -307,6 +307,10 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     isACP: false,
     isOAuth: false,
     defaultApiFormat: 'openai-chat',
+    apiFormatBaseUrls: {
+      'openai-chat': 'https://api.deepseek.com',
+      anthropic: 'https://api.deepseek.com/anthropic'
+    },
     defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'deepseek-v4-flash',
     defaultModels: [

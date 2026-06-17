@@ -47,14 +47,14 @@ function resolveProviderCustomEndpointApi(
   provider: ProviderSettings,
   modelId: string
 ): CustomEndpointApi | undefined {
+  if (provider.apiFormat === 'anthropic') {
+    return 'anthropic-messages'
+  }
+
   const model = findProviderModel(provider, modelId)
 
   if (isCustomEndpointApi(model?.providerApi)) {
     return model.providerApi
-  }
-
-  if (provider.apiFormat === 'anthropic') {
-    return 'anthropic-messages'
   }
 
   if (provider.apiFormat === 'openai-chat' && isOpenAICompatibleProvider(provider)) {
@@ -62,6 +62,13 @@ function resolveProviderCustomEndpointApi(
   }
 
   return undefined
+}
+
+/**
+ * 判断 provider 或模型元数据是否声明了 Anthropic Messages 协议。
+ */
+function isAnthropicMessagesProvider(provider: ProviderSettings, modelId: string): boolean {
+  return resolveProviderCustomEndpointApi(provider, modelId) === 'anthropic-messages'
 }
 
 /**
@@ -73,6 +80,15 @@ function resolveProviderBaseUrl(provider: ProviderSettings, modelId: string): st
 
   if (userBaseUrl.length > 0) {
     return userBaseUrl
+  }
+
+  if (provider.apiFormat === 'anthropic') {
+    return resolveProviderEffectiveBaseUrl({
+      provider: provider.provider,
+      apiFormat: provider.apiFormat,
+      baseUrl: provider.baseUrl,
+      defaultBaseUrl: provider.defaultBaseUrl
+    })
   }
 
   if (modelBaseUrl.length > 0) {
@@ -132,7 +148,7 @@ export function resolveAgentBackendProvider(
   provider: ProviderSettings,
   modelId = provider.model
 ): AgentBackendProvider {
-  if (isOfficialAnthropicProvider(provider)) {
+  if (isOfficialAnthropicProvider(provider) || isAnthropicMessagesProvider(provider, modelId)) {
     return 'anthropic'
   }
 

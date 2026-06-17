@@ -200,4 +200,77 @@ describe('ChatService integration', () => {
     },
     pgliteTestTimeout
   )
+
+  it(
+    'synchronizes a runnable DeepSeek connection when saving with empty model lists',
+    async () => {
+      const directoryPath = mkdtempSync(join(tmpdir(), 'moon-chat-service-'))
+      const databasePath = join(directoryPath, 'moon-pglite')
+      tempDirectories.push(directoryPath)
+
+      const connection = await createBootstrappedConnection(databasePath)
+      const settingsRepository = new SettingsRepository(connection)
+      const settingsService = new SettingsService(settingsRepository)
+      const sessionsRepository = new SessionsRepository(connection)
+      const chatService = new ChatService({
+        agentOperationsRepository: new AgentOperationsRepository(connection),
+        attachmentsDirectory: join(directoryPath, 'attachments'),
+        createAgentBackend: vi.fn(createUnusedAgentBackend),
+        messagesRepository: new MessagesRepository(connection),
+        sessionsRepository,
+        settingsRepository,
+        threadsRepository: new ThreadsRepository(connection),
+        toolInvocationsRepository: new ToolInvocationsRepository(connection),
+        topicsRepository: new TopicsRepository(connection)
+      })
+
+      try {
+        await settingsService.saveProvider({
+          provider: 'deepseek',
+          apiKey: 'sk-deepseek-demo',
+          enabled: true,
+          models: [],
+          availableModels: []
+        })
+
+        const settings = await settingsRepository.getSettings()
+        const syncedConnection = await settingsRepository.findLlmConnectionById('deepseek')
+        const result = await chatService.createMessageTurn({
+          llmConnectionId: 'deepseek',
+          content: '你好'
+        })
+
+        expect(settings.providers.deepseek).toMatchObject({
+          provider: 'deepseek',
+          model: 'deepseek-v4-flash',
+          models: [
+            {
+              id: 'deepseek-v4-flash',
+              enabled: true,
+              isManual: false
+            },
+            {
+              id: 'deepseek-v4-pro',
+              enabled: false,
+              isManual: false
+            }
+          ]
+        })
+        expect(syncedConnection).toMatchObject({
+          id: 'deepseek',
+          providerId: 'deepseek',
+          backend: 'pi_compat',
+          model: 'deepseek-v4-flash',
+          enabled: true
+        })
+        expect(result.session).toMatchObject({
+          provider: 'deepseek',
+          llmConnectionId: 'deepseek'
+        })
+      } finally {
+        await connection.close()
+      }
+    },
+    pgliteTestTimeout
+  )
 })

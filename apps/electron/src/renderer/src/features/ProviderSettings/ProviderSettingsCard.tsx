@@ -88,7 +88,8 @@ function ProviderSettingsCardBase({
   const enabledModelCount = draftModels.filter((model) => model.enabled).length
   const usesEnableOnlyCard = provider.isOAuth || (provider.isACP && !provider.isCustom)
   const showsModelsSection =
-    !usesEnableOnlyCard && (provider.noApiKey || draft.apiKey.trim().length > 0)
+    !usesEnableOnlyCard &&
+    (provider.noApiKey || provider.hasApiKey || draft.apiKey.trim().length > 0)
   const [showsProxyEndpoints, setShowsProxyEndpoints] = useState(false)
   const [copiedProxyValue, setCopiedProxyValue] = useState('')
   const [optionsModelId, setOptionsModelId] = useState<string | null>(null)

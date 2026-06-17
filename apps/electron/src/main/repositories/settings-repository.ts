@@ -10,6 +10,7 @@ import type {
   SaveProviderInput
 } from '@moon/shared/domain/settings-validation'
 import {
+  isValidApiKeyValue,
   llmConnectionSchema,
   selectDefaultLlmConnection as selectDefaultNormalizedLlmConnection,
   type LlmConnection,
@@ -49,6 +50,15 @@ type ProviderSaveDraft = Partial<SaveProviderInput> & {
 type LlmConnectionRow = typeof llmConnections.$inferSelect
 
 const providerModelManualOverrideFieldSet = new Set<string>(providerModelManualOverrideFields)
+
+/**
+ * 过滤历史脏密钥，避免 UI 文案等非法 header 值继续进入 SDK runtime。
+ */
+function normalizeStoredApiKey(value: string): string {
+  const apiKey = value.trim()
+
+  return isValidApiKeyValue(apiKey) ? apiKey : ''
+}
 
 function normalizeManualOverrides(
   manualOverrides: ProviderModel['manualOverrides']
@@ -224,13 +234,15 @@ function resolvePersistedApiFormat(
  * 把数据库行转换成共享 LLM connection 结构，空字符串字段恢复为可选字段。
  */
 function toLlmConnection(row: LlmConnectionRow): NormalizedLlmConnection {
+  const apiKey = normalizeStoredApiKey(row.apiKey)
+
   return llmConnectionSchema.parse({
     id: row.id,
     name: row.name,
     ...(row.providerId === null ? {} : { providerId: row.providerId }),
     backend: row.backend,
     model: row.model,
-    ...(row.apiKey.length === 0 ? {} : { apiKey: row.apiKey }),
+    ...(apiKey.length === 0 ? {} : { apiKey }),
     ...(row.baseUrl.length === 0 ? {} : { baseUrl: row.baseUrl }),
     ...(row.customEndpoint === null ? {} : { customEndpoint: row.customEndpoint }),
     enabled: row.enabled,
@@ -387,7 +399,7 @@ export class SettingsRepository {
     const rows = await this.database.db.select().from(providerSettings)
 
     for (const row of rows) {
-      const apiKey = row.apiKey
+      const apiKey = normalizeStoredApiKey(row.apiKey)
       const defaults = createDefaultProviderSettings(row.provider)
       const hasFetchedModels = row.modelsUpdatedAt !== null
       const rowModels = normalizeModels(row.models)
@@ -532,14 +544,18 @@ export class SettingsRepository {
     const storedApiKey =
       apiKey.length > 0 ? apiKey : ((await this.getStoredProviderKey(provider)) ?? '')
     const defaultStaticModels = createStaticDefaultModels(provider)
+    const shouldUseStaticDefaultModels =
+      defaultStaticModels.length > 0 &&
+      (draft.models === undefined || draft.models.length === 0) &&
+      (draft.availableModels === undefined || draft.availableModels.length === 0)
     const rawModels = normalizeModels(
       ensureSelectedModel(
-        draft.models === undefined ? defaultStaticModels : draft.models,
+        shouldUseStaticDefaultModels ? defaultStaticModels : (draft.models ?? []),
         selectedModel
       )
     )
     const rawAvailableModels = normalizeModels(
-      draft.availableModels === undefined ? defaultStaticModels : draft.availableModels
+      shouldUseStaticDefaultModels ? defaultStaticModels : (draft.availableModels ?? [])
     )
     const models = normalizeModels(mergeEnabledAvailableModels(rawModels, rawAvailableModels))
     const availableModels =
@@ -656,7 +672,13 @@ export class SettingsRepository {
       .where(eq(providerSettings.provider, provider))
       .then((rows) => rows[0])
 
-    return row?.apiKey ?? null
+    if (row === undefined) {
+      return null
+    }
+
+    const apiKey = normalizeStoredApiKey(row.apiKey)
+
+    return apiKey.length === 0 ? null : apiKey
   }
 
   async getProviderApiKey(provider: ProviderId): Promise<string> {

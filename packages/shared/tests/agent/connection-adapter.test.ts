@@ -7,7 +7,8 @@ import { describe, expect, it } from 'vitest'
 
 import {
   assertLlmConnectionReadyForAgent,
-  createConnectionAgentBackendConfig
+  createConnectionAgentBackendConfig,
+  resolveConnectionAgentBackendProvider
 } from '../../src/agent'
 import { llmConnectionSchema } from '../../src/config'
 
@@ -59,15 +60,39 @@ describe('createConnectionAgentBackendConfig', () => {
       model: 'compat-model',
       apiKey: ' stored-key ',
       baseUrl: ' https://compat.example.com ',
-      customEndpoint: { api: 'anthropic-messages' }
+      customEndpoint: { api: 'openai-completions' }
     })
 
+    expect(resolveConnectionAgentBackendProvider(connection)).toBe('pi_compat')
     expect(createConnectionAgentBackendConfig(connection, messages)).toEqual({
       provider: 'pi_compat',
       model: 'compat-model',
       apiKey: 'stored-key',
       baseUrl: 'https://compat.example.com',
-      customEndpoint: { api: 'anthropic-messages' },
+      customEndpoint: { api: 'openai-completions' },
+      thinkingLevel: 'medium',
+      messages
+    })
+  })
+
+  it('routes legacy Anthropic Messages compat connections through the Anthropic backend', () => {
+    const messages = [{ role: 'user' as const, content: 'hello' }]
+    const connection = llmConnectionSchema.parse({
+      id: 'compat-main',
+      name: 'Compat Main',
+      backend: 'pi_compat',
+      model: 'anthropic/claude-sonnet',
+      apiKey: ' stored-key ',
+      baseUrl: ' https://compat.example.com ',
+      customEndpoint: { api: 'anthropic-messages' }
+    })
+
+    expect(resolveConnectionAgentBackendProvider(connection)).toBe('anthropic')
+    expect(createConnectionAgentBackendConfig(connection, messages)).toEqual({
+      provider: 'anthropic',
+      model: 'anthropic/claude-sonnet',
+      apiKey: 'stored-key',
+      baseUrl: 'https://compat.example.com',
       thinkingLevel: 'medium',
       messages
     })

@@ -5,6 +5,7 @@
 
 import { z } from 'zod'
 
+import { isValidApiKeyValue } from '../config'
 import { providerApiFormats, providerModelManualOverrideFields } from './provider'
 import { appearanceThemes } from './settings'
 
@@ -35,6 +36,13 @@ export const providerModelSchema = z.object({
 })
 
 export const providerApiFormatSchema = z.enum(providerApiFormats)
+
+const apiKeyInputSchema = z
+  .string()
+  .trim()
+  .optional()
+  .default('')
+  .refine(isValidApiKeyValue, 'API key must not contain spaces or non-ASCII characters.')
 
 export const providerSettingsSchema = z.object({
   provider: providerIdSchema,
@@ -126,7 +134,7 @@ export const saveProviderInputSchema = z
     provider: providerIdSchema,
     name: z.string().trim().min(1, 'Provider name is required.').optional(),
     type: z.string().trim().min(1).optional(),
-    apiKey: z.string().trim().optional().default(''),
+    apiKey: apiKeyInputSchema,
     model: z.string().trim().optional().default(''),
     models: z.array(providerModelSchema).optional().default([]),
     availableModels: z.array(providerModelSchema).optional().default([]),
@@ -171,7 +179,7 @@ export const createCustomProviderInputSchema = z
   .object({
     name: z.string().trim().min(1, 'Provider name is required.'),
     baseUrl: z.string().trim().optional().default(''),
-    apiKey: z.string().trim().optional().default(''),
+    apiKey: apiKeyInputSchema,
     apiFormat: providerApiFormatSchema.optional().default('openai-chat'),
     useMaxCompletionTokens: z.boolean().optional().default(false),
     customHeaders: z.string().trim().optional().default('')

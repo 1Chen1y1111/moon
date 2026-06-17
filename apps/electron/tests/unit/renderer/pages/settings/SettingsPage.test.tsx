@@ -165,7 +165,7 @@ describe('SettingsPage', () => {
     ).not.toBeInTheDocument()
     await user.click(deepSeekProviderButton)
     expect(screen.getByLabelText('DeepSeek Endpoint URL')).toHaveValue('https://api.deepseek.com')
-    expect(screen.queryByLabelText('DeepSeek Endpoint Protocol')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('DeepSeek Endpoint Protocol')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('搜索提供商'), { target: { value: '' } })
     await user.click(getProviderCatalogItem('Azure OpenAI'))
     expect(screen.getByLabelText('Azure OpenAI Endpoint URL')).toBeInTheDocument()
@@ -225,7 +225,7 @@ describe('SettingsPage', () => {
     )
   }, 10000)
 
-  it('fills saved API keys into renderer form values', async () => {
+  it('keeps saved API keys redacted in renderer form values', async () => {
     const defaultSettings = createDefaultAppSettings()
     const existingSettings: AppSettings = {
       ...defaultSettings,
@@ -256,7 +256,9 @@ describe('SettingsPage', () => {
       }
     })
 
-    expect(screen.getByLabelText('OpenAI API Key')).toHaveValue('sk-openai-demo')
+    expect(screen.getByLabelText('OpenAI API Key')).toHaveValue('')
+    expect(screen.getByPlaceholderText('已保存 API Key，留空继续使用')).toBeInTheDocument()
+    expect(screen.getByText('已保存 API Key；输入新值才会替换。')).toBeInTheDocument()
     expect(screen.getByLabelText('OpenAI Endpoint URL')).toHaveValue('https://api.openai.com/v1')
     expect(screen.queryByLabelText('OpenAI Endpoint Protocol')).not.toBeInTheDocument()
     expect(screen.queryByText(/^当前密钥：/)).not.toBeInTheDocument()
@@ -274,7 +276,7 @@ describe('SettingsPage', () => {
       expect(api.settings.saveProvider).toHaveBeenCalledWith(
         expect.objectContaining({
           provider: 'openai',
-          apiKey: 'sk-openai-demo',
+          apiKey: '',
           model: 'gpt-5.4',
           baseUrl: 'https://proxy.openai.example/v1'
         })

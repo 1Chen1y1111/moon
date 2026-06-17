@@ -4,7 +4,12 @@
  */
 
 import type { HookInput, HookJSONOutput, Options } from '@anthropic-ai/claude-agent-sdk'
-import { isAbsolute, resolve } from 'node:path'
+import type { AgentPermissionDecision, AgentPermissionRequest } from '@moon/core/types'
+import { existsSync, mkdirSync, readdirSync } from 'node:fs'
+import { createRequire } from 'node:module'
+import { tmpdir } from 'node:os'
+import { dirname, isAbsolute, join, parse, resolve } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 import type { ThinkingLevel } from '../../../config'
 import { isPathInsideWorkspace, resolveWorkspacePath } from '../../runtime'
@@ -20,17 +25,57 @@ export type ClaudeRuntimeEnvInput = {
   apiKey?: string
   baseEnv?: NodeJS.ProcessEnv
   baseUrl?: string
+  model?: string
 }
 
 export type ClaudeQueryOptionsInput = ClaudeRuntimeEnvInput & {
   abortController: AbortController
   model: string
+  requestPermission?: ClaudeToolPermissionRequester
+  stderr?: (data: string) => void
   thinkingLevel?: ThinkingLevel
   workspace?: AgentBackendWorkspace
 }
 
 const claudeReadOnlyTools = new Set(['Read', 'Glob', 'Grep', 'LS'])
 const claudeCodeUnsupportedTools = ['EnterPlanMode', 'ExitPlanMode', 'AskUserQuestion', 'Skill']
+const claudeCodeExecutableEnvKeys = [
+  'MOON_CLAUDE_CODE_EXECUTABLE',
+  'CLAUDE_CODE_EXECUTABLE'
+] as const
+const claudeAgentSdkCliRelativePath = join(
+  'node_modules',
+  '@anthropic-ai',
+  'claude-agent-sdk',
+  'cli.js'
+)
+const claudeAgentSdkPnpmPackagePrefix = '@anthropic-ai+claude-agent-sdk@'
+const claudeAgentSdkNativePnpmPackagePrefix = '@anthropic-ai+'
+const claudeManagedEnvKeys = [
+  'ANTHROPIC_API_KEY',
+  'ANTHROPIC_AUTH_TOKEN',
+  'ANTHROPIC_BASE_URL',
+  'ANTHROPIC_MODEL',
+  'ANTHROPIC_DEFAULT_OPUS_MODEL',
+  'ANTHROPIC_DEFAULT_SONNET_MODEL',
+  'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+  'CLAUDE_CODE_SUBAGENT_MODEL',
+  'CLAUDE_CODE_EFFORT_LEVEL',
+  'CLAUDE_CODE_OAUTH_TOKEN',
+  'CLAUDE_CONFIG_DIR'
+] as const
+
+type ClaudePreToolUseCheckResult =
+  | { type: 'allow' }
+  | { type: 'block'; reason: string }
+  | { type: 'prompt'; request: AgentPermissionRequest }
+
+/**
+ * 负责把 Claude SDK 工具权限请求交给 Moon UI，并等待用户决策。
+ */
+export type ClaudeToolPermissionRequester = (
+  request: AgentPermissionRequest
+) => Promise<AgentPermissionDecision>
 
 function readRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
@@ -48,6 +93,284 @@ function resolveToolInputPath(input: Record<string, unknown>): string | undefine
     readStringField(input, 'path') ??
     readStringField(input, 'directory')
   )
+}
+
+function resolveBashCommand(input: Record<string, unknown>): string | undefined {
+  return readStringField(input, 'command')
+}
+
+function pathExists(path: string | undefined): path is string {
+  return path !== undefined && existsSync(path)
+}
+
+/**
+ * 判断当前 Claude SDK 调用是否走自定义 Claude-compatible endpoint。
+ */
+function shouldUseCustomClaudeEndpoint(baseUrl: string | undefined): boolean {
+  return baseUrl !== undefined
+}
+
+/**
+ * 移除 Moon 受管的 Claude 环境变量，避免 shell 或本机 Claude 登录状态污染当前连接。
+ */
+function sanitizeClaudeBaseEnv(baseEnv: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const env = { ...baseEnv }
+
+  for (const key of claudeManagedEnvKeys) {
+    delete env[key]
+  }
+
+  return env
+}
+
+/**
+ * 返回 Moon 专用 Claude Code 配置目录，阻断 SDK 读取用户主目录里的 Claude 凭据。
+ */
+function resolveMoonClaudeConfigDirectory(baseEnv: NodeJS.ProcessEnv): string {
+  const configuredDirectory = baseEnv.MOON_CLAUDE_CONFIG_DIR?.trim()
+  const directory =
+    configuredDirectory === undefined || configuredDirectory.length === 0
+      ? join(tmpdir(), 'moon-claude-code')
+      : configuredDirectory
+
+  mkdirSync(directory, { recursive: true })
+  return directory
+}
+
+/**
+ * 返回 Claude Code debug 日志路径，仅用于 custom endpoint 失败时继续诊断。
+ */
+function resolveMoonClaudeDebugFile(baseEnv: NodeJS.ProcessEnv): string {
+  const configuredFile = baseEnv.MOON_CLAUDE_DEBUG_FILE?.trim()
+  const debugFile =
+    configuredFile === undefined || configuredFile.length === 0
+      ? join(resolveMoonClaudeConfigDirectory(baseEnv), 'debug.log')
+      : configuredFile
+
+  mkdirSync(dirname(debugFile), { recursive: true })
+  return debugFile
+}
+
+/**
+ * 解析当前平台对应的 Claude Agent SDK 原生二进制包名。
+ */
+function resolveClaudeAgentSdkNativePackageName(): string | undefined {
+  const architecture = process.arch === 'arm64' ? 'arm64' : 'x64'
+
+  if (process.platform === 'darwin') {
+    return `claude-agent-sdk-darwin-${architecture}`
+  }
+
+  if (process.platform === 'win32') {
+    return `claude-agent-sdk-win32-${architecture}`
+  }
+
+  if (process.platform === 'linux') {
+    return `claude-agent-sdk-linux-${architecture}`
+  }
+
+  return undefined
+}
+
+/**
+ * 返回当前平台的 Claude Agent SDK 原生可执行文件名。
+ */
+function resolveClaudeAgentSdkNativeBinaryName(): string {
+  return process.platform === 'win32' ? 'claude.exe' : 'claude'
+}
+
+/**
+ * 从起点目录逐级向上枚举候选目录，用于兼容 Electron bundle 和 monorepo cwd。
+ */
+function listAncestorDirectories(startDirectory: string): string[] {
+  const directories: string[] = []
+  let currentDirectory = resolve(startDirectory)
+  const rootDirectory = parse(currentDirectory).root
+
+  while (true) {
+    directories.push(currentDirectory)
+
+    if (currentDirectory === rootDirectory) {
+      return directories
+    }
+
+    currentDirectory = dirname(currentDirectory)
+  }
+}
+
+/**
+ * 在 pnpm 虚拟 store 中查找新版 Claude Agent SDK 的原生可执行文件。
+ */
+function findPnpmClaudeAgentSdkNativeBinary(directory: string): string | undefined {
+  const packageName = resolveClaudeAgentSdkNativePackageName()
+
+  if (packageName === undefined) {
+    return undefined
+  }
+
+  const pnpmDirectory = join(directory, 'node_modules', '.pnpm')
+
+  if (!existsSync(pnpmDirectory)) {
+    return undefined
+  }
+
+  const packagePrefix = `${claudeAgentSdkNativePnpmPackagePrefix}${packageName}@`
+  const binaryName = resolveClaudeAgentSdkNativeBinaryName()
+
+  for (const entry of readdirSync(pnpmDirectory)) {
+    if (!entry.startsWith(packagePrefix)) {
+      continue
+    }
+
+    const candidate = join(
+      pnpmDirectory,
+      entry,
+      'node_modules',
+      '@anthropic-ai',
+      packageName,
+      binaryName
+    )
+
+    if (existsSync(candidate)) {
+      return candidate
+    }
+  }
+
+  return undefined
+}
+
+/**
+ * 在 pnpm 虚拟 store 中查找旧版 Claude Agent SDK 自带的 CLI 文件。
+ */
+function findPnpmClaudeAgentSdkCli(directory: string): string | undefined {
+  const pnpmDirectory = join(directory, 'node_modules', '.pnpm')
+
+  if (!existsSync(pnpmDirectory)) {
+    return undefined
+  }
+
+  for (const entry of readdirSync(pnpmDirectory)) {
+    if (!entry.startsWith(claudeAgentSdkPnpmPackagePrefix)) {
+      continue
+    }
+
+    const candidate = join(pnpmDirectory, entry, claudeAgentSdkCliRelativePath)
+
+    if (existsSync(candidate)) {
+      return candidate
+    }
+  }
+
+  return undefined
+}
+
+/**
+ * 用 Node 解析规则查找新版 SDK optional dependency 里的原生可执行文件。
+ */
+function resolveClaudeAgentSdkNativeBinaryFromRequire(directory: string): string | undefined {
+  const packageName = resolveClaudeAgentSdkNativePackageName()
+
+  if (packageName === undefined) {
+    return undefined
+  }
+
+  try {
+    const sdkEntry = createRequire(join(directory, 'package.json')).resolve(
+      '@anthropic-ai/claude-agent-sdk'
+    )
+
+    return createRequire(sdkEntry).resolve(
+      `@anthropic-ai/${packageName}/${resolveClaudeAgentSdkNativeBinaryName()}`
+    )
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * 用 Node 解析规则查找旧版 SDK 包内 CLI；Electron bundle 下失败时再由文件系统兜底。
+ */
+function resolveClaudeAgentSdkCliFromRequire(directory: string): string | undefined {
+  try {
+    return createRequire(join(directory, 'package.json')).resolve(
+      '@anthropic-ai/claude-agent-sdk/cli.js'
+    )
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * 解析传给 Claude Agent SDK 的 Claude Code 可执行路径，优先兼容新版原生二进制。
+ */
+export function resolveClaudeCodeExecutablePath(
+  baseEnv: NodeJS.ProcessEnv = process.env
+): string | undefined {
+  for (const envKey of claudeCodeExecutableEnvKeys) {
+    if (pathExists(baseEnv[envKey])) {
+      return baseEnv[envKey]
+    }
+  }
+
+  const moduleDirectory = dirname(fileURLToPath(import.meta.url))
+  const searchRoots = new Set([
+    process.cwd(),
+    moduleDirectory,
+    ...listAncestorDirectories(process.cwd()),
+    ...listAncestorDirectories(moduleDirectory)
+  ])
+
+  for (const directory of searchRoots) {
+    const resolvedNativeByRequire = resolveClaudeAgentSdkNativeBinaryFromRequire(directory)
+
+    if (pathExists(resolvedNativeByRequire)) {
+      return resolvedNativeByRequire
+    }
+
+    const nativePackageName = resolveClaudeAgentSdkNativePackageName()
+
+    if (nativePackageName !== undefined) {
+      const directNativeCandidate = join(
+        directory,
+        'node_modules',
+        '@anthropic-ai',
+        nativePackageName,
+        resolveClaudeAgentSdkNativeBinaryName()
+      )
+
+      if (existsSync(directNativeCandidate)) {
+        return directNativeCandidate
+      }
+    }
+
+    const pnpmNativeCandidate = findPnpmClaudeAgentSdkNativeBinary(directory)
+
+    if (pnpmNativeCandidate !== undefined) {
+      return pnpmNativeCandidate
+    }
+  }
+
+  for (const directory of searchRoots) {
+    const resolvedCliByRequire = resolveClaudeAgentSdkCliFromRequire(directory)
+
+    if (pathExists(resolvedCliByRequire)) {
+      return resolvedCliByRequire
+    }
+
+    const directCandidate = join(directory, claudeAgentSdkCliRelativePath)
+
+    if (existsSync(directCandidate)) {
+      return directCandidate
+    }
+
+    const pnpmCandidate = findPnpmClaudeAgentSdkCli(directory)
+
+    if (pnpmCandidate !== undefined) {
+      return pnpmCandidate
+    }
+  }
+
+  return undefined
 }
 
 /**
@@ -78,14 +401,58 @@ export function buildClaudeWorkspaceSystemPrompt(workspace: AgentBackendWorkspac
     `当前 Moon 项目：${workspace.name ?? '未命名项目'}`,
     `项目根目录：${workspace.path}`,
     '你必须把当前工作目录视为项目 workspace 边界。',
-    '当前阶段只允许使用只读工具理解项目；Bash、Edit、Write 等执行或修改类工具会被 Moon 阻止。'
+    '当前阶段允许使用只读工具理解项目；Bash 会等待用户确认；Edit、Write 等修改类工具会被 Moon 阻止。'
   ].join('\n')
 }
 
 /**
- * 创建 Step 1 的 Claude SDK PreToolUse hooks：只允许只读工具，其他工具全部阻止。
+ * 运行 Craft 风格的 Claude PreToolUse 检查：只读工具自动允许，Bash 转人工审批。
  */
-export function createClaudeReadOnlyToolHooks(workspace: AgentBackendWorkspace): Options['hooks'] {
+export function runClaudePreToolUseChecks(
+  workspace: AgentBackendWorkspace,
+  input: Extract<HookInput, { hook_event_name: 'PreToolUse' }>
+): ClaudePreToolUseCheckResult {
+  const toolInput = readRecord(input.tool_input)
+
+  if (input.tool_name === 'Bash') {
+    const command = resolveBashCommand(toolInput)
+
+    return {
+      type: 'prompt',
+      request: {
+        requestId: `perm-${input.tool_use_id}`,
+        toolName: input.tool_name,
+        description: `需要在项目目录执行命令：${command ?? ''}`,
+        ...(command === undefined ? {} : { command }),
+        type: 'bash'
+      }
+    }
+  }
+
+  if (!claudeReadOnlyTools.has(input.tool_name)) {
+    return {
+      type: 'block',
+      reason: `Moon 当前阶段只允许 Claude Code SDK 只读工具和 Bash，已阻止 ${input.tool_name}。`
+    }
+  }
+
+  if (!isClaudeToolInputInsideWorkspace(workspace, toolInput)) {
+    return {
+      type: 'block',
+      reason: '工具路径超出当前项目 workspace，已被 Moon 阻止。'
+    }
+  }
+
+  return { type: 'allow' }
+}
+
+/**
+ * 创建 Claude SDK PreToolUse hooks，并把检查结果翻译成 SDK hook 输出。
+ */
+export function createClaudePreToolUseHooks(
+  workspace: AgentBackendWorkspace,
+  requestPermission?: ClaudeToolPermissionRequester
+): Options['hooks'] {
   return {
     PreToolUse: [
       {
@@ -95,19 +462,35 @@ export function createClaudeReadOnlyToolHooks(workspace: AgentBackendWorkspace):
               return { continue: true }
             }
 
-            if (!claudeReadOnlyTools.has(input.tool_name)) {
+            const checkResult = runClaudePreToolUseChecks(workspace, input)
+
+            if (checkResult.type === 'prompt') {
+              if (requestPermission === undefined) {
+                return {
+                  continue: false,
+                  decision: 'block',
+                  reason: 'Moon 当前阶段需要 UI 审批后才允许执行 Bash。'
+                }
+              }
+
+              const decision = await requestPermission(checkResult.request)
+
+              if (decision.approved) {
+                return { continue: true }
+              }
+
               return {
                 continue: false,
                 decision: 'block',
-                reason: `Moon 当前阶段只允许 Claude Code SDK 只读工具，已阻止 ${input.tool_name}。`
+                reason: decision.reason ?? 'User denied permission'
               }
             }
 
-            if (!isClaudeToolInputInsideWorkspace(workspace, readRecord(input.tool_input))) {
+            if (checkResult.type === 'block') {
               return {
                 continue: false,
                 decision: 'block',
-                reason: '工具路径超出当前项目 workspace，已被 Moon 阻止。'
+                reason: checkResult.reason
               }
             }
 
@@ -125,16 +508,34 @@ export function createClaudeReadOnlyToolHooks(workspace: AgentBackendWorkspace):
 export function resolveClaudeRuntimeEnv({
   apiKey,
   baseEnv = process.env,
-  baseUrl
+  baseUrl,
+  model
 }: ClaudeRuntimeEnvInput): NodeJS.ProcessEnv | undefined {
   if (apiKey === undefined && baseUrl === undefined) {
     return undefined
   }
 
+  const usesCustomEndpoint = shouldUseCustomClaudeEndpoint(baseUrl)
+
   return {
-    ...baseEnv,
-    ...(apiKey === undefined ? {} : { ANTHROPIC_API_KEY: apiKey }),
-    ...(baseUrl === undefined ? {} : { ANTHROPIC_BASE_URL: baseUrl })
+    ...sanitizeClaudeBaseEnv(baseEnv),
+    ...(apiKey === undefined
+      ? {}
+      : usesCustomEndpoint
+        ? { ANTHROPIC_AUTH_TOKEN: apiKey }
+        : { ANTHROPIC_API_KEY: apiKey }),
+    ...(baseUrl === undefined ? {} : { ANTHROPIC_BASE_URL: baseUrl }),
+    ...(usesCustomEndpoint ? { CLAUDE_CONFIG_DIR: resolveMoonClaudeConfigDirectory(baseEnv) } : {}),
+    ...(usesCustomEndpoint && model !== undefined
+      ? {
+          ANTHROPIC_MODEL: model,
+          ANTHROPIC_DEFAULT_OPUS_MODEL: model,
+          ANTHROPIC_DEFAULT_SONNET_MODEL: model,
+          ANTHROPIC_DEFAULT_HAIKU_MODEL: model,
+          CLAUDE_CODE_SUBAGENT_MODEL: model,
+          CLAUDE_CODE_EFFORT_LEVEL: 'max'
+        }
+      : {})
   }
 }
 
@@ -156,11 +557,20 @@ export function createClaudeQueryOptions({
   baseEnv,
   baseUrl,
   model,
+  requestPermission,
+  stderr,
   thinkingLevel,
   workspace
 }: ClaudeQueryOptionsInput): Options {
-  const env = resolveClaudeRuntimeEnv({ apiKey, baseEnv, baseUrl })
-  const maxThinkingTokens = resolveClaudeThinkingTokenBudget(thinkingLevel)
+  const env = resolveClaudeRuntimeEnv({ apiKey, baseEnv, baseUrl, model })
+  const pathToClaudeCodeExecutable = resolveClaudeCodeExecutablePath(baseEnv)
+  const usesCustomEndpoint = shouldUseCustomClaudeEndpoint(baseUrl)
+  const debugFile = usesCustomEndpoint
+    ? resolveMoonClaudeDebugFile(baseEnv ?? process.env)
+    : undefined
+  const maxThinkingTokens = usesCustomEndpoint
+    ? undefined
+    : resolveClaudeThinkingTokenBudget(thinkingLevel)
   const workspaceOptions =
     workspace === undefined
       ? {
@@ -171,7 +581,7 @@ export function createClaudeQueryOptions({
           allowDangerouslySkipPermissions: true,
           cwd: workspace.path,
           disallowedTools: claudeCodeUnsupportedTools,
-          hooks: createClaudeReadOnlyToolHooks(workspace),
+          hooks: createClaudePreToolUseHooks(workspace, requestPermission),
           permissionMode: 'bypassPermissions' as const,
           systemPrompt: {
             type: 'preset' as const,
@@ -185,6 +595,9 @@ export function createClaudeQueryOptions({
     abortController,
     includePartialMessages: true,
     model,
+    ...(pathToClaudeCodeExecutable === undefined ? {} : { pathToClaudeCodeExecutable }),
+    ...(debugFile === undefined ? {} : { debugFile }),
+    ...(stderr === undefined ? {} : { stderr }),
     ...workspaceOptions,
     ...(maxThinkingTokens === undefined ? {} : { maxThinkingTokens }),
     ...(env === undefined ? {} : { env })

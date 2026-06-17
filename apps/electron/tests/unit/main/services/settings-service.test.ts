@@ -84,6 +84,40 @@ describe('SettingsService', () => {
     expect(settingsRepository.saveAppearance).toHaveBeenCalledWith({ theme: 'dark' })
   })
 
+  it('redacts provider and connection secrets from public settings responses', async () => {
+    const appSettings = createDefaultAppSettings()
+    appSettings.providers.openai = {
+      ...appSettings.providers.openai,
+      hasApiKey: true,
+      apiKey: 'sk-openai-demo'
+    }
+    appSettings.llmConnections = [
+      llmConnectionSchema.parse({
+        id: 'openai',
+        name: 'OpenAI',
+        providerId: 'openai',
+        backend: 'pi_compat',
+        model: 'gpt-5.4',
+        apiKey: 'sk-openai-demo',
+        baseUrl: 'https://api.openai.com/v1',
+        customEndpoint: { api: 'openai-completions' },
+        enabled: true,
+        isDefault: true,
+        thinkingLevel: 'medium'
+      })
+    ]
+    const settingsRepository = createSettingsRepositoryMock(appSettings)
+    const service = new SettingsService(settingsRepository as never)
+
+    const settings = await service.getSettings()
+
+    expect(settings.providers.openai).toMatchObject({
+      hasApiKey: true,
+      apiKey: ''
+    })
+    expect(settings.llmConnections[0]).not.toHaveProperty('apiKey')
+  })
+
   it('rejects unsupported appearance themes before writing to the repository', async () => {
     const settingsRepository = createSettingsRepositoryMock()
     const service = new SettingsService(settingsRepository as never)
@@ -162,6 +196,55 @@ describe('SettingsService', () => {
     )
   })
 
+  it('syncs DeepSeek Anthropic protocol into a Claude SDK LLM connection', async () => {
+    const deepseekModel: ProviderModel = {
+      id: 'deepseek-v4-flash',
+      name: 'DeepSeek V4 Flash',
+      enabled: true,
+      isManual: false,
+      providerApi: 'openai-completions',
+      providerBaseUrl: 'https://api.deepseek.com'
+    }
+    const appSettings = createSettingsWithProvider({
+      ...createDefaultProviderSettings('deepseek'),
+      apiFormat: 'anthropic',
+      enabled: true,
+      hasApiKey: true,
+      apiKey: 'sk-deepseek-demo',
+      model: deepseekModel.id,
+      models: [deepseekModel],
+      availableModels: [deepseekModel]
+    })
+    const settingsRepository = createSettingsRepositoryMock(appSettings)
+    const service = new SettingsService(settingsRepository as never)
+
+    await service.saveProvider({
+      provider: 'deepseek',
+      apiKey: 'sk-deepseek-demo',
+      apiFormat: 'anthropic',
+      model: deepseekModel.id,
+      models: [deepseekModel],
+      availableModels: [deepseekModel],
+      enabled: true
+    })
+
+    expect(settingsRepository.saveLlmConnection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'deepseek',
+        providerId: 'deepseek',
+        backend: 'anthropic',
+        model: 'deepseek-v4-flash',
+        apiKey: 'sk-deepseek-demo',
+        baseUrl: 'https://api.deepseek.com/anthropic',
+        enabled: true,
+        isDefault: false
+      })
+    )
+    expect(settingsRepository.saveLlmConnection.mock.calls[0]?.[0]).not.toHaveProperty(
+      'customEndpoint'
+    )
+  })
+
   it('disables the synchronized LLM connection when the provider is no longer runnable', async () => {
     const appSettings = createSettingsWithProvider({
       ...createDefaultProviderSettings('deepseek'),
@@ -219,6 +302,20 @@ describe('SettingsService', () => {
         baseUrl: 'ftp://api.example.com'
       })
     ).rejects.toThrow(/Base URL must be a valid HTTP URL/)
+    expect(settingsRepository.saveProvider).not.toHaveBeenCalled()
+  })
+
+  it('rejects API keys that cannot be used as HTTP header values', async () => {
+    const settingsRepository = createSettingsRepositoryMock()
+    const service = new SettingsService(settingsRepository as never)
+
+    await expect(
+      service.saveProvider({
+        provider: 'deepseek',
+        apiKey: '没有可选模型  先启用一个聊天 Provider 和模型。',
+        enabled: true
+      })
+    ).rejects.toThrow('API key must not contain spaces or non-ASCII characters.')
     expect(settingsRepository.saveProvider).not.toHaveBeenCalled()
   })
 

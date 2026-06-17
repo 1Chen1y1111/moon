@@ -19,7 +19,9 @@ describe('provider endpoint resolver', () => {
 
     expect(provider.defaultBaseUrl).toBe('https://api.deepseek.com')
     expect(resolveProviderDefaultApiFormat('deepseek', 'anthropic')).toBe('openai-chat')
-    expect(resolveProviderDefaultBaseUrl('deepseek', 'anthropic')).toBe('https://api.deepseek.com')
+    expect(resolveProviderDefaultBaseUrl('deepseek', 'anthropic')).toBe(
+      'https://api.deepseek.com/anthropic'
+    )
     expect(resolveProviderDefaultBaseUrl('deepseek', 'openai-chat')).toBe(
       'https://api.deepseek.com'
     )

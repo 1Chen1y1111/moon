@@ -3,10 +3,15 @@
  * 测试只覆盖进程环境和 Claude SDK options 边界，不触发真实 SDK 查询。
  */
 
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { basename, join } from 'node:path'
+
 import { describe, expect, it } from 'vitest'
 
 import {
   createClaudeQueryOptions,
+  resolveClaudeCodeExecutablePath,
   resolveClaudeThinkingTokenBudget,
   resolveClaudeRuntimeEnv
 } from '../../../../src/agent/backend/internal/runtime-resolver'
@@ -16,18 +21,66 @@ describe('resolveClaudeRuntimeEnv', () => {
     expect(resolveClaudeRuntimeEnv({ baseEnv: { EXISTING: '1' } })).toBeUndefined()
   })
 
-  it('merges API key and base URL into the provided environment', () => {
+  it('uses isolated Claude Code auth env for custom Claude-compatible endpoints', () => {
     expect(
       resolveClaudeRuntimeEnv({
         apiKey: 'test-key',
         baseEnv: { EXISTING: '1' },
-        baseUrl: 'https://api.example.com'
+        baseUrl: 'https://api.example.com',
+        model: 'deepseek-chat'
       })
     ).toEqual({
       EXISTING: '1',
-      ANTHROPIC_API_KEY: 'test-key',
-      ANTHROPIC_BASE_URL: 'https://api.example.com'
+      ANTHROPIC_AUTH_TOKEN: 'test-key',
+      ANTHROPIC_BASE_URL: 'https://api.example.com',
+      ANTHROPIC_MODEL: 'deepseek-chat',
+      ANTHROPIC_DEFAULT_OPUS_MODEL: 'deepseek-chat',
+      ANTHROPIC_DEFAULT_SONNET_MODEL: 'deepseek-chat',
+      ANTHROPIC_DEFAULT_HAIKU_MODEL: 'deepseek-chat',
+      CLAUDE_CODE_SUBAGENT_MODEL: 'deepseek-chat',
+      CLAUDE_CODE_EFFORT_LEVEL: 'max',
+      CLAUDE_CONFIG_DIR: expect.any(String)
     })
+  })
+
+  it('keeps official Anthropic API key auth unchanged without custom base URL', () => {
+    expect(
+      resolveClaudeRuntimeEnv({
+        apiKey: 'test-key',
+        baseEnv: { EXISTING: '1' }
+      })
+    ).toEqual({
+      EXISTING: '1',
+      ANTHROPIC_API_KEY: 'test-key'
+    })
+  })
+
+  it('removes stale managed Claude env before injecting current credentials', () => {
+    const env = resolveClaudeRuntimeEnv({
+      apiKey: 'fresh-key',
+      baseEnv: {
+        EXISTING: '1',
+        ANTHROPIC_API_KEY: 'stale-api-key',
+        ANTHROPIC_AUTH_TOKEN: 'stale-auth-token',
+        ANTHROPIC_BASE_URL: 'https://stale.example.com',
+        CLAUDE_CONFIG_DIR: '/tmp/stale-claude-config',
+        CLAUDE_CODE_OAUTH_TOKEN: 'stale-oauth-token'
+      },
+      baseUrl: 'https://api.deepseek.com/anthropic',
+      model: 'deepseek-v4-flash'
+    })
+
+    expect(env).toMatchObject({
+      EXISTING: '1',
+      ANTHROPIC_AUTH_TOKEN: 'fresh-key',
+      ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic',
+      ANTHROPIC_MODEL: 'deepseek-v4-flash',
+      CLAUDE_CODE_EFFORT_LEVEL: 'max',
+      CLAUDE_CONFIG_DIR: expect.any(String)
+    })
+    expect(env).not.toHaveProperty('ANTHROPIC_API_KEY')
+    expect(env?.CLAUDE_CONFIG_DIR).not.toBe('/tmp/stale-claude-config')
+    expect(env).not.toHaveProperty('CLAUDE_CODE_OAUTH_TOKEN')
   })
 })
 
@@ -40,23 +93,52 @@ describe('resolveClaudeThinkingTokenBudget', () => {
   })
 })
 
+describe('resolveClaudeCodeExecutablePath', () => {
+  it('uses an existing explicit Claude Code executable path from env', () => {
+    const directoryPath = mkdtempSync(join(tmpdir(), 'moon-claude-cli-'))
+    const executablePath = join(directoryPath, 'claude-cli.js')
+
+    try {
+      writeFileSync(executablePath, '#!/usr/bin/env node\n')
+
+      expect(
+        resolveClaudeCodeExecutablePath({
+          MOON_CLAUDE_CODE_EXECUTABLE: executablePath
+        })
+      ).toBe(executablePath)
+    } finally {
+      rmSync(directoryPath, { recursive: true, force: true })
+    }
+  })
+
+  it('prefers the installed native Claude Code executable when available', () => {
+    const executablePath = resolveClaudeCodeExecutablePath()
+
+    expect(basename(executablePath ?? '')).toBe(
+      process.platform === 'win32' ? 'claude.exe' : 'claude'
+    )
+  })
+})
+
 describe('createClaudeQueryOptions', () => {
   it('creates standard Claude SDK query options without env when credentials are omitted', () => {
     const abortController = new AbortController()
+    const options = createClaudeQueryOptions({
+      abortController,
+      baseEnv: { EXISTING: '1' },
+      model: 'claude-sonnet'
+    })
 
-    expect(
-      createClaudeQueryOptions({
-        abortController,
-        baseEnv: { EXISTING: '1' },
-        model: 'claude-sonnet'
-      })
-    ).toEqual({
+    expect(options).toMatchObject({
       abortController,
       includePartialMessages: true,
       model: 'claude-sonnet',
       permissionMode: 'dontAsk',
       tools: []
     })
+    expect(basename(options.pathToClaudeCodeExecutable ?? '')).toBe(
+      process.platform === 'win32' ? 'claude.exe' : 'claude'
+    )
   })
 
   it('includes max thinking tokens when thinking level is provided', () => {
@@ -89,5 +171,68 @@ describe('createClaudeQueryOptions', () => {
         ANTHROPIC_API_KEY: 'test-key'
       }
     })
+  })
+
+  it('uses Claude Code auth env for custom Claude-compatible endpoints', () => {
+    const abortController = new AbortController()
+
+    const options = createClaudeQueryOptions({
+      abortController,
+      apiKey: 'test-key',
+      baseEnv: { EXISTING: '1' },
+      baseUrl: 'https://api.deepseek.com/anthropic',
+      model: 'deepseek-chat'
+    })
+
+    expect(options).toMatchObject({
+      debugFile: expect.any(String),
+      env: {
+        EXISTING: '1',
+        ANTHROPIC_AUTH_TOKEN: 'test-key',
+        ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic',
+        ANTHROPIC_MODEL: 'deepseek-chat',
+        ANTHROPIC_DEFAULT_OPUS_MODEL: 'deepseek-chat',
+        ANTHROPIC_DEFAULT_SONNET_MODEL: 'deepseek-chat',
+        ANTHROPIC_DEFAULT_HAIKU_MODEL: 'deepseek-chat',
+        CLAUDE_CODE_SUBAGENT_MODEL: 'deepseek-chat',
+        CLAUDE_CODE_EFFORT_LEVEL: 'max',
+        CLAUDE_CONFIG_DIR: expect.any(String)
+      }
+    })
+    expect(options.debugFile).toContain('debug.log')
+    expect(options).not.toHaveProperty('maxThinkingTokens')
+  })
+
+  it('passes the resolved Claude Code executable path to the SDK options', () => {
+    const directoryPath = mkdtempSync(join(tmpdir(), 'moon-claude-cli-'))
+    const executablePath = join(directoryPath, 'claude-cli.js')
+
+    try {
+      writeFileSync(executablePath, '#!/usr/bin/env node\n')
+
+      expect(
+        createClaudeQueryOptions({
+          abortController: new AbortController(),
+          baseEnv: { MOON_CLAUDE_CODE_EXECUTABLE: executablePath },
+          model: 'claude-sonnet'
+        })
+      ).toMatchObject({
+        pathToClaudeCodeExecutable: executablePath
+      })
+    } finally {
+      rmSync(directoryPath, { recursive: true, force: true })
+    }
+  })
+
+  it('passes stderr callback through to Claude SDK options', () => {
+    const stderr = (): void => undefined
+
+    expect(
+      createClaudeQueryOptions({
+        abortController: new AbortController(),
+        model: 'claude-sonnet',
+        stderr
+      })
+    ).toMatchObject({ stderr })
   })
 })

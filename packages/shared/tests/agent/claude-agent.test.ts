@@ -42,6 +42,95 @@ function createResultQueryClaudeMock() {
   })
 }
 
+/**
+ * 创建会触发 Claude SDK Bash PreToolUse hook 的 query mock。
+ */
+function createBashHookQueryClaudeMock() {
+  return vi.fn(async function* ({ options }: { options?: Options }) {
+    const hook = options?.hooks?.PreToolUse?.[0]?.hooks[0]
+    const hookResult = await hook?.(
+      {
+        hook_event_name: 'PreToolUse',
+        session_id: 'sdk-session-1',
+        transcript_path: '/tmp/transcript.jsonl',
+        cwd: '/workspace/moon',
+        tool_name: 'Bash',
+        tool_input: { command: 'pwd' },
+        tool_use_id: 'bash-tool-1'
+      },
+      'bash-tool-1',
+      { signal: new AbortController().signal }
+    )
+
+    yield {
+      type: 'assistant',
+      message: {
+        content: [
+          {
+            type: 'text',
+            text:
+              hookResult !== undefined && 'continue' in hookResult && hookResult.continue
+                ? 'allowed'
+                : 'blocked'
+          }
+        ]
+      }
+    }
+  })
+}
+
+/**
+ * 创建返回 unknown 错误但写入 stderr 详情的 Claude SDK query mock。
+ */
+function createUnknownErrorWithStderrQueryClaudeMock() {
+  return vi.fn(async function* ({ options }: { options?: Options }) {
+    options?.stderr?.('provider rejected request: invalid beta header')
+
+    yield {
+      type: 'result',
+      subtype: 'error_during_execution',
+      is_error: true,
+      session_id: 'sdk-session-1',
+      errors: ['unknown'],
+      usage: {
+        input_tokens: 1,
+        output_tokens: 0
+      },
+      total_cost_usd: 0
+    }
+  })
+}
+
+/**
+ * 创建只返回 unknown 错误且没有 stderr 的 Claude SDK query mock。
+ */
+function createUnknownErrorQueryClaudeMock() {
+  return vi.fn(async function* () {
+    yield {
+      type: 'result',
+      subtype: 'error_during_execution',
+      is_error: true,
+      session_id: 'sdk-session-1',
+      errors: ['unknown']
+    }
+  })
+}
+
+/**
+ * 创建只返回认证失败错误码的 Claude SDK query mock。
+ */
+function createAuthenticationFailedQueryClaudeMock() {
+  return vi.fn(async function* () {
+    yield {
+      type: 'assistant',
+      error: 'authentication_failed',
+      message: {
+        content: []
+      }
+    }
+  })
+}
+
 describe('ClaudeAgent', () => {
   it('passes configured thinking level to Claude SDK options', async () => {
     const queryClaude = createQueryClaudeMock()
@@ -113,6 +202,73 @@ describe('ClaudeAgent', () => {
     ])
   })
 
+  it('uses Claude SDK stderr details when result error is unknown', async () => {
+    const queryClaude = createUnknownErrorWithStderrQueryClaudeMock()
+    const agent = new ClaudeAgent({
+      model: 'claude-sonnet',
+      messages: [],
+      queryClaude: queryClaude as never
+    })
+    const events: AgentEvent[] = []
+
+    for await (const event of agent.chat('hello')) {
+      events.push(event)
+    }
+
+    expect(events).toContainEqual({
+      type: 'error',
+      message: expect.stringContaining(
+        'Claude SDK failed: provider rejected request: invalid beta header'
+      )
+    })
+  })
+
+  it('adds runtime diagnostics to Claude SDK authentication failures', async () => {
+    const queryClaude = createAuthenticationFailedQueryClaudeMock()
+    const agent = new ClaudeAgent({
+      apiKey: 'test-key',
+      baseUrl: 'https://api.deepseek.com/anthropic',
+      model: 'deepseek-v4-flash',
+      messages: [],
+      queryClaude: queryClaude as never
+    })
+    const events: AgentEvent[] = []
+
+    for await (const event of agent.chat('hello')) {
+      events.push(event)
+    }
+
+    expect(events).toContainEqual({
+      type: 'error',
+      message: expect.stringContaining(
+        'runtime: model=deepseek-v4-flash, baseUrl=https://api.deepseek.com/anthropic, authEnv=ANTHROPIC_AUTH_TOKEN, claudeConfig=isolated, debugFile='
+      )
+    })
+  })
+
+  it('adds runtime diagnostics to unhelpful Claude SDK errors', async () => {
+    const queryClaude = createUnknownErrorQueryClaudeMock()
+    const agent = new ClaudeAgent({
+      apiKey: 'test-key',
+      baseUrl: 'https://api.deepseek.com/anthropic',
+      model: 'deepseek-v4-flash',
+      messages: [],
+      queryClaude: queryClaude as never
+    })
+    const events: AgentEvent[] = []
+
+    for await (const event of agent.chat('hello')) {
+      events.push(event)
+    }
+
+    expect(events).toContainEqual({
+      type: 'error',
+      message: expect.stringContaining(
+        'Claude SDK failed: unknown (runtime: model=deepseek-v4-flash, baseUrl=https://api.deepseek.com/anthropic, authEnv=ANTHROPIC_AUTH_TOKEN, claudeConfig=isolated, debugFile='
+      )
+    })
+  })
+
   it('configures Claude Code SDK tools with project workspace cwd', async () => {
     const queryClaude = createQueryClaudeMock()
     const agent = new ClaudeAgent({
@@ -148,6 +304,11 @@ describe('ClaudeAgent', () => {
         })
       })
     )
+
+    const queryCalls = queryClaude.mock.calls as unknown as Array<[{ options?: Options }]>
+    expect(queryCalls[0]?.[0].options?.systemPrompt).toMatchObject({
+      append: expect.not.stringContaining('运行 pwd')
+    })
   })
 
   it('allows only read-only Claude Code tools inside the workspace', async () => {
@@ -187,21 +348,23 @@ describe('ClaudeAgent', () => {
       )
     ).resolves.toEqual({ continue: true })
 
-    await expect(
-      hook?.(
-        {
-          hook_event_name: 'PreToolUse',
-          session_id: 'sdk-session-1',
-          transcript_path: '/tmp/transcript.jsonl',
-          cwd: '/workspace/moon',
-          tool_name: 'Bash',
-          tool_input: { command: 'pwd' },
-          tool_use_id: 'tool-2'
-        },
-        'tool-2',
-        { signal: new AbortController().signal }
-      )
-    ).resolves.toMatchObject({ continue: false, decision: 'block' })
+    const bashDecision = hook?.(
+      {
+        hook_event_name: 'PreToolUse',
+        session_id: 'sdk-session-1',
+        transcript_path: '/tmp/transcript.jsonl',
+        cwd: '/workspace/moon',
+        tool_name: 'Bash',
+        tool_input: { command: 'pwd' },
+        tool_use_id: 'tool-2'
+      },
+      'tool-2',
+      { signal: new AbortController().signal }
+    )
+
+    agent.respondToPermission('perm-tool-2', false)
+
+    await expect(bashDecision).resolves.toMatchObject({ continue: false, decision: 'block' })
 
     await expect(
       hook?.(
@@ -218,5 +381,52 @@ describe('ClaudeAgent', () => {
         { signal: new AbortController().signal }
       )
     ).resolves.toMatchObject({ continue: false, decision: 'block' })
+
+    await expect(
+      hook?.(
+        {
+          hook_event_name: 'PreToolUse',
+          session_id: 'sdk-session-1',
+          transcript_path: '/tmp/transcript.jsonl',
+          cwd: '/workspace/moon',
+          tool_name: 'Write',
+          tool_input: { file_path: 'generated.txt', content: 'hello' },
+          tool_use_id: 'tool-4'
+        },
+        'tool-4',
+        { signal: new AbortController().signal }
+      )
+    ).resolves.toMatchObject({ continue: false, decision: 'block' })
+  })
+
+  it('emits a permission request when Claude Code SDK asks to run Bash', async () => {
+    const queryClaude = createBashHookQueryClaudeMock()
+    const agent = new ClaudeAgent({
+      model: 'claude-sonnet',
+      messages: [],
+      queryClaude: queryClaude as never,
+      workspace: {
+        path: '/workspace/moon'
+      }
+    })
+    const events = agent.chat('run pwd')
+
+    const permissionEvent = await events.next()
+
+    expect(permissionEvent.value).toMatchObject({
+      type: 'permission_request',
+      request: {
+        requestId: 'perm-bash-tool-1',
+        toolName: 'Bash',
+        command: 'pwd',
+        type: 'bash'
+      }
+    })
+
+    agent.respondToPermission('perm-bash-tool-1', true)
+
+    const textEvent = await events.next()
+
+    expect(textEvent.value).toMatchObject({ type: 'text_complete', text: 'allowed' })
   })
 })

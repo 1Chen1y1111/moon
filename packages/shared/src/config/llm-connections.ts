@@ -27,13 +27,25 @@ export const customEndpointSchema = z.object({
   api: customEndpointApiSchema
 })
 
+/**
+ * 判断 API key 是否能安全放入 HTTP header；空值表示沿用已存凭据或未配置。
+ */
+export function isValidApiKeyValue(value: string): boolean {
+  return value.length === 0 || /^[\x21-\x7e]+$/u.test(value)
+}
+
+const apiKeySchema = z
+  .string()
+  .trim()
+  .refine(isValidApiKeyValue, 'API key must not contain spaces or non-ASCII characters.')
+
 export const llmConnectionSchema = z.object({
   id: z.string().trim().min(1),
   name: z.string().trim().min(1),
   providerId: z.string().trim().min(1).optional(),
   backend: agentBackendProviderSchema,
   model: z.string().trim().min(1),
-  apiKey: z.string().optional(),
+  apiKey: apiKeySchema.optional(),
   baseUrl: z.string().trim().url().optional(),
   customEndpoint: customEndpointSchema.optional(),
   enabled: z.boolean().default(true),

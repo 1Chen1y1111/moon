@@ -6,8 +6,10 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  createDraftWithProviderApiFormat,
   createDraftFromProvider,
   normalizeProviderDraftForSubmit,
+  resolveProviderApiFormatOptions,
   updateModelEnabled
 } from '@renderer/features/ProviderSettings/provider-settings.utils'
 import { createDefaultProviderSettings } from '@moon/shared/domain/settings'
@@ -40,7 +42,7 @@ function createDraft(input: Partial<ProviderDraft> = {}): ProviderDraft {
 }
 
 describe('provider settings utils', () => {
-  it('shows built-in defaults and clears unchanged endpoint defaults on submit', () => {
+  it('shows DeepSeek Anthropic defaults and clears unchanged endpoint defaults on submit', () => {
     const provider = {
       ...createDefaultProviderSettings('deepseek'),
       apiFormat: 'anthropic' as const,
@@ -48,19 +50,19 @@ describe('provider settings utils', () => {
     }
     const draft = createDraftFromProvider(provider)
 
-    expect(draft.baseUrl).toBe('https://api.deepseek.com')
-    expect(draft.apiFormat).toBe('openai-chat')
+    expect(draft.baseUrl).toBe('https://api.deepseek.com/anthropic')
+    expect(draft.apiFormat).toBe('anthropic')
     expect(normalizeProviderDraftForSubmit(provider, draft)).toEqual(
       expect.objectContaining({
         baseUrl: '',
-        apiFormat: 'openai-chat'
+        apiFormat: 'anthropic'
       })
     )
   })
 
   it('keeps custom endpoint overrides for built-in providers while fixing hidden protocol', () => {
     const provider = {
-      ...createDefaultProviderSettings('deepseek'),
+      ...createDefaultProviderSettings('openai'),
       apiFormat: 'anthropic' as const,
       baseUrl: 'https://proxy.example.com/anthropic'
     }
@@ -72,6 +74,40 @@ describe('provider settings utils', () => {
       expect.objectContaining({
         baseUrl: 'https://proxy.example.com/anthropic',
         apiFormat: 'openai-chat'
+      })
+    )
+  })
+
+  it('limits DeepSeek protocol options to OpenAI Chat and Anthropic Messages', () => {
+    expect(resolveProviderApiFormatOptions(createDefaultProviderSettings('deepseek'))).toEqual([
+      'openai-chat',
+      'anthropic'
+    ])
+  })
+
+  it('updates DeepSeek default endpoint when switching protocol', () => {
+    const provider = createDefaultProviderSettings('deepseek')
+    const draft = createDraftFromProvider(provider)
+
+    expect(createDraftWithProviderApiFormat(provider, draft, 'anthropic')).toEqual(
+      expect.objectContaining({
+        apiFormat: 'anthropic',
+        baseUrl: 'https://api.deepseek.com/anthropic'
+      })
+    )
+  })
+
+  it('keeps DeepSeek custom endpoint when switching protocol', () => {
+    const provider = createDefaultProviderSettings('deepseek')
+    const draft = createDraft({
+      baseUrl: 'https://proxy.example.com/deepseek',
+      apiFormat: 'openai-chat'
+    })
+
+    expect(createDraftWithProviderApiFormat(provider, draft, 'anthropic')).toEqual(
+      expect.objectContaining({
+        apiFormat: 'anthropic',
+        baseUrl: 'https://proxy.example.com/deepseek'
       })
     )
   })

@@ -60,7 +60,7 @@ function createSaveProviderInput(
     provider: provider.provider,
     name: provider.name,
     type: provider.type,
-    apiKey: provider.apiKey,
+    apiKey: '',
     model: selectedModel.id,
     models: ensureSelectedModel(provider.models, selectedModel),
     availableModels: ensureSelectedModel(provider.availableModels, selectedModel),

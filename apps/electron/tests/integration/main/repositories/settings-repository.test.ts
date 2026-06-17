@@ -8,7 +8,7 @@ import { afterEach, describe, expect, it } from 'vitest'
 
 import { bootstrapDatabase } from '@main/db/bootstrap'
 import { createDatabaseConnection, type AppDatabaseConnection } from '@main/db/connection'
-import { providerSettings } from '@main/db/schema'
+import { llmConnections, providerSettings } from '@main/db/schema'
 import { SettingsRepository } from '@main/repositories/settings-repository'
 
 const pgliteTestTimeout = 30_000
@@ -211,6 +211,70 @@ describe('SettingsRepository', () => {
   )
 
   it(
+    'ignores invalid persisted provider and connection API key values',
+    async () => {
+      const directoryPath = mkdtempSync(join(tmpdir(), 'moon-settings-repository-'))
+      const databasePath = join(directoryPath, 'moon-pglite')
+      tempDirectories.push(directoryPath)
+
+      const connection = await createBootstrappedConnection(databasePath)
+      const repository = new SettingsRepository(connection)
+      const invalidApiKey = '没有可选模型  先启用一个聊天 Provider 和模型。'
+      const updatedAt = new Date().toISOString()
+
+      await connection.db.insert(providerSettings).values({
+        provider: 'deepseek',
+        name: 'DeepSeek',
+        providerType: 'deepseek',
+        model: 'deepseek-v4-flash',
+        models: [],
+        availableModels: [],
+        baseUrl: '',
+        apiKey: invalidApiKey,
+        apiFormat: 'anthropic',
+        useMaxCompletionTokens: false,
+        customHeaders: '',
+        enabled: true,
+        isCustom: false,
+        isAcp: false,
+        isOauth: false,
+        acpCommand: '',
+        acpArgs: [],
+        acpAuthMethodId: '',
+        modelsUpdatedAt: null,
+        updatedAt
+      })
+      await connection.db.insert(llmConnections).values({
+        id: 'deepseek',
+        name: 'DeepSeek',
+        providerId: 'deepseek',
+        backend: 'anthropic',
+        model: 'deepseek-v4-flash',
+        apiKey: invalidApiKey,
+        baseUrl: 'https://api.deepseek.com/anthropic',
+        customEndpoint: null,
+        enabled: true,
+        isDefault: true,
+        thinkingLevel: 'medium',
+        createdAt: updatedAt,
+        updatedAt
+      })
+
+      const settings = await repository.getSettings()
+
+      expect(await repository.getStoredProviderKey('deepseek')).toBeNull()
+      expect(settings.providers.deepseek).toMatchObject({
+        hasApiKey: false,
+        apiKey: ''
+      })
+      expect(settings.llmConnections[0]).not.toHaveProperty('apiKey')
+
+      await connection.close()
+    },
+    pgliteTestTimeout
+  )
+
+  it(
     'does not surface unfetched built-in default models',
     async () => {
       const directoryPath = mkdtempSync(join(tmpdir(), 'moon-settings-repository-'))
@@ -302,6 +366,60 @@ describe('SettingsRepository', () => {
         apiKey: 'sk-deepseek-demo',
         model: 'deepseek-chat',
         baseUrl: 'https://api.deepseek.com/v1'
+      })
+
+      await connection.close()
+    },
+    pgliteTestTimeout
+  )
+
+  it(
+    'restores DeepSeek static models when saving provider with empty model lists',
+    async () => {
+      const directoryPath = mkdtempSync(join(tmpdir(), 'moon-settings-repository-'))
+      const databasePath = join(directoryPath, 'moon-pglite')
+      tempDirectories.push(directoryPath)
+
+      const connection = await createBootstrappedConnection(databasePath)
+      const repository = new SettingsRepository(connection)
+
+      await repository.saveProvider('deepseek', {
+        apiKey: 'sk-deepseek-demo',
+        enabled: true,
+        models: [],
+        availableModels: []
+      })
+
+      const settings = await repository.getSettings()
+
+      expect(settings.providers.deepseek).toMatchObject({
+        provider: 'deepseek',
+        enabled: true,
+        model: 'deepseek-v4-flash',
+        models: [
+          {
+            id: 'deepseek-v4-flash',
+            enabled: true,
+            isManual: false
+          },
+          {
+            id: 'deepseek-v4-pro',
+            enabled: false,
+            isManual: false
+          }
+        ],
+        availableModels: [
+          {
+            id: 'deepseek-v4-flash',
+            enabled: true,
+            isManual: false
+          },
+          {
+            id: 'deepseek-v4-pro',
+            enabled: false,
+            isManual: false
+          }
+        ]
       })
 
       await connection.close()

@@ -25,6 +25,7 @@ import {
   createDefaultAppSettings,
   createDefaultProviderSettings
 } from '@moon/shared/domain/settings'
+import type { ProviderModel } from '@moon/shared/domain/provider'
 import type { AppSettings, ProviderSettings } from '@moon/shared/domain/settings'
 import type {
   AgentBackend,
@@ -81,6 +82,36 @@ function createAnthropicCompatibleProvider(
     baseUrl: 'https://api.example.com',
     model: 'anthropic/claude-sonnet',
     ...input
+  })
+}
+
+/**
+ * 创建带 OpenAI-compatible 元数据的 DeepSeek 模型 fixture，模拟 Pi 模型目录返回值。
+ */
+function createDeepSeekOpenAiModel(): ProviderModel {
+  return {
+    id: 'deepseek-v4-flash',
+    name: 'DeepSeek V4 Flash',
+    enabled: true,
+    isManual: false,
+    providerApi: 'openai-completions',
+    providerBaseUrl: 'https://api.deepseek.com'
+  }
+}
+
+/**
+ * 创建 provider 级 Anthropic 协议、模型级仍是 OpenAI-compatible 的 DeepSeek fixture。
+ */
+function createDeepSeekAnthropicProviderWithOpenAiModel(): ProviderSettings {
+  const model = createDeepSeekOpenAiModel()
+
+  return createProviderSettings({
+    provider: 'deepseek',
+    type: 'deepseek',
+    apiFormat: 'anthropic',
+    model: model.id,
+    models: [model],
+    availableModels: [model]
   })
 }
 
@@ -675,7 +706,7 @@ describe('ChatService.sendMessage', () => {
     )
   })
 
-  it('passes Anthropic-compatible providers through pi_compat connection config', async () => {
+  it('passes Anthropic-compatible providers through Anthropic backend config', async () => {
     const openrouter = createAnthropicCompatibleProvider({
       provider: 'openrouter',
       type: 'openrouter',
@@ -696,13 +727,13 @@ describe('ChatService.sendMessage', () => {
 
     expect(createAgentBackend).toHaveBeenCalledWith(
       expect.objectContaining({
-        provider: 'pi_compat',
+        provider: 'anthropic',
         model: 'anthropic/claude-sonnet',
         apiKey: 'stored-key',
-        baseUrl: 'https://compat.example.com',
-        customEndpoint: { api: 'anthropic-messages' }
+        baseUrl: 'https://compat.example.com'
       })
     )
+    expect(createAgentBackend.mock.calls[0]?.[0]).not.toHaveProperty('customEndpoint')
   })
 
   it('passes DeepSeek providers through OpenAI-compatible pi_compat config', async () => {
@@ -754,6 +785,30 @@ describe('ChatService.sendMessage', () => {
     )
   })
 
+  it('passes DeepSeek Anthropic protocol providers through Claude SDK backend config', async () => {
+    const deepseek = createDeepSeekAnthropicProviderWithOpenAiModel()
+    const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
+      void config
+      return createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
+    })
+    const { service } = createService({
+      createAgentBackend,
+      settings: createSettings([deepseek])
+    })
+
+    await service.sendMessage({ content: 'hello' })
+
+    expect(createAgentBackend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'anthropic',
+        model: 'deepseek-v4-flash',
+        apiKey: 'stored-key',
+        baseUrl: 'https://api.deepseek.com/anthropic'
+      })
+    )
+    expect(createAgentBackend.mock.calls[0]?.[0]).not.toHaveProperty('customEndpoint')
+  })
+
   it('binds a requested provider to its synchronized same-id LLM connection', async () => {
     const deepseek = createProviderSettings({
       provider: 'deepseek',
@@ -785,6 +840,77 @@ describe('ChatService.sendMessage', () => {
         customEndpoint: { api: 'openai-completions' }
       })
     )
+  })
+
+  it('refreshes an explicit provider-backed LLM connection from current provider settings', async () => {
+    const deepseek = createDeepSeekAnthropicProviderWithOpenAiModel()
+    const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
+      void config
+      return createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
+    })
+    const { service, sessionsRepository } = createService({
+      createAgentBackend,
+      llmConnections: [createDeepSeekCompatConnection()],
+      settings: createSettings([deepseek])
+    })
+
+    await service.sendMessage({
+      llmConnectionId: 'deepseek',
+      provider: 'deepseek',
+      content: 'hello'
+    })
+
+    expect(sessionsRepository.sessions[0]).toMatchObject({
+      provider: 'deepseek',
+      llmConnectionId: 'deepseek'
+    })
+    expect(createAgentBackend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'anthropic',
+        model: 'deepseek-v4-flash',
+        apiKey: 'stored-key',
+        baseUrl: 'https://api.deepseek.com/anthropic'
+      })
+    )
+    expect(createAgentBackend.mock.calls[0]?.[0]).not.toHaveProperty('customEndpoint')
+  })
+
+  it('refreshes a provider-backed LLM connection even when its id differs from provider id', async () => {
+    const deepseek = createDeepSeekAnthropicProviderWithOpenAiModel()
+    const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
+      void config
+      return createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
+    })
+    const { service, sessionsRepository } = createService({
+      createAgentBackend,
+      llmConnections: [
+        createDeepSeekCompatConnection({
+          id: 'deepseek-legacy',
+          isDefault: true
+        })
+      ],
+      settings: createSettings([deepseek])
+    })
+
+    await service.sendMessage({
+      llmConnectionId: 'deepseek-legacy',
+      provider: 'deepseek',
+      content: 'hello'
+    })
+
+    expect(sessionsRepository.sessions[0]).toMatchObject({
+      provider: 'deepseek',
+      llmConnectionId: 'deepseek-legacy'
+    })
+    expect(createAgentBackend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'anthropic',
+        model: 'deepseek-v4-flash',
+        apiKey: 'stored-key',
+        baseUrl: 'https://api.deepseek.com/anthropic'
+      })
+    )
+    expect(createAgentBackend.mock.calls[0]?.[0]).not.toHaveProperty('customEndpoint')
   })
 
   it('uses an explicit LLM connection before the requested provider', async () => {
@@ -837,12 +963,12 @@ describe('ChatService.sendMessage', () => {
     })
     expect(createAgentBackend).toHaveBeenCalledWith(
       expect.objectContaining({
-        provider: 'pi_compat',
+        provider: 'anthropic',
         model: 'anthropic/claude-sonnet',
-        apiKey: 'stored-connection-key',
-        customEndpoint: { api: 'anthropic-messages' }
+        apiKey: 'stored-connection-key'
       })
     )
+    expect(createAgentBackend.mock.calls[0]?.[0]).not.toHaveProperty('customEndpoint')
   })
 
   it('reuses the session LLM connection for follow-up turns', async () => {
@@ -871,11 +997,89 @@ describe('ChatService.sendMessage', () => {
 
     expect(createAgentBackend).toHaveBeenCalledWith(
       expect.objectContaining({
-        provider: 'pi_compat',
+        provider: 'anthropic',
         model: 'anthropic/claude-sonnet',
         apiKey: 'stored-connection-key'
       })
     )
+    expect(createAgentBackend.mock.calls[0]?.[0]).not.toHaveProperty('customEndpoint')
+  })
+
+  it('refreshes a session provider-backed LLM connection from current provider settings', async () => {
+    const session: SessionRecord = {
+      id: 'session-1',
+      llmConnectionId: 'deepseek',
+      projectId: null,
+      provider: 'deepseek',
+      title: 'Plan',
+      status: 'active',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:00.000Z'
+    }
+    const deepseek = createDeepSeekAnthropicProviderWithOpenAiModel()
+    const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
+      void config
+      return createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
+    })
+    const { service } = createService({
+      createAgentBackend,
+      llmConnections: [createDeepSeekCompatConnection()],
+      sessions: [session],
+      settings: createSettings([deepseek])
+    })
+
+    await service.sendMessage({ sessionId: 'session-1', content: 'continue' })
+
+    expect(createAgentBackend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'anthropic',
+        model: 'deepseek-v4-flash',
+        apiKey: 'stored-key',
+        baseUrl: 'https://api.deepseek.com/anthropic'
+      })
+    )
+    expect(createAgentBackend.mock.calls[0]?.[0]).not.toHaveProperty('customEndpoint')
+  })
+
+  it('refreshes a legacy session LLM connection without providerId from the session provider', async () => {
+    const session: SessionRecord = {
+      id: 'session-1',
+      llmConnectionId: 'deepseek-legacy',
+      projectId: null,
+      provider: 'deepseek',
+      title: 'Plan',
+      status: 'active',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:00.000Z'
+    }
+    const deepseek = createDeepSeekAnthropicProviderWithOpenAiModel()
+    const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
+      void config
+      return createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
+    })
+    const { service } = createService({
+      createAgentBackend,
+      llmConnections: [
+        createDeepSeekCompatConnection({
+          id: 'deepseek-legacy',
+          providerId: undefined
+        })
+      ],
+      sessions: [session],
+      settings: createSettings([deepseek])
+    })
+
+    await service.sendMessage({ sessionId: 'session-1', content: 'continue' })
+
+    expect(createAgentBackend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'anthropic',
+        model: 'deepseek-v4-flash',
+        apiKey: 'stored-key',
+        baseUrl: 'https://api.deepseek.com/anthropic'
+      })
+    )
+    expect(createAgentBackend.mock.calls[0]?.[0]).not.toHaveProperty('customEndpoint')
   })
 
   it('uses the requested provider for an existing session', async () => {
@@ -1144,6 +1348,71 @@ describe('ChatService.sendMessage', () => {
     ])
     expect(events.map((event) => (event as { type: string }).type)).toContain('tool-start')
     expect(events.map((event) => (event as { type: string }).type)).toContain('tool-finish')
+  })
+
+  it('explains that command-like requests need the Claude SDK backend for Bash tools', async () => {
+    const project: ProjectRecord = {
+      id: 'project-1',
+      name: 'moon',
+      path: '/workspace/moon',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:00.000Z'
+    }
+    const createAgentBackend = vi.fn()
+    const { service } = createService({
+      activeProjectId: project.id,
+      createAgentBackend,
+      llmConnections: [createDeepSeekCompatConnection({ isDefault: true })],
+      projects: [project],
+      settings: createSettings([
+        createProviderSettings({
+          provider: 'deepseek',
+          type: 'deepseek',
+          model: 'deepseek-v4-flash'
+        })
+      ])
+    })
+
+    const result = await service.sendMessage({ content: '运行 pwd' })
+
+    expect(createAgentBackend).not.toHaveBeenCalled()
+    expect(result.messages.map((message) => message.content).at(-1)).toContain(
+      '不是 Claude SDK 后端'
+    )
+  })
+
+  it('runs command-like requests for legacy Anthropic Messages connections through Claude SDK backend', async () => {
+    const project: ProjectRecord = {
+      id: 'project-1',
+      name: 'moon',
+      path: '/workspace/moon',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:00.000Z'
+    }
+    const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
+      void config
+      return createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
+    })
+    const { service } = createService({
+      activeProjectId: project.id,
+      createAgentBackend,
+      llmConnections: [createAnthropicCompatConnection()],
+      projects: [project],
+      settings: createSettings([createAnthropicCompatibleProvider({ provider: 'openrouter' })])
+    })
+
+    const result = await service.sendMessage({ content: '运行 pwd' })
+
+    expect(createAgentBackend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        provider: 'anthropic',
+        model: 'anthropic/claude-sonnet',
+        apiKey: 'stored-connection-key',
+        baseUrl: 'https://compat.example.com'
+      })
+    )
+    expect(createAgentBackend.mock.calls[0]?.[0]).not.toHaveProperty('customEndpoint')
+    expect(result.messages.map((message) => message.content).at(-1)).toBe('ok')
   })
 
   it('waits for permission approval and resumes the backend through respondToPermission', async () => {

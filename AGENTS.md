@@ -187,6 +187,13 @@ the logo unchanged unless the user explicitly asks to modify it.
 
 Use `pnpm` for dependency management and scripts.
 
+AI agents must not run dependency installation or update commands on their own,
+including `pnpm install`, `pnpm i`, `pnpm add`, `pnpm update`, or package-fetching
+generators such as `pnpm dlx ...`, unless the user explicitly asks for that
+exact command in the current turn. When a dependency add or upgrade is needed,
+edit the relevant manifest with the intended version only, tell the user to run
+`pnpm i`, and verify the result after the user confirms installation is done.
+
 ```bash
 pnpm install
 pnpm --filter @moon/electron update-shadcn

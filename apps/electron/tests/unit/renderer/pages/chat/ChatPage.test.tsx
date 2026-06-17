@@ -465,6 +465,7 @@ describe('ChatPage', () => {
       expect(api.settings.saveProvider).toHaveBeenCalledWith(
         expect.objectContaining({
           provider: 'deepseek',
+          apiKey: '',
           model: 'deepseek-v4-flash',
           models: [
             expect.objectContaining({
