@@ -12,6 +12,8 @@ import type { ChatInputAttachment, ChatInputRuntimeInfo } from '@renderer/featur
 import { selectChatTarget } from '@renderer/features/ChatInput/chat-target-selection'
 import { useChatStore } from '@renderer/store/chat'
 import { selectChatDraftAttachments, selectChatSessions } from '@renderer/store/chat/selectors'
+import { useProjectsStore } from '@renderer/store/projects'
+import { selectProjects } from '@renderer/store/projects/selectors'
 import { useSettingsStore } from '@renderer/store/settings'
 import { selectAppSettings } from '@renderer/store/settings/selectors'
 import type { ChatAttachmentRecord } from '@moon/shared/domain/chat'
@@ -40,6 +42,23 @@ function toReadyAttachments(
     }))
 }
 
+/**
+ * 根据当前会话 projectId 解析输入框状态栏展示的 workspace 名称。
+ */
+function resolveWorkspaceLabel(
+  projectId: string | null,
+  projects: ReturnType<typeof selectProjects>
+): string {
+  if (projectId === null) {
+    return '未绑定项目'
+  }
+
+  return projects.find((project) => project.id === projectId)?.name ?? '已绑定项目'
+}
+
+/**
+ * 连接会话上下文、项目上下文和 provider 设置，渲染可发送的聊天输入框。
+ */
 export function ChatInput(): React.JSX.Element {
   const { setRouteState } = useAppRouterContext()
   const context = useConversationStore(conversationSelectors.context)
@@ -53,6 +72,7 @@ export function ChatInput(): React.JSX.Element {
   const updateInputMessage = useConversationStore((state) => state.updateInputMessage)
   const sessions = useChatStore(selectChatSessions)
   const draftAttachments = useChatStore(selectChatDraftAttachments)
+  const projects = useProjectsStore(selectProjects)
   const sendChatMessage = useChatStore((state) => state.sendChatMessage)
   const cancelChatOperation = useChatStore((state) => state.cancelChatOperation)
   const clearChatDraftAttachments = useChatStore((state) => state.clearChatDraftAttachments)
@@ -78,14 +98,19 @@ export function ChatInput(): React.JSX.Element {
     () => toReadyAttachments(draftAttachments),
     [draftAttachments]
   )
+  const workspaceLabel = useMemo(
+    () => resolveWorkspaceLabel(context.projectId, projects),
+    [context.projectId, projects]
+  )
   const runtimeInfo = useMemo<ChatInputRuntimeInfo>(
     () => ({
       providerLabel: activeProvider?.name ?? '未选择提供商',
       modelLabel: activeTarget.modelLabel,
       shortcutLabel: 'Enter 发送，Shift+Enter 换行',
-      statusLabel: isSending ? '发送中' : undefined
+      statusLabel: isSending ? '发送中' : undefined,
+      workspaceLabel
     }),
-    [activeProvider, activeTarget.modelLabel, isSending]
+    [activeProvider, activeTarget.modelLabel, isSending, workspaceLabel]
   )
 
   useEffect(() => {

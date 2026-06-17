@@ -1,5 +1,13 @@
+/**
+ * 负责渲染聊天输入框下方的运行环境和发送状态。
+ * 它只展示上层传入的 provider、model、workspace 与快捷键信息。
+ */
+
 import type { ChatInputRuntimeInfo } from '../types'
 
+/**
+ * 展示当前输入框绑定的运行环境和发送状态。
+ */
 export function RuntimeBar({
   runtimeInfo
 }: {
@@ -9,7 +17,11 @@ export function RuntimeBar({
     return null
   }
 
-  const environmentLabel = [runtimeInfo.providerLabel, runtimeInfo.modelLabel]
+  const environmentLabel = [
+    runtimeInfo.providerLabel,
+    runtimeInfo.modelLabel,
+    runtimeInfo.workspaceLabel
+  ]
     .filter((label): label is string => label !== undefined && label.length > 0)
     .join(' · ')
   const statusLabel = [runtimeInfo.statusLabel, runtimeInfo.shortcutLabel]

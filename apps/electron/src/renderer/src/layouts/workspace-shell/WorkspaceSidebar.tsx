@@ -302,19 +302,19 @@ export function WorkspaceSidebar(): React.JSX.Element {
     const title = session.title ?? '未命名会话'
 
     return (
-      <div key={session.id} role="listitem">
-        <div className="group/session flex h-7 min-w-0 items-center gap-1 rounded-md transition-colors hover:bg-accent focus-within:bg-accent">
+      <div key={session.id} role="listitem" className="w-full min-w-0 max-w-full overflow-hidden">
+        <div className="group/session grid h-7 w-full min-w-0 grid-cols-[minmax(0,1fr)_1.5rem] items-center rounded-md transition-colors hover:bg-accent focus-within:bg-accent">
           <button
             type="button"
             aria-current={isActive ? 'page' : undefined}
-            className="flex h-full min-w-0 flex-1 items-center rounded-md py-1 pl-2 text-left text-xs leading-5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-current:bg-accent"
+            className="flex h-full min-w-0 flex-1 items-center overflow-hidden rounded-md py-1 pl-2 text-left text-xs leading-5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring aria-current:bg-accent"
             onClick={() => {
               void handleSelectSession(session)
             }}
           >
-            <span className="truncate">{title}</span>
+            <span className="min-w-0 flex-1 truncate">{title}</span>
           </button>
-          <div className="flex h-full shrink-0 items-center justify-end pr-0.5">
+          <div className="flex h-full min-w-0 items-center justify-end pr-0.5">
             <button
               type="button"
               aria-label={`删除会话 ${title}`}
@@ -343,17 +343,17 @@ export function WorkspaceSidebar(): React.JSX.Element {
     const title = project.name
 
     return (
-      <section key={projectKey} className="min-w-0">
+      <section key={projectKey} className="w-full min-w-0 max-w-full overflow-hidden">
         <div
           className={cn(
-            'group/project flex h-8 min-w-0 items-center gap-1 rounded-md transition-colors hover:bg-accent focus-within:bg-accent',
+            'group/project grid h-8 w-full min-w-0 grid-cols-[minmax(0,1fr)_2.875rem] items-center rounded-md transition-colors hover:bg-accent focus-within:bg-accent',
             isActiveProject && 'bg-accent'
           )}
         >
           <button
             type="button"
             aria-expanded={isExpanded}
-            className="flex h-full min-w-0 flex-1 items-center gap-1.5 rounded-md py-1 pl-2 text-left text-xs leading-5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            className="flex h-full min-w-0 flex-1 items-center gap-1.5 overflow-hidden rounded-md py-1 pl-2 text-left text-xs leading-5 text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             onClick={() => {
               selectProject(projectId)
             }}
@@ -363,16 +363,16 @@ export function WorkspaceSidebar(): React.JSX.Element {
               className="size-3.5 shrink-0 text-muted-foreground"
               strokeWidth={1.8}
             />
-            <span className="truncate">{title}</span>
+            <span className="min-w-0 flex-1 truncate">{title}</span>
             <ChevronRight
               aria-hidden="true"
               className={cn(
-                'ml-auto size-3.5 shrink-0 text-muted-foreground transition-transform',
+                'size-3.5 shrink-0 text-muted-foreground transition-transform',
                 isExpanded && 'rotate-90'
               )}
             />
           </button>
-          <div className="flex h-full shrink-0 items-center justify-end gap-0.5 pr-0.5">
+          <div className="flex h-full min-w-0 items-center justify-end gap-0.5 pr-0.5">
             <button
               type="button"
               aria-label={`在 ${title} 下新建对话`}
@@ -398,7 +398,11 @@ export function WorkspaceSidebar(): React.JSX.Element {
         </div>
 
         {isExpanded ? (
-          <div role="list" aria-label={`${title} 的会话`} className="mt-1 space-y-1">
+          <div
+            role="list"
+            aria-label={`${title} 的会话`}
+            className="mt-1 w-full min-w-0 max-w-full space-y-1 overflow-hidden"
+          >
             {projectSessions.length === 0 ? (
               <button
                 type="button"
@@ -423,7 +427,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
     const isExpanded = isProjectExpanded(projectKey)
 
     return (
-      <section className="min-w-0">
+      <section className="w-full min-w-0 max-w-full overflow-hidden">
         <div className="flex h-8 items-center justify-between px-1.5">
           <button
             type="button"
@@ -460,7 +464,11 @@ export function WorkspaceSidebar(): React.JSX.Element {
         </div>
 
         {isExpanded ? (
-          <div role="list" aria-label="对话列表" className="mt-1 space-y-1">
+          <div
+            role="list"
+            aria-label="对话列表"
+            className="mt-1 w-full min-w-0 max-w-full space-y-1 overflow-hidden"
+          >
             {unboundSessions.length === 0 ? (
               <button
                 type="button"
@@ -485,8 +493,12 @@ export function WorkspaceSidebar(): React.JSX.Element {
       <div className="flex min-h-0 w-full flex-1 flex-col overflow-visible rounded-lg border border-border bg-card">
         <WorkspaceChrome />
 
-        <ScrollArea role="group" aria-label="项目和对话" className="min-h-0 flex-1">
-          <div className="flex flex-col gap-2 px-2 py-3">
+        <ScrollArea
+          role="group"
+          aria-label="项目和对话"
+          className="min-h-0 flex-1 [&_[data-slot=scroll-area-viewport]>div]:!block [&_[data-slot=scroll-area-viewport]>div]:!min-w-0 [&_[data-slot=scroll-area-viewport]>div]:!w-full"
+        >
+          <div className="flex w-full min-w-0 max-w-full flex-col gap-2 overflow-hidden px-2 py-3">
             <PopoverPrimitive.Root
               modal={false}
               open={isProjectMenuOpen}
@@ -554,7 +566,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
               </PopoverPrimitive.Portal>
             </PopoverPrimitive.Root>
 
-            <div className="space-y-1">
+            <div className="w-full min-w-0 max-w-full space-y-1 overflow-hidden">
               {isProjectSectionExpanded
                 ? projects.map((project) =>
                     renderProject(project, filterSessionsByProject(sessions, project.id))

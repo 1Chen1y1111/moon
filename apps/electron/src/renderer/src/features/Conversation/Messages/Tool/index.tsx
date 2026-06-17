@@ -72,6 +72,22 @@ function getToolCommand(toolInvocation: ToolInvocationRecord): string | undefine
   )
 }
 
+function getToolPath(toolInvocation: ToolInvocationRecord): string | undefined {
+  return readStringField(toolInvocation.arguments, 'path')
+}
+
+function getToolResultTitle(toolInvocation: ToolInvocationRecord): string | undefined {
+  return readStringField(toolInvocation.result, 'title')
+}
+
+function getToolResultOutput(toolInvocation: ToolInvocationRecord): string | undefined {
+  if (typeof toolInvocation.result === 'string' && toolInvocation.result.trim().length > 0) {
+    return toolInvocation.result
+  }
+
+  return readStringField(toolInvocation.result, 'output')
+}
+
 /**
  * 渲染等待人工确认时的允许/拒绝操作按钮。
  */
@@ -121,6 +137,9 @@ function ToolInvocationItem({
   const [isSubmittingDecision, setIsSubmittingDecision] = useState(false)
   const description = getToolDescription(toolInvocation)
   const command = getToolCommand(toolInvocation)
+  const path = getToolPath(toolInvocation)
+  const resultTitle = getToolResultTitle(toolInvocation)
+  const resultOutput = getToolResultOutput(toolInvocation)
   const isWaitingForHuman = toolInvocation.status === 'waiting_for_human'
 
   const approveTool = async (): Promise<void> => {
@@ -165,8 +184,27 @@ function ToolInvocationItem({
           {command}
         </code>
       )}
+      {command !== undefined || path === undefined ? null : (
+        <code className="mt-1 block max-h-24 overflow-auto rounded bg-muted px-1.5 py-1 font-mono text-[11px] leading-4 text-foreground">
+          {path}
+        </code>
+      )}
       {toolInvocation.error === undefined || toolInvocation.error === null ? null : (
         <div className="mt-1 text-destructive">{toolInvocation.error}</div>
+      )}
+      {resultTitle === undefined && resultOutput === undefined ? null : (
+        <div className="mt-1.5 rounded border border-border bg-muted/60">
+          {resultTitle === undefined ? null : (
+            <div className="border-b border-border px-1.5 py-1 text-[11px] font-medium leading-4 text-muted-foreground">
+              {resultTitle}
+            </div>
+          )}
+          {resultOutput === undefined ? null : (
+            <pre className="max-h-40 overflow-auto whitespace-pre-wrap px-1.5 py-1 font-mono text-[11px] leading-4 text-foreground">
+              {resultOutput}
+            </pre>
+          )}
+        </div>
       )}
       {isWaitingForHuman ? (
         <ToolApprovalActions

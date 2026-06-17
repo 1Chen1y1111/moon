@@ -133,6 +133,7 @@ describe('ChatPage', () => {
       'true'
     )
     expect(screen.getByRole('button', { name: '发送' })).toBeDisabled()
+    expect(screen.getByText(/未绑定项目/)).toBeInTheDocument()
 
     await user.type(screen.getByRole('textbox', { name: '消息内容' }), 'hello')
 
@@ -262,6 +263,8 @@ describe('ChatPage', () => {
         projects: [project]
       }
     })
+
+    expect(screen.getByText(/moon/)).toBeInTheDocument()
 
     await user.type(screen.getByRole('textbox', { name: '消息内容' }), '项目任务')
     await user.click(screen.getByRole('button', { name: '发送' }))

@@ -1,3 +1,8 @@
+/**
+ * 负责定义聊天输入框的展示参数和附件动作类型。
+ * 它只描述纯 UI 组件 props，不触碰会话状态或 IPC 边界。
+ */
+
 import type { ComponentType, ReactNode } from 'react'
 
 export interface ChatInputAttachment {
@@ -25,6 +30,7 @@ export interface ChatInputRuntimeInfo {
   providerLabel?: string
   shortcutLabel?: string
   statusLabel?: string
+  workspaceLabel?: string
 }
 
 export interface ChatInputProps {

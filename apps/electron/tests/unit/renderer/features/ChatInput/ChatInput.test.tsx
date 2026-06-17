@@ -225,14 +225,15 @@ describe('ChatInput', () => {
           providerLabel: 'Moon Provider',
           modelLabel: 'gpt-5.4',
           shortcutLabel: 'Enter 发送，Shift+Enter 换行',
-          statusLabel: '发送中'
+          statusLabel: '发送中',
+          workspaceLabel: 'moon'
         }}
         onChange={() => undefined}
         onSend={() => undefined}
       />
     )
 
-    expect(screen.getByText('Moon Provider · gpt-5.4')).toBeInTheDocument()
+    expect(screen.getByText('Moon Provider · gpt-5.4 · moon')).toBeInTheDocument()
     expect(screen.getByText('发送中 · Enter 发送，Shift+Enter 换行')).toBeInTheDocument()
   })
 })
