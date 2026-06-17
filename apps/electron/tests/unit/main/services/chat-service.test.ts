@@ -1106,6 +1106,42 @@ describe('ChatService.sendMessage', () => {
     expect(events.map((event) => (event as { type: string }).type)).toContain('tool-finish')
   })
 
+  it('runs explicit workspace tool commands through the local runtime', async () => {
+    const workspacePath = await mkdtemp(join(tmpdir(), 'moon-chat-runtime-'))
+
+    await writeFile(join(workspacePath, 'README.md'), 'hello moon runtime')
+
+    const project = {
+      id: 'project-1',
+      name: 'moon',
+      path: workspacePath,
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:00.000Z'
+    }
+    const events: unknown[] = []
+    const { service, toolInvocationsRepository } = createService({
+      activeProjectId: project.id,
+      agentEvents: [{ type: 'text_delta', text: 'delegate should not run' }],
+      projects: [project],
+      settings: createClaudeSettings()
+    })
+
+    const result = await service.sendMessage({ content: '/ls .' }, (event) => events.push(event))
+
+    expect(result.messages.map((message) => message.content).at(-1)).toContain('README.md')
+    expect(toolInvocationsRepository.invocations).toEqual([
+      expect.objectContaining({
+        name: 'list_dir',
+        result: expect.objectContaining({
+          output: expect.stringContaining('README.md')
+        }),
+        status: 'done'
+      })
+    ])
+    expect(events.map((event) => (event as { type: string }).type)).toContain('tool-start')
+    expect(events.map((event) => (event as { type: string }).type)).toContain('tool-finish')
+  })
+
   it('waits for permission approval and resumes the backend through respondToPermission', async () => {
     const settings = createClaudeSettings()
     const decisions: AgentPermissionDecision[] = []

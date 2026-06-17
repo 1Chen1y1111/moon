@@ -13,11 +13,13 @@ import {
   createAgent,
   createConnectionAgentBackendConfig,
   createAgentBackendMessage,
+  buildAgentRuntimeSystemPrompt,
   createProviderLlmConnection,
   type AgentBackend,
   type AgentBackendConfig,
   type AgentBackendMessage,
   type AgentEvent,
+  type AgentPermissionMode,
   type AgentPermissionDecision
 } from '@moon/shared/agent'
 import type { NormalizedLlmConnection } from '@moon/shared/config'
@@ -78,11 +80,13 @@ import {
 import type { ProviderSettings } from '@moon/shared/domain/settings'
 import type { ProviderId } from '@moon/shared/domain/provider'
 import type { SettingsRepository } from '../repositories/settings-repository'
+import { createAgentRuntimeBackend } from './agent-runtime-backend'
 
 const newChatTitle = '新聊天'
 const defaultTopicTitle = '默认话题'
 const defaultThreadTitle = '主线'
 const titleMaxLength = 48
+const defaultAgentPermissionMode = 'ask' satisfies AgentPermissionMode
 
 type ChatServiceDependencies = {
   agentOperationsRepository: AgentOperationsRepository
@@ -237,11 +241,13 @@ function resolveRejectedToolReason(reason?: string): string {
 function createProjectContextMessage(project: ProjectRecord): AgentBackendMessage {
   return {
     role: 'system',
-    content: [
-      `当前项目：${project.name}`,
-      `项目根目录：${project.path}`,
-      '回答和后续工具使用应把该目录视为当前工作区边界。'
-    ].join('\n')
+    content: buildAgentRuntimeSystemPrompt({
+      permissionMode: defaultAgentPermissionMode,
+      workspace: {
+        name: project.name,
+        path: project.path
+      }
+    })
   }
 }
 
@@ -921,9 +927,21 @@ export class ChatService {
         : [createProjectContextMessage(scope.project), ...backendMessages]
     const currentUserMessage =
       [...previousMessages].reverse().find((message) => message.role === 'user')?.content ?? ''
-    const agentBackend = this.createAgentBackend(
+    const delegateBackend = this.createAgentBackend(
       createConnectionAgentBackendConfig(connection, scopedBackendMessages)
     )
+    const agentBackend = createAgentRuntimeBackend({
+      delegate: delegateBackend,
+      permissionMode: defaultAgentPermissionMode,
+      ...(scope.project === null
+        ? {}
+        : {
+            workspace: {
+              name: scope.project.name,
+              path: scope.project.path
+            }
+          })
+    })
 
     this.activeAgentBackends.set(operation.id, agentBackend)
 
