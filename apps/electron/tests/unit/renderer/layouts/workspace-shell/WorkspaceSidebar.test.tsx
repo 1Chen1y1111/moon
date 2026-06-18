@@ -201,6 +201,9 @@ describe('WorkspaceSidebar', () => {
 
     const sidebar = screen.getByRole('complementary', { name: 'Workspace navigation' })
 
+    expect(screen.getByRole('button', { name: '对话' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: '新建对话' })).toBeEnabled()
+
     await user.click(screen.getByRole('button', { name: '添加项目' }))
     const useFolderButton = await screen.findByRole('button', { name: '使用现有文件夹' })
 

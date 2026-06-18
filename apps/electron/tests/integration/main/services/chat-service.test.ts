@@ -326,4 +326,70 @@ describe('ChatService integration', () => {
     },
     pgliteTestTimeout
   )
+
+  it(
+    'deletes sessions that have persisted agent operations',
+    async () => {
+      const directoryPath = mkdtempSync(join(tmpdir(), 'moon-chat-service-'))
+      const databasePath = join(directoryPath, 'moon-pglite')
+      tempDirectories.push(directoryPath)
+
+      const connection = await createBootstrappedConnection(databasePath)
+      const settingsRepository = new SettingsRepository(connection)
+      const settingsService = new SettingsService(settingsRepository)
+      const sessionsRepository = new SessionsRepository(connection)
+      const agentOperationsRepository = new AgentOperationsRepository(connection)
+      const messagesRepository = new MessagesRepository(connection)
+      const deepseekModel: ProviderModel = {
+        id: 'deepseek-v4-flash',
+        name: 'DeepSeek V4 Flash',
+        enabled: true,
+        isManual: false,
+        providerApi: 'openai-completions',
+        providerBaseUrl: 'https://api.deepseek.com'
+      }
+      const createAgentBackend = vi.fn(createUnusedAgentBackend)
+      const chatService = new ChatService({
+        agentOperationsRepository,
+        attachmentsDirectory: join(directoryPath, 'attachments'),
+        createAgentBackend,
+        messagesRepository,
+        sessionsRepository,
+        settingsRepository,
+        threadsRepository: new ThreadsRepository(connection),
+        toolInvocationsRepository: new ToolInvocationsRepository(connection),
+        topicsRepository: new TopicsRepository(connection)
+      })
+
+      try {
+        await settingsService.saveProvider({
+          provider: 'deepseek',
+          apiKey: 'sk-deepseek-demo',
+          apiFormat: 'anthropic',
+          model: deepseekModel.id,
+          models: [deepseekModel],
+          availableModels: [deepseekModel],
+          enabled: true
+        })
+
+        const result = await chatService.createMessageTurn({
+          llmConnectionId: 'deepseek',
+          content: '这条会话可以被删除'
+        })
+
+        await chatService.deleteSession({ sessionId: result.session.id })
+
+        expect(await sessionsRepository.findById(result.session.id)).toBeNull()
+        expect(await messagesRepository.listByOperation(result.operation.id)).toEqual([])
+        expect(await agentOperationsRepository.findById(result.operation.id)).toMatchObject({
+          id: result.operation.id,
+          topicId: null,
+          threadId: null
+        })
+      } finally {
+        await connection.close()
+      }
+    },
+    pgliteTestTimeout
+  )
 })

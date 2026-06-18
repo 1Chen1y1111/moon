@@ -107,7 +107,6 @@ export function WorkspaceSidebar(): React.JSX.Element {
   const [isMoreActionsOpen, setIsMoreActionsOpen] = useState(false)
   const closeTimeoutRef = useRef<number | null>(null)
   const unboundSessions = useMemo(() => filterSessionsByProject(sessions, null), [sessions])
-  const shouldShowConversationSection = activeProject === null || unboundSessions.length > 0
   const activeProjectKey = getProjectKey(activeProject?.id ?? null)
 
   useEffect(() => {
@@ -573,15 +572,7 @@ export function WorkspaceSidebar(): React.JSX.Element {
                   )
                 : null}
 
-              {shouldShowConversationSection ? renderConversationSection() : null}
-
-              {isProjectSectionExpanded &&
-              projects.length === 0 &&
-              !shouldShowConversationSection ? (
-                <div className="px-2 py-6 text-center text-xs leading-5 text-muted-foreground">
-                  选择一个文件夹开始项目对话。
-                </div>
-              ) : null}
+              {renderConversationSection()}
             </div>
           </div>
         </ScrollArea>
