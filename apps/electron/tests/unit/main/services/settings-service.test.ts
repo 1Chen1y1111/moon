@@ -151,7 +151,7 @@ describe('SettingsService', () => {
     )
   })
 
-  it('syncs an enabled provider into a same-id LLM connection after saving', async () => {
+  it('does not sync OpenAI-compatible providers into enabled Pi-compatible connections', async () => {
     const deepseekModel: ProviderModel = {
       id: 'deepseek-v4-flash',
       name: 'DeepSeek V4 Flash',
@@ -181,19 +181,7 @@ describe('SettingsService', () => {
       enabled: true
     })
 
-    expect(settingsRepository.saveLlmConnection).toHaveBeenCalledWith(
-      expect.objectContaining({
-        id: 'deepseek',
-        providerId: 'deepseek',
-        backend: 'pi_compat',
-        model: 'deepseek-v4-flash',
-        apiKey: 'sk-deepseek-demo',
-        baseUrl: 'https://api.deepseek.com',
-        customEndpoint: { api: 'openai-completions' },
-        enabled: true,
-        isDefault: false
-      })
-    )
+    expect(settingsRepository.saveLlmConnection).not.toHaveBeenCalled()
   })
 
   it('syncs DeepSeek Anthropic protocol into a Claude SDK LLM connection', async () => {
@@ -270,6 +258,59 @@ describe('SettingsService', () => {
     await service.saveProvider({
       provider: 'deepseek',
       enabled: false
+    })
+
+    expect(settingsRepository.saveLlmConnection).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: 'deepseek',
+        enabled: false,
+        isDefault: false
+      })
+    )
+  })
+
+  it('disables existing Pi-compatible provider connections when the provider remains selectable only', async () => {
+    const deepseekModel: ProviderModel = {
+      id: 'deepseek-v4-flash',
+      name: 'DeepSeek V4 Flash',
+      enabled: true,
+      isManual: false,
+      providerApi: 'openai-completions',
+      providerBaseUrl: 'https://api.deepseek.com'
+    }
+    const appSettings = createSettingsWithProvider({
+      ...createDefaultProviderSettings('deepseek'),
+      enabled: true,
+      hasApiKey: true,
+      apiKey: 'sk-deepseek-demo',
+      model: deepseekModel.id,
+      models: [deepseekModel],
+      availableModels: [deepseekModel]
+    })
+    const existingConnection = llmConnectionSchema.parse({
+      id: 'deepseek',
+      name: 'DeepSeek',
+      providerId: 'deepseek',
+      backend: 'pi_compat',
+      model: 'deepseek-v4-flash',
+      apiKey: 'sk-deepseek-demo',
+      baseUrl: 'https://api.deepseek.com',
+      customEndpoint: { api: 'openai-completions' },
+      enabled: true,
+      isDefault: true,
+      thinkingLevel: 'medium'
+    })
+    const settingsRepository = createSettingsRepositoryMock(appSettings)
+    settingsRepository.findLlmConnectionById.mockResolvedValue(existingConnection)
+    const service = new SettingsService(settingsRepository as never)
+
+    await service.saveProvider({
+      provider: 'deepseek',
+      apiKey: 'sk-deepseek-demo',
+      model: deepseekModel.id,
+      models: [deepseekModel],
+      availableModels: [deepseekModel],
+      enabled: true
     })
 
     expect(settingsRepository.saveLlmConnection).toHaveBeenCalledWith(

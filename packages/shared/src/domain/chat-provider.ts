@@ -23,17 +23,16 @@ export function isOpenAICompatibleProvider(provider: ProviderSettings): boolean 
 }
 
 /**
- * 判断 provider 模型目录里是否包含已接入的兼容端点协议。
+ * 判断 provider 模型目录里是否包含当前可由 Claude SDK 执行的 Anthropic Messages 协议。
  */
-function hasSupportedCompatibleModel(provider: ProviderSettings): boolean {
+function hasAnthropicMessagesModel(provider: ProviderSettings): boolean {
   return getChatProviderModelCandidates(provider).some(
-    (model) =>
-      model.providerApi === 'openai-completions' || model.providerApi === 'anthropic-messages'
+    (model) => model.providerApi === 'anthropic-messages'
   )
 }
 
 /**
- * 判断当前 provider 是否能进入 Moon agent backend 主路径。
+ * 判断当前 provider 是否能进入 Moon agent backend 可执行发送路径。
  */
 export function isSupportedChatProvider(provider: ProviderSettings): boolean {
   if (
@@ -48,8 +47,7 @@ export function isSupportedChatProvider(provider: ProviderSettings): boolean {
   return (
     provider.type === 'anthropic' ||
     provider.apiFormat === 'anthropic' ||
-    isOpenAICompatibleProvider(provider) ||
-    hasSupportedCompatibleModel(provider)
+    hasAnthropicMessagesModel(provider)
   )
 }
 
@@ -66,7 +64,11 @@ export function isSelectableChatProvider(provider: ProviderSettings): boolean {
     return false
   }
 
-  return isSupportedChatProvider(provider) || getChatProviderModelCandidates(provider).length > 0
+  return (
+    isSupportedChatProvider(provider) ||
+    isOpenAICompatibleProvider(provider) ||
+    getChatProviderModelCandidates(provider).length > 0
+  )
 }
 
 /**

@@ -14,6 +14,7 @@ import {
   createConnectionAgentBackendConfig,
   createAgentBackendMessage,
   createProviderLlmConnection,
+  resolveAgentBackendProvider,
   resolveConnectionAgentBackendProvider,
   type AgentBackend,
   type AgentBackendConfig,
@@ -1548,13 +1549,18 @@ export class ChatService {
       throw new Error(`${provider.name} is disabled.`)
     }
 
-    if (!isSupportedChatProvider(provider)) {
+    const providerWithApiKey = await this.withStoredApiKey(provider)
+    const model = selectChatModel(providerWithApiKey)
+
+    if (!isSupportedChatProvider(providerWithApiKey)) {
+      const backend = resolveAgentBackendProvider(providerWithApiKey, model)
+
+      if (backend === 'pi' || backend === 'pi_compat') {
+        assertProviderReadyForAgent(providerWithApiKey, model)
+      }
+
       throw new Error(`${provider.name} is not supported for chat.`)
     }
-
-    const providerWithApiKey = await this.withStoredApiKey(provider)
-
-    const model = selectChatModel(providerWithApiKey)
 
     assertProviderReadyForAgent(providerWithApiKey, model)
 

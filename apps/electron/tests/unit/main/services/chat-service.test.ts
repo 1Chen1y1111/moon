@@ -734,7 +734,7 @@ describe('ChatService.sendMessage', () => {
     expect(createAgentBackend.mock.calls[0]?.[0]).not.toHaveProperty('customEndpoint')
   })
 
-  it('rejects DeepSeek OpenAI-compatible providers while Pi is not wired', async () => {
+  it('rejects explicitly selected DeepSeek Pi-compatible providers while Pi is not wired', async () => {
     const deepseek = createProviderSettings({
       provider: 'deepseek',
       type: 'deepseek',
@@ -769,7 +769,7 @@ describe('ChatService.sendMessage', () => {
       settings: createSettings([deepseek])
     })
 
-    await expect(service.sendMessage({ content: 'hello' })).rejects.toThrow(
+    await expect(service.sendMessage({ provider: 'deepseek', content: 'hello' })).rejects.toThrow(
       'Pi backend is not wired yet'
     )
 

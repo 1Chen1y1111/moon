@@ -15,7 +15,7 @@ import {
 import { createDefaultAppSettings, createDefaultProviderSettings } from '../../src/domain/settings'
 
 describe('chat provider selection rules', () => {
-  it('allows DeepSeek to be selected and sent through the OpenAI-compatible runtime', () => {
+  it('allows DeepSeek to be selected without treating Pi-compatible config as executable', () => {
     const settings = createDefaultAppSettings()
     const provider = {
       ...createDefaultProviderSettings('deepseek'),
@@ -25,6 +25,24 @@ describe('chat provider selection rules', () => {
     }
 
     settings.providers.deepseek = provider
+
+    expect(isSelectableChatProvider(provider)).toBe(true)
+    expect(isSupportedChatProvider(provider)).toBe(false)
+    expect(selectDefaultSelectableChatProvider(settings)).toBe(provider)
+    expect(() => selectDefaultChatProvider(settings)).toThrow('No enabled chat provider configured.')
+  })
+
+  it('allows Anthropic-compatible providers to be selected and used as executable defaults', () => {
+    const settings = createDefaultAppSettings()
+    const provider = {
+      ...createDefaultProviderSettings('openrouter'),
+      apiFormat: 'anthropic' as const,
+      enabled: true,
+      hasApiKey: true,
+      apiKey: 'sk-openrouter-demo'
+    }
+
+    settings.providers.openrouter = provider
 
     expect(isSelectableChatProvider(provider)).toBe(true)
     expect(isSupportedChatProvider(provider)).toBe(true)
