@@ -11,6 +11,7 @@ export default defineConfig({
       '@preload': resolve('src/preload'),
       '@renderer': resolve('src/renderer/src'),
       '@ipc': resolve('src/ipc'),
+      '@moon/server-core': resolve('../../packages/server-core/src'),
       '@moon/shared': resolve('../../packages/shared/src'),
       '@moon/ui': resolve('../../packages/ui/src'),
       '@tests': resolve('tests')

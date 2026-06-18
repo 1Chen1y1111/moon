@@ -14,6 +14,8 @@
     "paths": {
       "@ipc": ["src/ipc"],
       "@ipc/*": ["src/ipc/*"],
+      "@moon/server-core": ["../../packages/server-core/src"],
+      "@moon/server-core/*": ["../../packages/server-core/src/*"],
       "@moon/shared": ["../../packages/shared/src"],
       "@moon/shared/*": ["../../packages/shared/src/*"],
       "@moon/ui": ["../../packages/ui/src"],

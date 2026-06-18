@@ -1,8 +1,8 @@
 // @vitest-environment node
 
 /**
- * 负责验证 ChatService 的主进程会话编排和 agent 事件落库行为。
- * 测试使用内存仓储和 mock backend，不触发真实 SDK 或数据库。
+ * 负责验证 server-core SessionManager 的会话编排和 agent 事件落库行为。
+ * 测试使用内存仓储和 mock backend，不触发真实 SDK、Electron 或数据库。
  */
 
 import { mkdtemp, writeFile } from 'node:fs/promises'
@@ -11,7 +11,7 @@ import { join } from 'node:path'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { ChatService } from '@main/services/chat-service'
+import { SessionManager } from '@moon/server-core/sessions'
 import type {
   AgentOperationRecord,
   MessageRecord,
@@ -358,7 +358,7 @@ type CreateServiceResult = {
   createAgentBackend: ReturnType<typeof vi.fn>
   messagesRepository: MessagesRepositoryMock
   projectsRepository: ProjectsRepositoryMock
-  service: ChatService
+  service: SessionManager
   sessionsRepository: SessionsRepositoryMock
   settingsRepository: {
     findLlmConnectionById: (id: string) => Promise<NormalizedLlmConnection | null>
@@ -388,7 +388,7 @@ function createMockAgentBackend(events: AgentEvent[]): AgentBackend {
 }
 
 /**
- * 创建会等待权限决策的 backend fixture，用来验证 ChatService 能通过 respondToPermission 恢复执行。
+ * 创建会等待权限决策的 backend fixture，用来验证 SessionManager 能通过 respondToPermission 恢复执行。
  */
 function createPermissionAgentBackend(
   decisions: AgentPermissionDecision[],
@@ -526,7 +526,7 @@ function createService(input: {
   return {
     createAgentBackend,
     messagesRepository,
-    service: new ChatService({
+    service: new SessionManager({
       agentOperationsRepository: agentOperationsRepository as never,
       attachmentsDirectory: input.attachmentsDirectory,
       createAgentBackend: createAgentBackend as never,
@@ -545,7 +545,7 @@ function createService(input: {
   }
 }
 
-describe('ChatService provider resolution', () => {
+describe('SessionManager provider resolution', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -621,7 +621,7 @@ describe('ChatService provider resolution', () => {
   })
 })
 
-describe('ChatService.sendMessage', () => {
+describe('SessionManager.sendMessage', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -1492,7 +1492,7 @@ describe('ChatService.sendMessage', () => {
   })
 })
 
-describe('ChatService.deleteSession', () => {
+describe('SessionManager.deleteSession', () => {
   it('deletes a chat session by id', async () => {
     const session: SessionRecord = {
       id: 'session-1',
@@ -1515,7 +1515,7 @@ describe('ChatService.deleteSession', () => {
   })
 })
 
-describe('ChatService two-stage operations', () => {
+describe('SessionManager two-stage operations', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })

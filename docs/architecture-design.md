@@ -17,6 +17,7 @@ moon/
     resources/          打包资源和图标
 
   packages/core/        纯 core 类型：session、message、usage、agent event
+  packages/server-core/ 可复用会话运行时：SessionManager、operation 编排、事件落库
   packages/shared/      纯领域类型、默认值、Zod 校验、agent/config 边界
   packages/ui/          本地 shadcn primitives、ai-elements、UI helpers
 ```
@@ -27,6 +28,7 @@ moon/
 pnpm --filter @moon/electron dev
 pnpm --filter @moon/electron build
 pnpm --filter @moon/core typecheck
+pnpm --filter @moon/server-core typecheck
 pnpm --filter @moon/shared typecheck
 pnpm --filter @moon/ui typecheck
 ```
@@ -35,6 +37,7 @@ pnpm --filter @moon/ui typecheck
 
 - `@moon/electron` 是唯一应用包，拥有 Electron main/preload/renderer、IPC 合同、数据库 schema、migration 和打包资源。
 - `@moon/core` 只放最底层的会话、消息、用量和 agent event 类型；不得依赖 Electron、React、Drizzle、Zod 或具体 SDK。
+- `@moon/server-core` 放可复用会话运行时，例如 `SessionManager`。它可以依赖 `@moon/core` 和 `@moon/shared`，但不得依赖 Electron、React、renderer、IPC、Drizzle schema 或具体 repository 类；持久化能力通过接口注入。
 - `@moon/shared` 只放跨进程共享的纯领域模型、默认值、校验逻辑和 `agent/config` 抽象；不得依赖 Electron、React、Drizzle 运行时代码或 renderer-only 模块。
 - `@moon/ui` 只放可复用 UI primitive、ai-elements 和 `cn` 等 UI helper；业务组合继续放在 `apps/electron/src/renderer/src/features`、`components`、`layouts` 等目录。
 
@@ -47,6 +50,7 @@ pnpm --filter @moon/ui typecheck
 @renderer/...             apps/electron renderer 内部引用
 @tests/...                apps/electron 测试 helper
 @moon/core/types            core session/message/agent event 类型
+@moon/server-core/sessions  server runtime 的 SessionManager 入口
 @moon/shared/agent          agent backend 抽象入口
 @moon/shared/config         LLM connection 配置模型
 @moon/shared/domain/...   workspace shared 领域模型
@@ -62,13 +66,15 @@ renderer feature
   -> window.api.*
   -> preload typed invoke
   -> ipcMain handler
-  -> service validation/orchestration
+  -> Electron service facade
+  -> @moon/server-core SessionManager
   -> repository
   -> PGlite/Drizzle
   -> typed response
 ```
 
 - `apps/electron/src/main/` 拥有 Electron API、窗口生命周期、IPC handler 注册、PGlite/Drizzle、repositories、services 和 provider proxy。
+- `apps/electron/src/main/services/` 保留 Electron main service 门面；会话运行时编排应优先下沉到 `@moon/server-core`。
 - `apps/electron/src/preload/` 只暴露窄 typed bridge，不承载业务逻辑或持久化逻辑。
 - `apps/electron/src/ipc/` 是 app 内跨进程协议层，定义 channel、request/response 类型和窗口相关 schema。
 - `apps/electron/src/renderer/src/` 只通过 `window.api` 访问主进程，不直接依赖 Electron、Node、数据库或 main-process 模块。
@@ -103,6 +109,7 @@ app -> pages -> layouts -> features -> entities -> components/assets/styles
 pnpm --filter @moon/core typecheck
 pnpm --filter @moon/shared typecheck
 pnpm --filter @moon/shared test
+pnpm --filter @moon/server-core typecheck
 pnpm --filter @moon/ui typecheck
 pnpm --filter @moon/electron typecheck
 pnpm --filter @moon/electron test
