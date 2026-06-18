@@ -166,6 +166,9 @@ describe('SettingsPage', () => {
     await user.click(deepSeekProviderButton)
     expect(screen.getByLabelText('DeepSeek Endpoint URL')).toHaveValue('https://api.deepseek.com')
     expect(screen.getByLabelText('DeepSeek Endpoint Protocol')).toBeInTheDocument()
+    expect(
+      screen.getByText('OpenAI 协议仅保留为未来 Pi runtime 配置；当前发送请使用 Anthropic 协议。')
+    ).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('搜索提供商'), { target: { value: '' } })
     await user.click(getProviderCatalogItem('Azure OpenAI'))
     expect(screen.getByLabelText('Azure OpenAI Endpoint URL')).toBeInTheDocument()

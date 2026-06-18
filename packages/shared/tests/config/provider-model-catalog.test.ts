@@ -1,15 +1,18 @@
 /**
- * 负责验证 Pi 模型目录 helper 的 provider 过滤和 Moon 模型映射。
- * 测试只读取本地 Pi SDK 静态目录，不访问真实 provider 网络。
+ * 负责验证 provider 模型目录 helper 的 provider 过滤和 Moon 模型映射。
+ * 测试只读取本地模型元数据目录，不访问真实 provider 网络。
  */
 
 import { describe, expect, it } from 'vitest'
 
-import { getPiProviderBaseUrl, getPiProviderModels } from '../../src/config/models-pi'
+import {
+  getProviderCatalogBaseUrl,
+  getProviderCatalogModels
+} from '../../src/config/provider-model-catalog'
 
-describe('models-pi', () => {
+describe('provider-model-catalog', () => {
   it('returns current DeepSeek models with protocol metadata', async () => {
-    const models = await getPiProviderModels('deepseek')
+    const models = await getProviderCatalogModels('deepseek')
     const modelIds = models.map((model) => model.id)
 
     expect(modelIds).toContain('deepseek-v4-flash')
@@ -26,8 +29,8 @@ describe('models-pi', () => {
     )
   })
 
-  it('returns an empty list for unknown Pi providers', async () => {
-    await expect(getPiProviderModels('unknown-provider')).resolves.toEqual([])
-    await expect(getPiProviderBaseUrl('unknown-provider')).resolves.toBe('')
+  it('returns an empty list for unknown catalog providers', async () => {
+    await expect(getProviderCatalogModels('unknown-provider')).resolves.toEqual([])
+    await expect(getProviderCatalogBaseUrl('unknown-provider')).resolves.toBe('')
   })
 })

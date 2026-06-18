@@ -86,7 +86,7 @@ function createAnthropicCompatibleProvider(
 }
 
 /**
- * 创建带 OpenAI-compatible 元数据的 DeepSeek 模型 fixture，模拟 Pi 模型目录返回值。
+ * 创建带 OpenAI-compatible 元数据的 DeepSeek 模型 fixture，模拟 provider 模型目录返回值。
  */
 function createDeepSeekOpenAiModel(): ProviderModel {
   return {

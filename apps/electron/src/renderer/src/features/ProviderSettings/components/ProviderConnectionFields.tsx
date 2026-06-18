@@ -254,8 +254,8 @@ export function ApiConnectionFields({
           </Select>
           <FieldHint>
             {provider.provider === 'deepseek'
-              ? 'DeepSeek 支持 OpenAI 与 Anthropic 协议。'
-              : '自定义 endpoint 需要选择对应协议。'}
+              ? 'OpenAI 协议仅保留为未来 Pi runtime 配置；当前发送请使用 Anthropic 协议。'
+              : 'OpenAI 协议当前不可直接发送；当前可执行测试仅支持 Anthropic Messages。'}
           </FieldHint>
         </div>
       ) : null}

@@ -36,12 +36,12 @@ import {
   providerModelManualOverrideFields,
   resolveProviderEffectiveBaseUrl,
   resolveProviderModelDiscovery,
-  resolveProviderPiModelsProviderId,
+  resolveProviderModelCatalogProviderId,
   type ProviderId,
   type ProviderModel,
   type ProviderModelManualOverride
 } from '@moon/shared/domain/provider'
-import { getPiProviderModels } from '@moon/shared/config/models-pi'
+import { getProviderCatalogModels } from '@moon/shared/config/provider-model-catalog'
 import type { SettingsRepository } from '../repositories/settings-repository'
 
 const execFileAsync = promisify(execFile)
@@ -558,6 +558,40 @@ function ensureReadyForHttp(config: ProviderConnectionConfig): void {
 }
 
 /**
+ * 把设置页连接测试草稿补成 provider settings，复用 agent backend readiness 规则。
+ */
+function createConnectionTestProviderSettings(
+  config: ProviderConnectionConfig,
+  model: string
+): ProviderSettings {
+  const defaults = createDefaultProviderSettings(config.provider)
+
+  return {
+    ...defaults,
+    name: config.name ?? defaults.name,
+    type: (config.type ?? defaults.type) as ProviderSettings['type'],
+    hasApiKey: config.apiKey.trim().length > 0,
+    apiKey: config.apiKey,
+    model,
+    models: config.models,
+    availableModels: config.availableModels,
+    baseUrl: config.baseUrl,
+    apiFormat: config.apiFormat,
+    useMaxCompletionTokens: config.useMaxCompletionTokens,
+    customHeaders: config.customHeaders,
+    enabled: config.enabled,
+    requiresBaseUrl: config.requiresBaseUrl,
+    noApiKey: config.noApiKey,
+    isCustom: config.isCustom,
+    isACP: config.isACP,
+    isOAuth: config.isOAuth,
+    acpCommand: config.acpCommand,
+    acpArgs: config.acpArgs,
+    acpAuthMethodId: config.acpAuthMethodId
+  }
+}
+
+/**
  * 解析不需要远端模型列表接口的 provider 模型目录，并套用已有启用状态。
  */
 async function resolveStaticProviderModels(
@@ -574,22 +608,24 @@ async function resolveStaticProviderModels(
 }
 
 /**
- * 通过 Pi SDK 模型目录解析内置 provider 模型，失败时返回空数组以便继续旧路径。
+ * 通过模型元数据目录解析内置 provider 模型，失败时返回空数组以便继续旧路径。
  */
-async function resolvePiProviderModels(config: ProviderConnectionConfig): Promise<ProviderModel[]> {
-  const piProvider = resolveProviderPiModelsProviderId(config.provider)
+async function resolveProviderCatalogModels(
+  config: ProviderConnectionConfig
+): Promise<ProviderModel[]> {
+  const catalogProvider = resolveProviderModelCatalogProviderId(config.provider)
 
-  if (piProvider.length === 0) {
+  if (catalogProvider.length === 0) {
     return []
   }
 
-  const piModels = await getPiProviderModels(piProvider)
+  const catalogModels = await getProviderCatalogModels(catalogProvider)
 
-  if (piModels.length === 0) {
+  if (catalogModels.length === 0) {
     return []
   }
 
-  const enrichedModels = await enrichModelsFromModelsDev(config.provider, piModels)
+  const enrichedModels = await enrichModelsFromModelsDev(config.provider, catalogModels)
   const existingModels = [...config.availableModels, ...config.models]
   const mergedModels = mergeCatalogModelsWithExistingState(enrichedModels, existingModels)
 
@@ -647,7 +683,7 @@ export class SettingsService {
   }
 
   /**
-   * 刷新 provider 的模型列表；内置 provider 优先使用 Pi 模型目录，再回退旧发现路径。
+   * 刷新 provider 的模型列表；内置 provider 优先使用模型元数据目录，再回退旧发现路径。
    */
   async fetchProviderModels(input: ProviderConnectionInput): Promise<AppSettings> {
     const config = await this.resolveConnectionConfig(input)
@@ -670,13 +706,13 @@ export class SettingsService {
       )
     }
 
-    const piModels = await resolvePiProviderModels(config)
+    const catalogModels = await resolveProviderCatalogModels(config)
 
-    if (piModels.length > 0) {
+    if (catalogModels.length > 0) {
       await this.settingsRepository.saveProvider(config.provider, config)
 
       return redactAppSettingsSecrets(
-        await this.updateProviderModelsAndSync(config.provider, piModels, piModels)
+        await this.updateProviderModelsAndSync(config.provider, catalogModels, catalogModels)
       )
     }
 
@@ -725,7 +761,7 @@ export class SettingsService {
   }
 
   /**
-   * 使用 provider 当前协议 endpoint 发起最小请求，验证配置能否工作。
+   * 复用 agent readiness 规则验证当前 provider 是否能进入 Moon 可执行聊天路径。
    */
   async testProvider(input: ProviderConnectionInput): Promise<ProviderTestResult> {
     try {
@@ -746,53 +782,25 @@ export class SettingsService {
         }
       }
 
-      if (config.type === 'google') {
-        await fetchJson(
-          `${joinEndpoint(
-            config.resolvedBaseUrl,
-            `models/${model}:generateContent`
-          )}?key=${encodeURIComponent(config.apiKey)}`,
-          {
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: 'ping' }] }],
-              generationConfig: { maxOutputTokens: 1 }
-            }),
-            headers: createHeaders(config),
-            method: 'POST'
-          }
-        )
-      } else if (config.apiFormat === 'anthropic' || config.type === 'anthropic') {
-        await fetchJson(joinVersionedEndpoint(config.resolvedBaseUrl, 'v1/messages'), {
-          body: JSON.stringify({
-            max_tokens: 1,
-            messages: [{ role: 'user', content: 'ping' }],
-            model
-          }),
-          headers: createHeaders(config),
-          method: 'POST'
-        })
-      } else if (config.apiFormat === 'openai-responses') {
-        await fetchJson(joinEndpoint(config.resolvedBaseUrl, 'responses'), {
-          body: JSON.stringify({
-            input: 'ping',
-            max_output_tokens: 1,
-            model
-          }),
-          headers: createHeaders(config),
-          method: 'POST'
-        })
-      } else {
-        await fetchJson(joinEndpoint(config.resolvedBaseUrl, 'chat/completions'), {
-          body: JSON.stringify({
-            messages: [{ role: 'user', content: 'ping' }],
-            model,
-            stream: false,
-            [config.useMaxCompletionTokens ? 'max_completion_tokens' : 'max_tokens']: 1
-          }),
-          headers: createHeaders(config),
-          method: 'POST'
-        })
-      }
+      const provider = createConnectionTestProviderSettings(config, model)
+
+      assertProviderReadyForAgent(provider, model)
+
+      const connection = createProviderLlmConnection(provider, model)
+      const baseUrl = connection.baseUrl ?? config.resolvedBaseUrl
+
+      await fetchJson(joinVersionedEndpoint(baseUrl, 'v1/messages'), {
+        body: JSON.stringify({
+          max_tokens: 1,
+          messages: [{ role: 'user', content: 'ping' }],
+          model
+        }),
+        headers: createHeaders({
+          ...config,
+          apiFormat: 'anthropic'
+        }),
+        method: 'POST'
+      })
 
       return {
         success: true,

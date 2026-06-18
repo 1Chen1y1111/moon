@@ -397,7 +397,7 @@ describe('SettingsService', () => {
     )
   })
 
-  it('uses the Pi DeepSeek catalog and enriches it with exact models.dev metadata', async () => {
+  it('uses the DeepSeek provider model catalog and enriches it with exact models.dev metadata', async () => {
     const settingsRepository = createSettingsRepositoryMock()
     const service = new SettingsService(settingsRepository as never)
     const fetchMock = vi.fn().mockResolvedValueOnce(
@@ -472,7 +472,7 @@ describe('SettingsService', () => {
     ])
   })
 
-  it('uses the Pi OpenAI catalog instead of the provider models endpoint', async () => {
+  it('uses the OpenAI provider model catalog instead of the provider models endpoint', async () => {
     const settingsRepository = createSettingsRepositoryMock()
     const service = new SettingsService(settingsRepository as never)
     const fetchMock = vi.fn().mockResolvedValueOnce(createJsonResponse({}))
@@ -633,10 +633,10 @@ describe('SettingsService', () => {
     ])
   })
 
-  it('tests DeepSeek through its OpenAI-compatible default endpoint', async () => {
+  it('rejects DeepSeek OpenAI-compatible tests before direct HTTP execution', async () => {
     const settingsRepository = createSettingsRepositoryMock()
     const service = new SettingsService(settingsRepository as never)
-    const fetchMock = vi.fn().mockResolvedValue(createJsonResponse({ content: [{ text: 'ok' }] }))
+    const fetchMock = vi.fn()
     vi.stubGlobal('fetch', fetchMock)
 
     const result = await service.testProvider(
@@ -648,9 +648,57 @@ describe('SettingsService', () => {
       })
     )
 
-    expect(result.success).toBe(true)
+    expect(result).toMatchObject({
+      success: false,
+      message: expect.stringContaining('Pi backend is not wired yet')
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('rejects official OpenAI tests while Pi backend is not wired', async () => {
+    const settingsRepository = createSettingsRepositoryMock()
+    const service = new SettingsService(settingsRepository as never)
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await service.testProvider(
+      createFetchProviderModelsInput({
+        provider: 'openai',
+        apiKey: 'sk-openai-demo',
+        baseUrl: '',
+        model: 'gpt-5.4'
+      })
+    )
+
+    expect(result).toMatchObject({
+      success: false,
+      message: expect.stringContaining('Pi backend is not wired yet')
+    })
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('tests DeepSeek Anthropic protocol through the executable Claude SDK path', async () => {
+    const settingsRepository = createSettingsRepositoryMock()
+    const service = new SettingsService(settingsRepository as never)
+    const fetchMock = vi.fn().mockResolvedValue(createJsonResponse({ content: [{ text: 'ok' }] }))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const result = await service.testProvider(
+      createFetchProviderModelsInput({
+        provider: 'deepseek',
+        apiKey: 'sk-deepseek-demo',
+        apiFormat: 'anthropic',
+        baseUrl: '',
+        model: 'deepseek-v4-flash'
+      })
+    )
+
+    expect(result).toMatchObject({
+      success: true,
+      modelId: 'deepseek-v4-flash'
+    })
     expect(fetchMock).toHaveBeenCalledWith(
-      'https://api.deepseek.com/chat/completions',
+      'https://api.deepseek.com/anthropic/v1/messages',
       expect.objectContaining({
         method: 'POST'
       })

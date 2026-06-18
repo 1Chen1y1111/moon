@@ -55,7 +55,7 @@ describe('ChatService integration', () => {
   })
 
   it(
-    'creates a DeepSeek provider fallback turn without writing a missing LLM connection foreign key',
+    'rejects DeepSeek provider fallback while Pi-compatible runtime is not wired',
     async () => {
       const directoryPath = mkdtempSync(join(tmpdir(), 'moon-chat-service-'))
       const databasePath = join(directoryPath, 'moon-pglite')
@@ -72,10 +72,11 @@ describe('ChatService integration', () => {
         providerApi: 'openai-completions',
         providerBaseUrl: 'https://api.deepseek.com'
       }
+      const createAgentBackend = vi.fn(createUnusedAgentBackend)
       const service = new ChatService({
         agentOperationsRepository: new AgentOperationsRepository(connection),
         attachmentsDirectory: join(directoryPath, 'attachments'),
-        createAgentBackend: vi.fn(createUnusedAgentBackend),
+        createAgentBackend,
         messagesRepository: new MessagesRepository(connection),
         sessionsRepository,
         settingsRepository,
@@ -93,28 +94,17 @@ describe('ChatService integration', () => {
           enabled: true
         })
 
-        const result = await service.createMessageTurn({
-          provider: 'deepseek',
-          content: '你好'
-        })
+        await expect(
+          service.createMessageTurn({
+            provider: 'deepseek',
+            content: '你好'
+          })
+        ).rejects.toThrow('Pi backend is not wired yet')
+
         const sessions = await sessionsRepository.list()
 
-        expect(result.session).toMatchObject({
-          provider: 'deepseek',
-          llmConnectionId: null
-        })
-        expect(result.operation.appContext).toMatchObject({
-          sessionId: result.session.id,
-          llmConnectionBackend: 'pi_compat'
-        })
-        expect(result.operation.appContext).not.toHaveProperty('llmConnectionId')
-        expect(sessions).toEqual([
-          expect.objectContaining({
-            id: result.session.id,
-            provider: 'deepseek',
-            llmConnectionId: null
-          })
-        ])
+        expect(sessions).toEqual([])
+        expect(createAgentBackend).not.toHaveBeenCalled()
       } finally {
         await connection.close()
       }
@@ -123,7 +113,7 @@ describe('ChatService integration', () => {
   )
 
   it(
-    'binds a DeepSeek turn to the LLM connection synchronized from provider settings',
+    'does not synchronize OpenAI-compatible DeepSeek into a runnable LLM connection',
     async () => {
       const directoryPath = mkdtempSync(join(tmpdir(), 'moon-chat-service-'))
       const databasePath = join(directoryPath, 'moon-pglite')
@@ -141,10 +131,11 @@ describe('ChatService integration', () => {
         providerApi: 'openai-completions',
         providerBaseUrl: 'https://api.deepseek.com'
       }
+      const createAgentBackend = vi.fn(createUnusedAgentBackend)
       const chatService = new ChatService({
         agentOperationsRepository: new AgentOperationsRepository(connection),
         attachmentsDirectory: join(directoryPath, 'attachments'),
-        createAgentBackend: vi.fn(createUnusedAgentBackend),
+        createAgentBackend,
         messagesRepository: new MessagesRepository(connection),
         sessionsRepository,
         settingsRepository,
@@ -164,36 +155,18 @@ describe('ChatService integration', () => {
         })
 
         const syncedConnection = await settingsRepository.findLlmConnectionById('deepseek')
-        const result = await chatService.createMessageTurn({
-          llmConnectionId: 'deepseek',
-          content: '你好'
-        })
+        await expect(
+          chatService.createMessageTurn({
+            llmConnectionId: 'deepseek',
+            content: '你好'
+          })
+        ).rejects.toThrow('LLM connection not found.')
+
         const sessions = await sessionsRepository.list()
 
-        expect(syncedConnection).toMatchObject({
-          id: 'deepseek',
-          providerId: 'deepseek',
-          backend: 'pi_compat',
-          model: 'deepseek-v4-flash',
-          customEndpoint: { api: 'openai-completions' },
-          enabled: true
-        })
-        expect(result.session).toMatchObject({
-          provider: 'deepseek',
-          llmConnectionId: 'deepseek'
-        })
-        expect(result.operation.appContext).toMatchObject({
-          sessionId: result.session.id,
-          llmConnectionId: 'deepseek',
-          llmConnectionBackend: 'pi_compat'
-        })
-        expect(sessions).toEqual([
-          expect.objectContaining({
-            id: result.session.id,
-            provider: 'deepseek',
-            llmConnectionId: 'deepseek'
-          })
-        ])
+        expect(syncedConnection).toBeNull()
+        expect(sessions).toEqual([])
+        expect(createAgentBackend).not.toHaveBeenCalled()
       } finally {
         await connection.close()
       }
@@ -202,7 +175,7 @@ describe('ChatService integration', () => {
   )
 
   it(
-    'synchronizes a runnable DeepSeek connection when saving with empty model lists',
+    'keeps DeepSeek static models as Pi-compatible config without synchronizing a connection',
     async () => {
       const directoryPath = mkdtempSync(join(tmpdir(), 'moon-chat-service-'))
       const databasePath = join(directoryPath, 'moon-pglite')
@@ -212,10 +185,11 @@ describe('ChatService integration', () => {
       const settingsRepository = new SettingsRepository(connection)
       const settingsService = new SettingsService(settingsRepository)
       const sessionsRepository = new SessionsRepository(connection)
+      const createAgentBackend = vi.fn(createUnusedAgentBackend)
       const chatService = new ChatService({
         agentOperationsRepository: new AgentOperationsRepository(connection),
         attachmentsDirectory: join(directoryPath, 'attachments'),
-        createAgentBackend: vi.fn(createUnusedAgentBackend),
+        createAgentBackend,
         messagesRepository: new MessagesRepository(connection),
         sessionsRepository,
         settingsRepository,
@@ -235,10 +209,14 @@ describe('ChatService integration', () => {
 
         const settings = await settingsRepository.getSettings()
         const syncedConnection = await settingsRepository.findLlmConnectionById('deepseek')
-        const result = await chatService.createMessageTurn({
-          llmConnectionId: 'deepseek',
-          content: '你好'
-        })
+        await expect(
+          chatService.createMessageTurn({
+            llmConnectionId: 'deepseek',
+            content: '你好'
+          })
+        ).rejects.toThrow('LLM connection not found.')
+
+        const sessions = await sessionsRepository.list()
 
         expect(settings.providers.deepseek).toMatchObject({
           provider: 'deepseek',
@@ -256,17 +234,92 @@ describe('ChatService integration', () => {
             }
           ]
         })
+        expect(syncedConnection).toBeNull()
+        expect(sessions).toEqual([])
+        expect(createAgentBackend).not.toHaveBeenCalled()
+      } finally {
+        await connection.close()
+      }
+    },
+    pgliteTestTimeout
+  )
+
+  it(
+    'synchronizes Anthropic-compatible DeepSeek into an executable LLM connection',
+    async () => {
+      const directoryPath = mkdtempSync(join(tmpdir(), 'moon-chat-service-'))
+      const databasePath = join(directoryPath, 'moon-pglite')
+      tempDirectories.push(directoryPath)
+
+      const connection = await createBootstrappedConnection(databasePath)
+      const settingsRepository = new SettingsRepository(connection)
+      const settingsService = new SettingsService(settingsRepository)
+      const sessionsRepository = new SessionsRepository(connection)
+      const deepseekModel: ProviderModel = {
+        id: 'deepseek-v4-flash',
+        name: 'DeepSeek V4 Flash',
+        enabled: true,
+        isManual: false,
+        providerApi: 'openai-completions',
+        providerBaseUrl: 'https://api.deepseek.com'
+      }
+      const createAgentBackend = vi.fn(createUnusedAgentBackend)
+      const chatService = new ChatService({
+        agentOperationsRepository: new AgentOperationsRepository(connection),
+        attachmentsDirectory: join(directoryPath, 'attachments'),
+        createAgentBackend,
+        messagesRepository: new MessagesRepository(connection),
+        sessionsRepository,
+        settingsRepository,
+        threadsRepository: new ThreadsRepository(connection),
+        toolInvocationsRepository: new ToolInvocationsRepository(connection),
+        topicsRepository: new TopicsRepository(connection)
+      })
+
+      try {
+        await settingsService.saveProvider({
+          provider: 'deepseek',
+          apiKey: 'sk-deepseek-demo',
+          apiFormat: 'anthropic',
+          model: deepseekModel.id,
+          models: [deepseekModel],
+          availableModels: [deepseekModel],
+          enabled: true
+        })
+
+        const syncedConnection = await settingsRepository.findLlmConnectionById('deepseek')
+        const result = await chatService.createMessageTurn({
+          llmConnectionId: 'deepseek',
+          content: '你好'
+        })
+        const sessions = await sessionsRepository.list()
+
         expect(syncedConnection).toMatchObject({
           id: 'deepseek',
           providerId: 'deepseek',
-          backend: 'pi_compat',
+          backend: 'anthropic',
           model: 'deepseek-v4-flash',
+          baseUrl: 'https://api.deepseek.com/anthropic',
           enabled: true
         })
+        expect(syncedConnection).not.toHaveProperty('customEndpoint')
         expect(result.session).toMatchObject({
           provider: 'deepseek',
           llmConnectionId: 'deepseek'
         })
+        expect(result.operation.appContext).toMatchObject({
+          sessionId: result.session.id,
+          llmConnectionId: 'deepseek',
+          llmConnectionBackend: 'anthropic'
+        })
+        expect(sessions).toEqual([
+          expect.objectContaining({
+            id: result.session.id,
+            provider: 'deepseek',
+            llmConnectionId: 'deepseek'
+          })
+        ])
+        expect(createAgentBackend).not.toHaveBeenCalled()
       } finally {
         await connection.close()
       }

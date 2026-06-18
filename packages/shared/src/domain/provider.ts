@@ -156,7 +156,7 @@ export type ProviderMetadata = {
   modelPlaceholder: string
   defaultModels: ProviderModel[]
   modelsDevProviderId?: string
-  piModelsProviderId?: string
+  modelCatalogProviderId?: string
   badge?: string
   acpCommand?: string
   acpArgs?: string[]
@@ -214,7 +214,7 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     modelPlaceholder: 'moonshot-v1-8k',
     defaultModels: [model('moonshot-v1-8k'), model('moonshot-v1-32k'), model('moonshot-v1-128k')],
     modelsDevProviderId: 'moonshotai',
-    piModelsProviderId: 'moonshotai'
+    modelCatalogProviderId: 'moonshotai'
   },
   openai: {
     provider: 'openai',
@@ -232,7 +232,7 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     defaultUseMaxCompletionTokens: true,
     modelPlaceholder: 'gpt-5.4',
     defaultModels: [model('gpt-5.4', 'gpt-5.4', true, 400_000), model('gpt-5.2', 'gpt-5.2')],
-    piModelsProviderId: 'openai'
+    modelCatalogProviderId: 'openai'
   },
   claude: {
     provider: 'claude',
@@ -255,7 +255,7 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
       model('claude-3-7-sonnet-latest')
     ],
     modelsDevProviderId: 'anthropic',
-    piModelsProviderId: 'anthropic'
+    modelCatalogProviderId: 'anthropic'
   },
   gemini: {
     provider: 'gemini',
@@ -274,7 +274,7 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     modelPlaceholder: 'gemini-2.5-pro',
     defaultModels: [model('gemini-2.5-pro'), model('gemini-2.5-flash')],
     modelsDevProviderId: 'google',
-    piModelsProviderId: 'google'
+    modelCatalogProviderId: 'google'
   },
   aihubmix: {
     provider: 'aihubmix',
@@ -317,7 +317,7 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
       model('deepseek-v4-flash', 'deepseek-v4-flash', true),
       model('deepseek-v4-pro')
     ],
-    piModelsProviderId: 'deepseek'
+    modelCatalogProviderId: 'deepseek'
   },
   'z-ai-coding-plan': {
     provider: 'z-ai-coding-plan',
@@ -369,7 +369,7 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'openai/gpt-5.4',
     defaultModels: [],
-    piModelsProviderId: 'openrouter'
+    modelCatalogProviderId: 'openrouter'
   },
   'azure-openai': {
     provider: 'azure-openai',
@@ -387,7 +387,7 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'Deployment name (e.g., gpt-4o)',
     defaultModels: [],
-    piModelsProviderId: 'azure-openai-responses'
+    modelCatalogProviderId: 'azure-openai-responses'
   },
   'github-copilot': {
     provider: 'github-copilot',
@@ -530,7 +530,7 @@ export const providerMetadata: Record<BuiltInProviderId, ProviderMetadata> = {
     defaultUseMaxCompletionTokens: false,
     modelPlaceholder: 'provider/model',
     defaultModels: [],
-    piModelsProviderId: 'cloudflare-ai-gateway'
+    modelCatalogProviderId: 'cloudflare-ai-gateway'
   }
 }
 
@@ -576,14 +576,14 @@ export function resolveProviderDefaultBaseUrl(
 }
 
 /**
- * 解析内置 provider 对应的 Pi 模型目录 provider key；没有映射时返回空字符串。
+ * 解析内置 provider 对应的模型目录 provider key；没有映射时返回空字符串。
  */
-export function resolveProviderPiModelsProviderId(provider: ProviderId): string {
+export function resolveProviderModelCatalogProviderId(provider: ProviderId): string {
   if (!isBuiltInProviderId(provider)) {
     return ''
   }
 
-  return providerMetadata[provider].piModelsProviderId ?? ''
+  return providerMetadata[provider].modelCatalogProviderId ?? ''
 }
 
 /**
