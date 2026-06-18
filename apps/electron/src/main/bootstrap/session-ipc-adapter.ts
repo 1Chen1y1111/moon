@@ -11,7 +11,7 @@ import type {
   RpcServerPort,
   SessionRpcRequestContext
 } from '@moon/server-core/handlers'
-import type { SessionEventSink } from '@moon/server-core/sessions'
+import type { ChatOperationEvent } from '@moon/shared/domain/chat'
 import { RPC_CHANNELS, type SessionRpcChannel } from '@moon/shared/protocol'
 
 type CallableSessionRpcChannel = Exclude<
@@ -67,35 +67,38 @@ function resolveSessionIpcChannel(channel: string): string {
 }
 
 /**
- * 为单次 IPC 调用创建 request context，流式事件会回到当前调用窗口。
+ * 为单次 IPC 调用创建 request context，内部 `session:event` 会回到当前调用窗口。
  */
 function createSessionIpcRequestContext(
   channel: string,
   event: IpcMainInvokeEvent
 ): SessionRpcRequestContext {
   return {
-    eventSink: createSessionEventSink(channel, event)
+    emitSessionEvent: (eventChannel, operationEvent) => {
+      emitLegacyChatEvent(channel, eventChannel, operationEvent, event)
+    }
   }
 }
 
 /**
- * 根据不同会话运行入口选择旧 IPC 事件 channel，保持 renderer 行为不变。
+ * 根据不同会话运行入口把内部 `session:event` 转换成旧 IPC 事件 channel。
  */
-function createSessionEventSink(
+function emitLegacyChatEvent(
   channel: string,
+  eventChannel: typeof RPC_CHANNELS.sessions.event,
+  operationEvent: ChatOperationEvent,
   event: IpcMainInvokeEvent
-): SessionEventSink | undefined {
+): void {
+  if (eventChannel !== RPC_CHANNELS.sessions.event) {
+    return
+  }
+
   if (channel === RPC_CHANNELS.sessions.runOperation) {
-    return (operationEvent) => {
-      event.sender.send(ipcChannels.chat.operationEvent, operationEvent)
-    }
+    event.sender.send(ipcChannels.chat.operationEvent, operationEvent)
+    return
   }
 
   if (channel === RPC_CHANNELS.sessions.sendMessage) {
-    return (messageEvent) => {
-      event.sender.send(ipcChannels.chat.sendMessageEvent, messageEvent)
-    }
+    event.sender.send(ipcChannels.chat.sendMessageEvent, operationEvent)
   }
-
-  return undefined
 }

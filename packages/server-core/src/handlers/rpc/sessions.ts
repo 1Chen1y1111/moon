@@ -17,6 +17,7 @@ import type {
   RunChatOperationInput,
   SendChatMessageInput
 } from '@moon/shared/domain/chat-validation'
+import type { ChatOperationEvent } from '@moon/shared/domain/chat'
 
 import type { RpcServerPort } from '../types'
 import type { SessionEventSink, SessionHandlers } from '../../sessions'
@@ -41,10 +42,18 @@ export const HANDLED_SESSION_CHANNELS = [
 ] as const
 
 /**
- * sessions RPC 请求上下文，承载当前调用方可用的事件出口。
+ * sessions RPC 事件发送器，当前只负责把运行时事件推到 `session:event`。
+ */
+export type SessionRpcEventEmitter = (
+  channel: typeof RPC_CHANNELS.sessions.event,
+  event: ChatOperationEvent
+) => void
+
+/**
+ * sessions RPC 请求上下文，承载当前调用方可用的协议事件出口。
  */
 export type SessionRpcRequestContext = {
-  eventSink?: SessionEventSink
+  emitSessionEvent?: SessionRpcEventEmitter
 }
 
 /**
@@ -84,10 +93,10 @@ export function registerSessionHandlers(
     (_context, input: CreateMessageTurnInput) => sessionHandlers.createMessageTurn(input)
   )
   server.handle(RPC_CHANNELS.sessions.runOperation, (context, input: RunChatOperationInput) =>
-    sessionHandlers.runOperation(input, context.eventSink)
+    sessionHandlers.runOperation(input, createSessionEventSink(context))
   )
   server.handle(RPC_CHANNELS.sessions.sendMessage, (context, input: SendChatMessageInput) =>
-    sessionHandlers.sendMessage(input, context.eventSink)
+    sessionHandlers.sendMessage(input, createSessionEventSink(context))
   )
   server.handle(
     RPC_CHANNELS.sessions.cancelOperation,
@@ -99,4 +108,17 @@ export function registerSessionHandlers(
   server.handle(RPC_CHANNELS.sessions.rejectToolCall, (_context, input: RejectToolCallInput) =>
     sessionHandlers.rejectToolCall(input)
   )
+}
+
+/**
+ * 把运行时事件收口为内部 `session:event` 协议事件，由具体 transport adapter 再映射出去。
+ */
+function createSessionEventSink(context: SessionRpcRequestContext): SessionEventSink | undefined {
+  if (!context.emitSessionEvent) {
+    return undefined
+  }
+
+  return (event) => {
+    context.emitSessionEvent?.(RPC_CHANNELS.sessions.event, event)
+  }
 }

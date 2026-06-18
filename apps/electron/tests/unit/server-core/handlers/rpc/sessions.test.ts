@@ -13,7 +13,6 @@ import {
   registerSessionHandlers,
   type RpcRequestHandler,
   type RpcServerPort,
-  type SessionEventSink,
   type SessionHandlers,
   type SessionRpcRequestContext
 } from '@moon/server-core'
@@ -27,7 +26,8 @@ import type {
   SessionRecord,
   ThreadRecord,
   ToolInvocationRecord,
-  TopicRecord
+  TopicRecord,
+  ChatOperationEvent
 } from '@moon/shared/domain/chat'
 
 type RegisteredHandlers = Map<string, RpcRequestHandler<SessionRpcRequestContext>>
@@ -236,10 +236,10 @@ describe('registerSessionHandlers', () => {
     expect(registeredHandlers.has(RPC_CHANNELS.sessions.event)).toBe(false)
   })
 
-  it('delegates registered RPC calls to SessionHandlers and preserves event sink', async () => {
+  it('delegates registered RPC calls and emits runtime events through session:event', async () => {
     const { sessionHandlers, values } = createSessionHandlersFixture()
     const { registeredHandlers, server } = createRpcServerFixture()
-    const eventSink = vi.fn() satisfies SessionEventSink
+    const emitSessionEvent = vi.fn()
 
     registerSessionHandlers(server, { sessionHandlers })
 
@@ -283,14 +283,24 @@ describe('registerSessionHandlers', () => {
       })
     ).resolves.toBe(values.createTurnResult)
     await expect(
-      invokeRegisteredHandler(registeredHandlers, RPC_CHANNELS.sessions.runOperation, {
-        operationId: 'operation-1'
-      }, { eventSink })
+      invokeRegisteredHandler(
+        registeredHandlers,
+        RPC_CHANNELS.sessions.runOperation,
+        {
+          operationId: 'operation-1'
+        },
+        { emitSessionEvent }
+      )
     ).resolves.toBe(values.runResult)
     await expect(
-      invokeRegisteredHandler(registeredHandlers, RPC_CHANNELS.sessions.sendMessage, {
-        content: 'hello'
-      }, { eventSink })
+      invokeRegisteredHandler(
+        registeredHandlers,
+        RPC_CHANNELS.sessions.sendMessage,
+        {
+          content: 'hello'
+        },
+        { emitSessionEvent }
+      )
     ).resolves.toBe(values.sendResult)
     await expect(
       invokeRegisteredHandler(registeredHandlers, RPC_CHANNELS.sessions.cancelOperation, {
@@ -324,9 +334,12 @@ describe('registerSessionHandlers', () => {
     expect(sessionHandlers.createMessageTurn).toHaveBeenCalledWith({ content: 'hello' })
     expect(sessionHandlers.runOperation).toHaveBeenCalledWith(
       { operationId: 'operation-1' },
-      eventSink
+      expect.any(Function)
     )
-    expect(sessionHandlers.sendMessage).toHaveBeenCalledWith({ content: 'hello' }, eventSink)
+    expect(sessionHandlers.sendMessage).toHaveBeenCalledWith(
+      { content: 'hello' },
+      expect.any(Function)
+    )
     expect(sessionHandlers.cancelOperation).toHaveBeenCalledWith({ operationId: 'operation-1' })
     expect(sessionHandlers.approveToolCall).toHaveBeenCalledWith({
       toolInvocationId: 'tool-1'
@@ -335,5 +348,23 @@ describe('registerSessionHandlers', () => {
       toolInvocationId: 'tool-1',
       reason: 'nope'
     })
+
+    const event = {
+      type: 'message-created',
+      operationId: 'operation-1',
+      session: values.session,
+      topic: values.topic,
+      thread: values.thread,
+      message: values.messages[0]
+    } satisfies ChatOperationEvent
+    const runOperationEventSink = vi.mocked(sessionHandlers.runOperation).mock.calls[0][1]
+    const sendMessageEventSink = vi.mocked(sessionHandlers.sendMessage).mock.calls[0][1]
+
+    runOperationEventSink?.(event)
+    sendMessageEventSink?.(event)
+
+    expect(emitSessionEvent).toHaveBeenCalledTimes(2)
+    expect(emitSessionEvent).toHaveBeenNthCalledWith(1, RPC_CHANNELS.sessions.event, event)
+    expect(emitSessionEvent).toHaveBeenNthCalledWith(2, RPC_CHANNELS.sessions.event, event)
   })
 })
