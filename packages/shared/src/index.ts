@@ -1,5 +1,5 @@
 /**
- * 负责暴露 @moon/shared 的公开入口，边界止于跨进程可复用的纯领域逻辑。
+ * 负责暴露 @moon/shared 的公开入口，边界止于跨进程可复用的纯领域和协议逻辑。
  * Electron、React、Drizzle 运行时和 renderer-only 代码不能从这里导出。
  */
 
@@ -14,3 +14,4 @@ export * from './domain/project'
 export * from './domain/project-validation'
 export * from './domain/settings'
 export * from './domain/settings-validation'
+export * from './protocol'

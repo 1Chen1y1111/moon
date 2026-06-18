@@ -7,6 +7,10 @@
   "types": "./src/index.ts",
   "exports": {
     ".": "./src/index.ts",
+    "./handlers": "./src/handlers/index.ts",
+    "./handlers/*": "./src/handlers/*.ts",
+    "./handlers/rpc": "./src/handlers/rpc/index.ts",
+    "./handlers/rpc/*": "./src/handlers/rpc/*.ts",
     "./sessions": "./src/sessions/index.ts",
     "./sessions/*": "./src/sessions/*.ts"
   },
