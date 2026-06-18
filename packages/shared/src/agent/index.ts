@@ -5,8 +5,6 @@
 
 export * from './backend'
 export * from './claude-agent'
-export * from './compat-anthropic-messages-agent'
-export * from './compat-openai-completions-agent'
 export * from './connection-adapter'
 export * from './message-adapter'
 export * from './pi-agent'

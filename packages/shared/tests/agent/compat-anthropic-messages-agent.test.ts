@@ -5,7 +5,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 
-import { CompatAnthropicMessagesAgent } from '../../src/agent'
+import { CompatAnthropicMessagesAgent } from '../../src/agent/compat-anthropic-messages-agent'
 import type { AgentEvent } from '../../src/agent'
 
 /**

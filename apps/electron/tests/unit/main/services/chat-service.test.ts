@@ -392,7 +392,10 @@ function createMockAgentBackend(events: AgentEvent[]): AgentBackend {
  */
 function createPermissionAgentBackend(
   decisions: AgentPermissionDecision[],
-  options: { throwWhenAborted?: boolean } = {}
+  options: {
+    request?: Extract<AgentEvent, { type: 'permission_request' }>['request']
+    throwWhenAborted?: boolean
+  } = {}
 ): AgentBackend {
   let resolvePermission: ((decision: AgentPermissionDecision) => void) | null = null
   const respondToPermission = vi.fn(
@@ -428,7 +431,7 @@ function createPermissionAgentBackend(
 
       yield {
         type: 'permission_request',
-        request: {
+        request: options.request ?? {
           requestId: 'permission-tool-1',
           toolName: 'Bash',
           description: '需要执行测试命令',
@@ -696,6 +699,7 @@ describe('ChatService.sendMessage', () => {
           name: project.name,
           path: project.path
         },
+        permissionMode: 'ask',
         messages: expect.arrayContaining([
           expect.objectContaining({
             role: 'system',
@@ -736,7 +740,7 @@ describe('ChatService.sendMessage', () => {
     expect(createAgentBackend.mock.calls[0]?.[0]).not.toHaveProperty('customEndpoint')
   })
 
-  it('passes DeepSeek providers through OpenAI-compatible pi_compat config', async () => {
+  it('rejects DeepSeek OpenAI-compatible providers while Pi is not wired', async () => {
     const deepseek = createProviderSettings({
       provider: 'deepseek',
       type: 'deepseek',
@@ -771,18 +775,12 @@ describe('ChatService.sendMessage', () => {
       settings: createSettings([deepseek])
     })
 
-    await service.sendMessage({ content: 'hello' })
-
-    expect(sessionsRepository.sessions[0].llmConnectionId).toBeNull()
-    expect(createAgentBackend).toHaveBeenCalledWith(
-      expect.objectContaining({
-        provider: 'pi_compat',
-        model: 'deepseek-v4-flash',
-        apiKey: 'stored-key',
-        baseUrl: 'https://api.deepseek.com',
-        customEndpoint: { api: 'openai-completions' }
-      })
+    await expect(service.sendMessage({ content: 'hello' })).rejects.toThrow(
+      'Pi backend is not wired yet'
     )
+
+    expect(sessionsRepository.sessions).toEqual([])
+    expect(createAgentBackend).not.toHaveBeenCalled()
   })
 
   it('passes DeepSeek Anthropic protocol providers through Claude SDK backend config', async () => {
@@ -809,7 +807,7 @@ describe('ChatService.sendMessage', () => {
     expect(createAgentBackend.mock.calls[0]?.[0]).not.toHaveProperty('customEndpoint')
   })
 
-  it('binds a requested provider to its synchronized same-id LLM connection', async () => {
+  it('rejects a requested provider bound to a Pi-compatible same-id connection', async () => {
     const deepseek = createProviderSettings({
       provider: 'deepseek',
       type: 'deepseek',
@@ -825,21 +823,12 @@ describe('ChatService.sendMessage', () => {
       settings: createSettings([deepseek])
     })
 
-    await service.sendMessage({ provider: 'deepseek', content: 'hello' })
-
-    expect(sessionsRepository.sessions[0]).toMatchObject({
-      provider: 'deepseek',
-      llmConnectionId: 'deepseek'
-    })
-    expect(createAgentBackend).toHaveBeenCalledWith(
-      expect.objectContaining({
-        provider: 'pi_compat',
-        model: 'deepseek-v4-flash',
-        apiKey: 'stored-connection-key',
-        baseUrl: 'https://api.deepseek.com',
-        customEndpoint: { api: 'openai-completions' }
-      })
+    await expect(service.sendMessage({ provider: 'deepseek', content: 'hello' })).rejects.toThrow(
+      'Pi backend is not wired yet'
     )
+
+    expect(sessionsRepository.sessions).toEqual([])
+    expect(createAgentBackend).not.toHaveBeenCalled()
   })
 
   it('refreshes an explicit provider-backed LLM connection from current provider settings', async () => {
@@ -913,7 +902,7 @@ describe('ChatService.sendMessage', () => {
     expect(createAgentBackend.mock.calls[0]?.[0]).not.toHaveProperty('customEndpoint')
   })
 
-  it('uses an explicit LLM connection before the requested provider', async () => {
+  it('rejects an explicit Pi-compatible LLM connection before the requested provider', async () => {
     const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
       void config
       return createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
@@ -924,27 +913,19 @@ describe('ChatService.sendMessage', () => {
       settings: createClaudeSettings()
     })
 
-    await service.sendMessage({
-      llmConnectionId: 'deepseek',
-      provider: 'claude',
-      content: 'hello'
-    })
-
-    expect(sessionsRepository.sessions[0]).toMatchObject({
-      provider: 'deepseek',
-      llmConnectionId: 'deepseek'
-    })
-    expect(createAgentBackend).toHaveBeenCalledWith(
-      expect.objectContaining({
-        provider: 'pi_compat',
-        model: 'deepseek-v4-flash',
-        apiKey: 'stored-connection-key',
-        customEndpoint: { api: 'openai-completions' }
+    await expect(
+      service.sendMessage({
+        llmConnectionId: 'deepseek',
+        provider: 'claude',
+        content: 'hello'
       })
-    )
+    ).rejects.toThrow('Pi backend is not wired yet')
+
+    expect(sessionsRepository.sessions).toEqual([])
+    expect(createAgentBackend).not.toHaveBeenCalled()
   })
 
-  it('uses the persisted default LLM connection before provider fallback', async () => {
+  it('rejects a persisted default Pi-compatible LLM connection before provider fallback', async () => {
     const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
       void config
       return createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
@@ -955,23 +936,15 @@ describe('ChatService.sendMessage', () => {
       settings: createDefaultAppSettings()
     })
 
-    await service.sendMessage({ content: 'hello' })
-
-    expect(sessionsRepository.sessions[0]).toMatchObject({
-      provider: 'openrouter',
-      llmConnectionId: 'compat-main'
-    })
-    expect(createAgentBackend).toHaveBeenCalledWith(
-      expect.objectContaining({
-        provider: 'anthropic',
-        model: 'anthropic/claude-sonnet',
-        apiKey: 'stored-connection-key'
-      })
+    await expect(service.sendMessage({ content: 'hello' })).rejects.toThrow(
+      'Pi backend is not wired yet'
     )
-    expect(createAgentBackend.mock.calls[0]?.[0]).not.toHaveProperty('customEndpoint')
+
+    expect(sessionsRepository.sessions).toEqual([])
+    expect(createAgentBackend).not.toHaveBeenCalled()
   })
 
-  it('reuses the session LLM connection for follow-up turns', async () => {
+  it('rejects a session Pi-compatible LLM connection for follow-up turns', async () => {
     const session: SessionRecord = {
       id: 'session-1',
       llmConnectionId: 'compat-main',
@@ -993,16 +966,11 @@ describe('ChatService.sendMessage', () => {
       settings: createClaudeSettings()
     })
 
-    await service.sendMessage({ sessionId: 'session-1', content: 'continue' })
+    await expect(
+      service.sendMessage({ sessionId: 'session-1', content: 'continue' })
+    ).rejects.toThrow('Pi backend is not wired yet')
 
-    expect(createAgentBackend).toHaveBeenCalledWith(
-      expect.objectContaining({
-        provider: 'anthropic',
-        model: 'anthropic/claude-sonnet',
-        apiKey: 'stored-connection-key'
-      })
-    )
-    expect(createAgentBackend.mock.calls[0]?.[0]).not.toHaveProperty('customEndpoint')
+    expect(createAgentBackend).not.toHaveBeenCalled()
   })
 
   it('refreshes a session provider-backed LLM connection from current provider settings', async () => {
@@ -1350,7 +1318,7 @@ describe('ChatService.sendMessage', () => {
     expect(events.map((event) => (event as { type: string }).type)).toContain('tool-finish')
   })
 
-  it('explains that command-like requests need the Claude SDK backend for Bash tools', async () => {
+  it('rejects command-like requests for Pi-compatible connections before backend creation', async () => {
     const project: ProjectRecord = {
       id: 'project-1',
       name: 'moon',
@@ -1373,15 +1341,14 @@ describe('ChatService.sendMessage', () => {
       ])
     })
 
-    const result = await service.sendMessage({ content: '运行 pwd' })
+    await expect(service.sendMessage({ content: '运行 pwd' })).rejects.toThrow(
+      'Pi backend is not wired yet'
+    )
 
     expect(createAgentBackend).not.toHaveBeenCalled()
-    expect(result.messages.map((message) => message.content).at(-1)).toContain(
-      '不是 Claude SDK 后端'
-    )
   })
 
-  it('runs command-like requests for legacy Anthropic Messages connections through Claude SDK backend', async () => {
+  it('refreshes legacy Anthropic Messages Pi-compatible connections through provider settings', async () => {
     const project: ProjectRecord = {
       id: 'project-1',
       name: 'moon',
@@ -1407,8 +1374,8 @@ describe('ChatService.sendMessage', () => {
       expect.objectContaining({
         provider: 'anthropic',
         model: 'anthropic/claude-sonnet',
-        apiKey: 'stored-connection-key',
-        baseUrl: 'https://compat.example.com'
+        apiKey: 'stored-key',
+        baseUrl: 'https://api.example.com'
       })
     )
     expect(createAgentBackend.mock.calls[0]?.[0]).not.toHaveProperty('customEndpoint')
@@ -1456,6 +1423,50 @@ describe('ChatService.sendMessage', () => {
       'tool-finish',
       'message-delta',
       'operation-done'
+    ])
+  })
+
+  it('persists file write permission metadata for the approval card', async () => {
+    const settings = createClaudeSettings()
+    const decisions: AgentPermissionDecision[] = []
+    const agentBackend = createPermissionAgentBackend(decisions, {
+      request: {
+        requestId: 'permission-edit-1',
+        toolName: 'Edit',
+        description: '需要修改项目文件：README.md',
+        path: 'README.md',
+        type: 'file_write',
+        impact: '写操作会改变当前项目工作区文件。'
+      }
+    })
+    const { service, toolInvocationsRepository } = createService({
+      createAgentBackend: vi.fn(() => agentBackend),
+      settings
+    })
+
+    await service.sendMessage({ content: '修改 README' }, (event) => {
+      if (event.type === 'tool-waiting-approval') {
+        void service.approveToolCall({ toolInvocationId: event.toolInvocation.id })
+      }
+    })
+
+    expect(toolInvocationsRepository.invocations).toEqual([
+      expect.objectContaining({
+        id: 'permission-edit-1',
+        name: 'Edit',
+        arguments: expect.objectContaining({
+          description: '需要修改项目文件：README.md',
+          path: 'README.md',
+          type: 'file_write',
+          impact: '写操作会改变当前项目工作区文件。'
+        }),
+        intervention: expect.objectContaining({
+          type: 'permission_request',
+          description: '需要修改项目文件：README.md',
+          path: 'README.md',
+          impact: '写操作会改变当前项目工作区文件。'
+        })
+      })
     ])
   })
 

@@ -5,7 +5,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 
-import { CompatOpenAiCompletionsAgent } from '../../src/agent'
+import { CompatOpenAiCompletionsAgent } from '../../src/agent/compat-openai-completions-agent'
 import type { AgentEvent } from '../../src/agent'
 
 /**

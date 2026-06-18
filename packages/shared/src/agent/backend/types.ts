@@ -8,6 +8,7 @@ import type {
   MessageAttachment as CoreMessageAttachment
 } from '@moon/core/types'
 import type { AgentBackendProvider, CustomEndpointApi, ThinkingLevel } from '../../config'
+import type { AgentPermissionMode } from '../runtime/types'
 
 export type { AgentEvent, AgentPermissionDecision, MessageAttachment } from '@moon/core/types'
 
@@ -36,6 +37,7 @@ export type AgentBackendConfig = {
     api: CustomEndpointApi
   }
   messages?: AgentBackendMessage[]
+  permissionMode?: AgentPermissionMode
   thinkingLevel?: ThinkingLevel
   workspace?: AgentBackendWorkspace
 }

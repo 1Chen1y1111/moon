@@ -75,7 +75,7 @@ describe('createConnectionAgentBackendConfig', () => {
     })
   })
 
-  it('routes legacy Anthropic Messages compat connections through the Anthropic backend', () => {
+  it('keeps legacy Anthropic Messages compat connections on the Pi-compatible backend', () => {
     const messages = [{ role: 'user' as const, content: 'hello' }]
     const connection = llmConnectionSchema.parse({
       id: 'compat-main',
@@ -87,12 +87,13 @@ describe('createConnectionAgentBackendConfig', () => {
       customEndpoint: { api: 'anthropic-messages' }
     })
 
-    expect(resolveConnectionAgentBackendProvider(connection)).toBe('anthropic')
+    expect(resolveConnectionAgentBackendProvider(connection)).toBe('pi_compat')
     expect(createConnectionAgentBackendConfig(connection, messages)).toEqual({
-      provider: 'anthropic',
+      provider: 'pi_compat',
       model: 'anthropic/claude-sonnet',
       apiKey: 'stored-key',
       baseUrl: 'https://compat.example.com',
+      customEndpoint: { api: 'anthropic-messages' },
       thinkingLevel: 'medium',
       messages
     })
@@ -119,23 +120,36 @@ describe('createConnectionAgentBackendConfig', () => {
       }
     })
   })
+
+  it('adds permission mode when provided by the session scope', () => {
+    const connection = llmConnectionSchema.parse({
+      id: 'anthropic-main',
+      name: 'Claude Main',
+      backend: 'anthropic',
+      model: 'claude-sonnet-4-5',
+      apiKey: 'stored-key'
+    })
+
+    expect(createConnectionAgentBackendConfig(connection, [], undefined, 'ask')).toMatchObject({
+      permissionMode: 'ask'
+    })
+  })
 })
 
 describe('assertLlmConnectionReadyForAgent', () => {
-  it('accepts enabled non-Pi connections with an API key', () => {
+  it('accepts enabled Anthropic connections with an API key', () => {
     const connection = llmConnectionSchema.parse({
-      id: 'compat-main',
-      name: 'Compat Main',
-      backend: 'pi_compat',
-      model: 'compat-model',
-      apiKey: 'stored-key',
-      customEndpoint: { api: 'anthropic-messages' }
+      id: 'anthropic-main',
+      name: 'Claude Main',
+      backend: 'anthropic',
+      model: 'claude-sonnet-4-5',
+      apiKey: 'stored-key'
     })
 
     expect(() => assertLlmConnectionReadyForAgent(connection)).not.toThrow()
   })
 
-  it('rejects disabled connections, missing API keys, and unwired Pi connections', () => {
+  it('rejects disabled connections, missing API keys, and unwired Pi-family connections', () => {
     expect(() =>
       assertLlmConnectionReadyForAgent(
         llmConnectionSchema.parse({
@@ -154,8 +168,8 @@ describe('assertLlmConnectionReadyForAgent', () => {
         llmConnectionSchema.parse({
           id: 'missing-key',
           name: 'Missing Key',
-          backend: 'pi_compat',
-          model: 'compat-model'
+          backend: 'anthropic',
+          model: 'claude-sonnet-4-5'
         })
       )
     ).toThrow('Missing Key API key is required.')
@@ -168,6 +182,19 @@ describe('assertLlmConnectionReadyForAgent', () => {
           backend: 'pi',
           model: 'gpt-5',
           apiKey: 'stored-key'
+        })
+      )
+    ).toThrow('Pi backend is not wired yet')
+
+    expect(() =>
+      assertLlmConnectionReadyForAgent(
+        llmConnectionSchema.parse({
+          id: 'compat-main',
+          name: 'Compat Main',
+          backend: 'pi_compat',
+          model: 'compat-model',
+          apiKey: 'stored-key',
+          customEndpoint: { api: 'openai-completions' }
         })
       )
     ).toThrow('Pi backend is not wired yet')

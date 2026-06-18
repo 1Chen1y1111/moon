@@ -36,6 +36,18 @@ Keep changes surgical:
   boundaries, or intent; avoid comments that merely restate the code.
 - Mention unrelated dead code or risks instead of fixing them opportunistically.
 
+Breaking changes and compatibility:
+
+- This repository allows breaking changes when the requested direction is clear.
+- Do not preserve legacy protocols, fallback paths, data shapes, or compatibility layers only
+  because they existed before.
+- When replacing an old design, remove obsolete compatibility code, dead branches,
+  migrations-in-progress, and adapter shims that were only needed for the previous design.
+- Keep the removal surgical: delete only compatibility code related to the current change, and
+  do not turn it into broad cleanup.
+- If breaking behavior affects IPC contracts, persisted data, provider selection, or runtime
+  protocols, state the breakage explicitly and verify the new intended path with focused tests.
+
 For behavior changes, verify the result with focused tests. If a bug fix is
 requested, prefer a regression test that fails before the fix and passes after it.
 After two unsuccessful fix attempts on the same failing test, stop and ask for

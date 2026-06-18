@@ -11,6 +11,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   createClaudeQueryOptions,
+  runClaudePreToolUseChecks,
   resolveClaudeCodeExecutablePath,
   resolveClaudeThinkingTokenBudget,
   resolveClaudeRuntimeEnv
@@ -234,5 +235,97 @@ describe('createClaudeQueryOptions', () => {
         stderr
       })
     ).toMatchObject({ stderr })
+  })
+})
+
+describe('runClaudePreToolUseChecks', () => {
+  const workspace = { path: '/workspace/moon' }
+
+  it('prompts for file writes in ask mode with path and risk metadata', () => {
+    expect(
+      runClaudePreToolUseChecks(
+        workspace,
+        {
+          hook_event_name: 'PreToolUse',
+          session_id: 'sdk-session-1',
+          transcript_path: '/tmp/transcript.jsonl',
+          cwd: '/workspace/moon',
+          tool_name: 'Edit',
+          tool_input: { file_path: 'README.md', old_string: 'old', new_string: 'new' },
+          tool_use_id: 'edit-tool-1'
+        },
+        'ask'
+      )
+    ).toEqual({
+      type: 'prompt',
+      request: {
+        requestId: 'perm-edit-tool-1',
+        toolName: 'Edit',
+        description: '需要修改项目文件：README.md',
+        path: 'README.md',
+        type: 'file_write',
+        impact: '写操作会改变当前项目工作区文件。'
+      }
+    })
+  })
+
+  it('blocks file writes in safe mode', () => {
+    expect(
+      runClaudePreToolUseChecks(
+        workspace,
+        {
+          hook_event_name: 'PreToolUse',
+          session_id: 'sdk-session-1',
+          transcript_path: '/tmp/transcript.jsonl',
+          cwd: '/workspace/moon',
+          tool_name: 'Write',
+          tool_input: { file_path: 'generated.txt', content: 'hello' },
+          tool_use_id: 'write-tool-1'
+        },
+        'safe'
+      )
+    ).toMatchObject({
+      type: 'block',
+      reason: '安全模式禁止 Claude Code SDK 修改项目文件。'
+    })
+  })
+
+  it('allows file writes in allow-all mode when the target stays inside workspace', () => {
+    expect(
+      runClaudePreToolUseChecks(
+        workspace,
+        {
+          hook_event_name: 'PreToolUse',
+          session_id: 'sdk-session-1',
+          transcript_path: '/tmp/transcript.jsonl',
+          cwd: '/workspace/moon',
+          tool_name: 'MultiEdit',
+          tool_input: { file_path: 'README.md', edits: [] },
+          tool_use_id: 'multi-edit-tool-1'
+        },
+        'allow-all'
+      )
+    ).toEqual({ type: 'allow' })
+  })
+
+  it('blocks file writes outside the workspace before permission mode is applied', () => {
+    expect(
+      runClaudePreToolUseChecks(
+        workspace,
+        {
+          hook_event_name: 'PreToolUse',
+          session_id: 'sdk-session-1',
+          transcript_path: '/tmp/transcript.jsonl',
+          cwd: '/workspace/moon',
+          tool_name: 'Edit',
+          tool_input: { file_path: '../README.md', old_string: 'old', new_string: 'new' },
+          tool_use_id: 'edit-tool-2'
+        },
+        'allow-all'
+      )
+    ).toMatchObject({
+      type: 'block',
+      reason: '工具路径超出当前项目 workspace，已被 Moon 阻止。'
+    })
   })
 })

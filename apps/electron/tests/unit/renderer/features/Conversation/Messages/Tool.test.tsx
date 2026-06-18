@@ -67,6 +67,33 @@ describe('ToolInvocationList', () => {
     )
   })
 
+  it('renders file write permission path and impact from intervention metadata', () => {
+    renderWithProviders(
+      <ToolInvocationList
+        toolInvocations={[
+          createToolInvocation({
+            name: 'Edit',
+            arguments: {
+              description: '需要修改项目文件：README.md',
+              path: 'README.md',
+              impact: '写操作会改变当前项目工作区文件。'
+            },
+            intervention: {
+              type: 'permission_request',
+              description: '需要修改项目文件：README.md',
+              path: 'README.md',
+              impact: '写操作会改变当前项目工作区文件。'
+            }
+          })
+        ]}
+      />
+    )
+
+    expect(screen.getByText('需要修改项目文件：README.md')).toBeInTheDocument()
+    expect(screen.getByText('写操作会改变当前项目工作区文件。')).toBeInTheDocument()
+    expect(screen.getByText('README.md')).toBeInTheDocument()
+  })
+
   it('hides approval actions after a tool invocation is resolved', () => {
     renderWithProviders(
       <ToolInvocationList

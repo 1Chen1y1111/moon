@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url'
 
 import type { ThinkingLevel } from '../../../config'
 import { isPathInsideWorkspace, resolveWorkspacePath } from '../../runtime'
+import type { AgentPermissionMode } from '../../runtime/types'
 import type { AgentBackendWorkspace } from '../types'
 
 const thinkingLevelTokenBudgets: Record<ThinkingLevel, number> = {
@@ -31,6 +32,7 @@ export type ClaudeRuntimeEnvInput = {
 export type ClaudeQueryOptionsInput = ClaudeRuntimeEnvInput & {
   abortController: AbortController
   model: string
+  permissionMode?: AgentPermissionMode
   requestPermission?: ClaudeToolPermissionRequester
   stderr?: (data: string) => void
   thinkingLevel?: ThinkingLevel
@@ -38,6 +40,7 @@ export type ClaudeQueryOptionsInput = ClaudeRuntimeEnvInput & {
 }
 
 const claudeReadOnlyTools = new Set(['Read', 'Glob', 'Grep', 'LS'])
+const claudeWritableTools = new Set(['Write', 'Edit', 'MultiEdit'])
 const claudeCodeUnsupportedTools = ['EnterPlanMode', 'ExitPlanMode', 'AskUserQuestion', 'Skill']
 const claudeCodeExecutableEnvKeys = [
   'MOON_CLAUDE_CODE_EXECUTABLE',
@@ -97,6 +100,30 @@ function resolveToolInputPath(input: Record<string, unknown>): string | undefine
 
 function resolveBashCommand(input: Record<string, unknown>): string | undefined {
   return readStringField(input, 'command')
+}
+
+function resolveWritableToolPath(input: Record<string, unknown>): string | undefined {
+  return readStringField(input, 'file_path')
+}
+
+/**
+ * 把 Claude Code 写文件工具输入转换成 Moon 统一权限请求，隐藏 SDK 私有字段差异。
+ */
+function createWritableToolPermissionRequest(
+  toolName: string,
+  toolUseId: string,
+  input: Record<string, unknown>
+): AgentPermissionRequest {
+  const path = resolveWritableToolPath(input)
+
+  return {
+    requestId: `perm-${toolUseId}`,
+    toolName,
+    description: `需要修改项目文件：${path ?? ''}`,
+    ...(path === undefined ? {} : { path }),
+    type: 'file_write',
+    impact: '写操作会改变当前项目工作区文件。'
+  }
 }
 
 function pathExists(path: string | undefined): path is string {
@@ -401,16 +428,17 @@ export function buildClaudeWorkspaceSystemPrompt(workspace: AgentBackendWorkspac
     `当前 Moon 项目：${workspace.name ?? '未命名项目'}`,
     `项目根目录：${workspace.path}`,
     '你必须把当前工作目录视为项目 workspace 边界。',
-    '当前阶段允许使用只读工具理解项目；Bash 会等待用户确认；Edit、Write 等修改类工具会被 Moon 阻止。'
+    '当前阶段允许使用只读工具理解项目；Bash、Edit、Write、MultiEdit 会等待用户确认。'
   ].join('\n')
 }
 
 /**
- * 运行 Craft 风格的 Claude PreToolUse 检查：只读工具自动允许，Bash 转人工审批。
+ * 运行 Craft 风格的 Claude PreToolUse 检查：只读工具自动允许，命令和写操作按权限模式处理。
  */
 export function runClaudePreToolUseChecks(
   workspace: AgentBackendWorkspace,
-  input: Extract<HookInput, { hook_event_name: 'PreToolUse' }>
+  input: Extract<HookInput, { hook_event_name: 'PreToolUse' }>,
+  permissionMode: AgentPermissionMode = 'ask'
 ): ClaudePreToolUseCheckResult {
   const toolInput = readRecord(input.tool_input)
 
@@ -429,10 +457,35 @@ export function runClaudePreToolUseChecks(
     }
   }
 
+  if (claudeWritableTools.has(input.tool_name)) {
+    if (!isClaudeToolInputInsideWorkspace(workspace, toolInput)) {
+      return {
+        type: 'block',
+        reason: '工具路径超出当前项目 workspace，已被 Moon 阻止。'
+      }
+    }
+
+    if (permissionMode === 'allow-all') {
+      return { type: 'allow' }
+    }
+
+    if (permissionMode === 'safe') {
+      return {
+        type: 'block',
+        reason: '安全模式禁止 Claude Code SDK 修改项目文件。'
+      }
+    }
+
+    return {
+      type: 'prompt',
+      request: createWritableToolPermissionRequest(input.tool_name, input.tool_use_id, toolInput)
+    }
+  }
+
   if (!claudeReadOnlyTools.has(input.tool_name)) {
     return {
       type: 'block',
-      reason: `Moon 当前阶段只允许 Claude Code SDK 只读工具和 Bash，已阻止 ${input.tool_name}。`
+      reason: `Moon 当前阶段只允许 Claude Code SDK 只读工具、Bash 和文件写入审批，已阻止 ${input.tool_name}。`
     }
   }
 
@@ -451,7 +504,8 @@ export function runClaudePreToolUseChecks(
  */
 export function createClaudePreToolUseHooks(
   workspace: AgentBackendWorkspace,
-  requestPermission?: ClaudeToolPermissionRequester
+  requestPermission?: ClaudeToolPermissionRequester,
+  permissionMode: AgentPermissionMode = 'ask'
 ): Options['hooks'] {
   return {
     PreToolUse: [
@@ -462,14 +516,14 @@ export function createClaudePreToolUseHooks(
               return { continue: true }
             }
 
-            const checkResult = runClaudePreToolUseChecks(workspace, input)
+            const checkResult = runClaudePreToolUseChecks(workspace, input, permissionMode)
 
             if (checkResult.type === 'prompt') {
               if (requestPermission === undefined) {
                 return {
                   continue: false,
                   decision: 'block',
-                  reason: 'Moon 当前阶段需要 UI 审批后才允许执行 Bash。'
+                  reason: 'Moon 当前阶段需要 UI 审批后才允许执行该工具。'
                 }
               }
 
@@ -557,6 +611,7 @@ export function createClaudeQueryOptions({
   baseEnv,
   baseUrl,
   model,
+  permissionMode,
   requestPermission,
   stderr,
   thinkingLevel,
@@ -581,7 +636,7 @@ export function createClaudeQueryOptions({
           allowDangerouslySkipPermissions: true,
           cwd: workspace.path,
           disallowedTools: claudeCodeUnsupportedTools,
-          hooks: createClaudePreToolUseHooks(workspace, requestPermission),
+          hooks: createClaudePreToolUseHooks(workspace, requestPermission, permissionMode),
           permissionMode: 'bypassPermissions' as const,
           systemPrompt: {
             type: 'preset' as const,

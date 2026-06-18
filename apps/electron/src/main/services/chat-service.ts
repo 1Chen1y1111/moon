@@ -223,6 +223,7 @@ function createPermissionRequestArguments(
   return {
     description: request.description,
     ...(request.command === undefined ? {} : { command: request.command }),
+    ...(request.path === undefined ? {} : { path: request.path }),
     ...(request.type === undefined ? {} : { type: request.type }),
     ...(request.reason === undefined ? {} : { reason: request.reason }),
     ...(request.impact === undefined ? {} : { impact: request.impact })
@@ -991,7 +992,12 @@ export class ChatService {
       unsupportedClaudeToolMessage === null
         ? createAgentRuntimeBackend({
             delegate: this.createAgentBackend(
-              createConnectionAgentBackendConfig(connection, scopedBackendMessages, workspace)
+              createConnectionAgentBackendConfig(
+                connection,
+                scopedBackendMessages,
+                workspace,
+                defaultAgentPermissionMode
+              )
             ),
             permissionMode: defaultAgentPermissionMode,
             ...(workspace === undefined ? {} : { workspace })
@@ -1250,6 +1256,7 @@ export class ChatService {
           type: 'permission_request',
           description: event.request.description,
           ...(event.request.command === undefined ? {} : { command: event.request.command }),
+          ...(event.request.path === undefined ? {} : { path: event.request.path }),
           ...(event.request.reason === undefined ? {} : { reason: event.request.reason }),
           ...(event.request.impact === undefined ? {} : { impact: event.request.impact })
         },

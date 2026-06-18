@@ -14,10 +14,10 @@ import { resolveProviderEffectiveBaseUrl } from '../domain/provider'
 import { isOpenAICompatibleProvider } from '../domain/chat-provider'
 import type { ProviderSettings } from '../domain/settings'
 import type { AgentBackendConfig, AgentBackendMessage } from './backend/types'
-import { createConnectionAgentBackendConfig } from './connection-adapter'
-
-const piBackendNotWiredMessage =
-  'Pi backend is not wired yet. Configure an Anthropic provider for now.'
+import {
+  createConnectionAgentBackendConfig,
+  piBackendNotWiredMessage
+} from './connection-adapter'
 
 /**
  * 判断字符串是否是后端已支持的兼容端点协议。
@@ -164,7 +164,9 @@ export function assertProviderReadyForAgent(
 ): void {
   assertProviderCredentials(provider)
 
-  if (resolveAgentBackendProvider(provider, modelId) === 'pi') {
+  const backend = resolveAgentBackendProvider(provider, modelId)
+
+  if (backend === 'pi' || backend === 'pi_compat') {
     throw new Error(piBackendNotWiredMessage)
   }
 }

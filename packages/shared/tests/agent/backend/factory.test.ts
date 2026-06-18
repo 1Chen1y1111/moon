@@ -7,8 +7,6 @@ import { describe, expect, it } from 'vitest'
 
 import {
   ClaudeAgent,
-  CompatAnthropicMessagesAgent,
-  CompatOpenAiCompletionsAgent,
   createAgent,
   createBackend,
   getAvailableAgentProviders,
@@ -32,7 +30,7 @@ describe('agent backend factory', () => {
     expect(backend.getModel()).toBe('claude-sonnet-4-5')
   })
 
-  it('creates a compatible Anthropic Messages backend for pi_compat config', () => {
+  it('creates a Pi placeholder for Anthropic Messages pi_compat config', async () => {
     const backend = createAgent({
       provider: 'pi_compat',
       model: 'compat-model',
@@ -41,12 +39,24 @@ describe('agent backend factory', () => {
       customEndpoint: { api: 'anthropic-messages' },
       messages: [{ role: 'user', content: 'hello' }]
     })
+    const events = []
 
-    expect(backend).toBeInstanceOf(CompatAnthropicMessagesAgent)
+    for await (const event of backend.chat('hello')) {
+      events.push(event)
+    }
+
+    expect(backend).toBeInstanceOf(PiAgent)
     expect(backend.getModel()).toBe('compat-model')
+    expect(events).toEqual([
+      {
+        type: 'error',
+        message:
+          'Pi backend is not wired yet. Configure an Anthropic-compatible connection for now.'
+      }
+    ])
   })
 
-  it('creates a compatible OpenAI Chat Completions backend for pi_compat config', () => {
+  it('creates a Pi placeholder for OpenAI Chat Completions pi_compat config', async () => {
     const backend = createAgent({
       provider: 'pi_compat',
       model: 'deepseek-v4-flash',
@@ -55,9 +65,21 @@ describe('agent backend factory', () => {
       customEndpoint: { api: 'openai-completions' },
       messages: [{ role: 'user', content: 'hello' }]
     })
+    const events = []
 
-    expect(backend).toBeInstanceOf(CompatOpenAiCompletionsAgent)
+    for await (const event of backend.chat('hello')) {
+      events.push(event)
+    }
+
+    expect(backend).toBeInstanceOf(PiAgent)
     expect(backend.getModel()).toBe('deepseek-v4-flash')
+    expect(events).toEqual([
+      {
+        type: 'error',
+        message:
+          'Pi backend is not wired yet. Configure an Anthropic-compatible connection for now.'
+      }
+    ])
   })
 
   it('keeps createBackend as a compatibility alias', () => {
@@ -80,7 +102,8 @@ describe('agent backend factory', () => {
     expect(events).toEqual([
       {
         type: 'error',
-        message: 'Pi backend is not wired yet. Configure an Anthropic provider for now.'
+        message:
+          'Pi backend is not wired yet. Configure an Anthropic-compatible connection for now.'
       }
     ])
   })

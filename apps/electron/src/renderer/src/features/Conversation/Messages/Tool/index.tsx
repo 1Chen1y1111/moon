@@ -73,7 +73,17 @@ function getToolCommand(toolInvocation: ToolInvocationRecord): string | undefine
 }
 
 function getToolPath(toolInvocation: ToolInvocationRecord): string | undefined {
-  return readStringField(toolInvocation.arguments, 'path')
+  return (
+    readStringField(toolInvocation.intervention, 'path') ??
+    readStringField(toolInvocation.arguments, 'path')
+  )
+}
+
+function getToolImpact(toolInvocation: ToolInvocationRecord): string | undefined {
+  return (
+    readStringField(toolInvocation.intervention, 'impact') ??
+    readStringField(toolInvocation.arguments, 'impact')
+  )
 }
 
 function getToolResultTitle(toolInvocation: ToolInvocationRecord): string | undefined {
@@ -137,6 +147,7 @@ function ToolInvocationItem({
   const [isSubmittingDecision, setIsSubmittingDecision] = useState(false)
   const description = getToolDescription(toolInvocation)
   const command = getToolCommand(toolInvocation)
+  const impact = getToolImpact(toolInvocation)
   const path = getToolPath(toolInvocation)
   const resultTitle = getToolResultTitle(toolInvocation)
   const resultOutput = getToolResultOutput(toolInvocation)
@@ -179,6 +190,7 @@ function ToolInvocationItem({
       {description === undefined ? null : (
         <div className="mt-1 text-muted-foreground">{description}</div>
       )}
+      {impact === undefined ? null : <div className="mt-0.5 text-muted-foreground">{impact}</div>}
       {command === undefined ? null : (
         <code className="mt-1 block max-h-24 overflow-auto rounded bg-muted px-1.5 py-1 font-mono text-[11px] leading-4 text-foreground">
           {command}

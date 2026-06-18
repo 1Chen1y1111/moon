@@ -25,6 +25,7 @@ export type AgentPermissionRequest = {
   toolName: string
   description: string
   command?: string
+  path?: string
   type?: AgentPermissionRequestType
   reason?: string
   impact?: string

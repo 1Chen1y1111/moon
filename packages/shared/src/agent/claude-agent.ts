@@ -18,12 +18,14 @@ import type {
   AgentEvent,
   MessageAttachment
 } from './backend/types'
+import type { AgentPermissionMode } from './runtime/types'
 
 export type ClaudeAgentInput = {
   apiKey?: string
   baseUrl?: string
   messages: AgentBackendMessage[]
   model: string
+  permissionMode?: AgentPermissionMode
   queryClaude?: typeof query
   thinkingLevel?: ThinkingLevel
   workspace?: AgentBackendWorkspace
@@ -184,6 +186,7 @@ export class ClaudeAgent implements AgentBackend {
   private readonly apiKey?: string
   private readonly baseUrl?: string
   private readonly messages: AgentBackendMessage[]
+  private readonly permissionMode?: AgentPermissionMode
   private readonly queryClaude: typeof query
   private readonly thinkingLevel?: ThinkingLevel
   private readonly workspace?: AgentBackendWorkspace
@@ -201,6 +204,7 @@ export class ClaudeAgent implements AgentBackend {
     baseUrl,
     messages,
     model,
+    permissionMode,
     queryClaude = query,
     thinkingLevel,
     workspace
@@ -209,6 +213,7 @@ export class ClaudeAgent implements AgentBackend {
     this.baseUrl = baseUrl
     this.messages = messages
     this.model = model
+    this.permissionMode = permissionMode
     this.queryClaude = queryClaude
     this.thinkingLevel = thinkingLevel
     this.workspace = workspace
@@ -250,6 +255,7 @@ export class ClaudeAgent implements AgentBackend {
         apiKey: this.apiKey,
         baseUrl: this.baseUrl,
         model: this.model,
+        permissionMode: this.permissionMode,
         requestPermission: (request) => this.requestPermission(request),
         stderr: (data) => stderrBuffer.append(data),
         thinkingLevel: options.thinkingOverride ?? this.thinkingLevel,

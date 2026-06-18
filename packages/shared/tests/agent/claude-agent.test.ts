@@ -80,6 +80,43 @@ function createBashHookQueryClaudeMock() {
 }
 
 /**
+ * 创建会触发 Claude SDK Edit PreToolUse hook 的 query mock。
+ */
+function createEditHookQueryClaudeMock() {
+  return vi.fn(async function* ({ options }: { options?: Options }) {
+    const hook = options?.hooks?.PreToolUse?.[0]?.hooks[0]
+    const hookResult = await hook?.(
+      {
+        hook_event_name: 'PreToolUse',
+        session_id: 'sdk-session-1',
+        transcript_path: '/tmp/transcript.jsonl',
+        cwd: '/workspace/moon',
+        tool_name: 'Edit',
+        tool_input: { file_path: 'README.md', old_string: 'old', new_string: 'new' },
+        tool_use_id: 'edit-tool-1'
+      },
+      'edit-tool-1',
+      { signal: new AbortController().signal }
+    )
+
+    yield {
+      type: 'assistant',
+      message: {
+        content: [
+          {
+            type: 'text',
+            text:
+              hookResult !== undefined && 'continue' in hookResult && hookResult.continue
+                ? 'edit allowed'
+                : 'edit blocked'
+          }
+        ]
+      }
+    }
+  })
+}
+
+/**
  * 创建返回 unknown 错误但写入 stderr 详情的 Claude SDK query mock。
  */
 function createUnknownErrorWithStderrQueryClaudeMock() {
@@ -316,6 +353,7 @@ describe('ClaudeAgent', () => {
     const agent = new ClaudeAgent({
       model: 'claude-sonnet',
       messages: [],
+      permissionMode: 'safe',
       queryClaude: queryClaude as never,
       workspace: {
         path: '/workspace/moon'
@@ -428,5 +466,38 @@ describe('ClaudeAgent', () => {
     const textEvent = await events.next()
 
     expect(textEvent.value).toMatchObject({ type: 'text_complete', text: 'allowed' })
+  })
+
+  it('emits a permission request when Claude Code SDK asks to edit a file', async () => {
+    const queryClaude = createEditHookQueryClaudeMock()
+    const agent = new ClaudeAgent({
+      model: 'claude-sonnet',
+      messages: [],
+      queryClaude: queryClaude as never,
+      workspace: {
+        path: '/workspace/moon'
+      }
+    })
+    const events = agent.chat('update README')
+
+    const permissionEvent = await events.next()
+
+    expect(permissionEvent.value).toMatchObject({
+      type: 'permission_request',
+      request: {
+        requestId: 'perm-edit-tool-1',
+        toolName: 'Edit',
+        description: '需要修改项目文件：README.md',
+        path: 'README.md',
+        type: 'file_write',
+        impact: '写操作会改变当前项目工作区文件。'
+      }
+    })
+
+    agent.respondToPermission('perm-edit-tool-1', true)
+
+    const textEvent = await events.next()
+
+    expect(textEvent.value).toMatchObject({ type: 'text_complete', text: 'edit allowed' })
   })
 })

@@ -9,23 +9,17 @@ import type {
   AgentBackendMessage,
   AgentBackendWorkspace
 } from './backend/types'
+import type { AgentPermissionMode } from './runtime/types'
 
-const piBackendNotWiredMessage =
+export const piBackendNotWiredMessage =
   'Pi backend is not wired yet. Configure an Anthropic-compatible connection for now.'
 
 /**
- * 解析 connection 实际应使用的 agent backend，兼容早期保存的 Anthropic Messages 连接。
+ * 解析 connection 实际应使用的 agent backend；不再把 Pi-compatible 连接改写成 Claude 路径。
  */
 export function resolveConnectionAgentBackendProvider(
   connection: NormalizedLlmConnection
 ): AgentBackendConfig['provider'] {
-  if (
-    connection.backend === 'pi_compat' &&
-    connection.customEndpoint?.api === 'anthropic-messages'
-  ) {
-    return 'anthropic'
-  }
-
   return connection.backend
 }
 
@@ -39,7 +33,7 @@ export function assertLlmConnectionReadyForAgent(connection: NormalizedLlmConnec
     throw new Error(`${connection.name} is disabled.`)
   }
 
-  if (provider === 'pi') {
+  if (provider === 'pi' || provider === 'pi_compat') {
     throw new Error(piBackendNotWiredMessage)
   }
 
@@ -56,7 +50,8 @@ export function assertLlmConnectionReadyForAgent(connection: NormalizedLlmConnec
 export function createConnectionAgentBackendConfig(
   connection: NormalizedLlmConnection,
   messages: AgentBackendMessage[],
-  workspace?: AgentBackendWorkspace
+  workspace?: AgentBackendWorkspace,
+  permissionMode?: AgentPermissionMode
 ): AgentBackendConfig {
   const apiKey = connection.apiKey?.trim()
   const provider = resolveConnectionAgentBackendProvider(connection)
@@ -71,6 +66,7 @@ export function createConnectionAgentBackendConfig(
       : { customEndpoint: connection.customEndpoint }),
     ...(apiKey === undefined ? {} : { apiKey }),
     ...(connection.baseUrl === undefined ? {} : { baseUrl: connection.baseUrl }),
+    ...(permissionMode === undefined ? {} : { permissionMode }),
     ...(workspace === undefined ? {} : { workspace })
   }
 }

@@ -68,14 +68,14 @@ describe('provider agent adapter', () => {
     )
   })
 
-  it('maps DeepSeek OpenAI-compatible defaults to pi_compat backend config', () => {
+  it('maps DeepSeek OpenAI-compatible defaults to pi_compat config but rejects execution', () => {
     const provider = createProvider({
       provider: 'deepseek',
       model: 'deepseek-v4-flash'
     })
 
     expect(resolveAgentBackendProvider(provider)).toBe('pi_compat')
-    expect(() => assertProviderReadyForAgent(provider)).not.toThrow()
+    expect(() => assertProviderReadyForAgent(provider)).toThrow('Pi backend is not wired yet')
     expect(createProviderAgentBackendConfig(provider, 'deepseek-v4-flash', [])).toMatchObject({
       provider: 'pi_compat',
       model: 'deepseek-v4-flash',
@@ -164,7 +164,7 @@ describe('provider agent adapter', () => {
     ).not.toHaveProperty('customEndpoint')
   })
 
-  it('rejects non-compatible providers while Pi is not wired', () => {
+  it('rejects Pi-family providers while Pi is not wired', () => {
     const provider = createProvider({
       provider: 'gemini',
       type: 'google',
