@@ -47,28 +47,6 @@ const api: MoonApi = {
       return () => {
         ipcRenderer.off(channel, handler)
       }
-    },
-    onOperationEvent: (listener) => {
-      const channel = ipcChannels.chat.operationEvent
-      const handler = (_event: unknown, payload: Parameters<typeof listener>[0]): void =>
-        listener(payload)
-
-      ipcRenderer.on(channel, handler)
-
-      return () => {
-        ipcRenderer.off(channel, handler)
-      }
-    },
-    onSendMessageEvent: (listener) => {
-      const channel = ipcChannels.chat.sendMessageEvent
-      const handler = (_event: unknown, payload: Parameters<typeof listener>[0]): void =>
-        listener(payload)
-
-      ipcRenderer.on(channel, handler)
-
-      return () => {
-        ipcRenderer.off(channel, handler)
-      }
     }
   },
   settings: {

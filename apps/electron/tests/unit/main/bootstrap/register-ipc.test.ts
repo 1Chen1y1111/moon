@@ -340,7 +340,7 @@ describe('registerIpcHandlers', () => {
       message
     })
 
-    expect(sender.send).toHaveBeenCalledWith(ipcChannels.chat.operationEvent, {
+    expect(sender.send).toHaveBeenCalledWith(ipcChannels.chat.sessionEvent, {
       type: 'message-created',
       operationId: 'operation-1',
       session,
@@ -359,7 +359,7 @@ describe('registerIpcHandlers', () => {
       message
     })
 
-    expect(sender.send).toHaveBeenCalledWith(ipcChannels.chat.sendMessageEvent, {
+    expect(sender.send).toHaveBeenCalledWith(ipcChannels.chat.sessionEvent, {
       type: 'message-created',
       operationId: 'operation-1',
       session,

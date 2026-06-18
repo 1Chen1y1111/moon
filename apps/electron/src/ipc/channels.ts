@@ -23,9 +23,7 @@ export const ipcChannels = {
     cancelOperation: 'chat:cancelOperation',
     approveToolCall: 'chat:approveToolCall',
     rejectToolCall: 'chat:rejectToolCall',
-    sessionEvent: RPC_CHANNELS.sessions.event,
-    operationEvent: 'chat:operationEvent',
-    sendMessageEvent: 'chat:sendMessageEvent'
+    sessionEvent: RPC_CHANNELS.sessions.event
   },
   settings: {
     get: 'settings:get',

@@ -14,7 +14,6 @@ import type {
   CreateMessageTurnResult,
   MessageRecord,
   RunChatOperationResult,
-  SendMessageEvent,
   SendMessageResult,
   SessionRecord,
   ThreadRecord,
@@ -71,8 +70,6 @@ export type MockMoonApi = {
     approveToolCall: MockFn<(input: ApproveToolCallInput) => Promise<ToolInvocationRecord>>
     rejectToolCall: MockFn<(input: RejectToolCallInput) => Promise<ToolInvocationRecord>>
     onSessionEvent: MockFn<(listener: (event: ChatOperationEvent) => void) => () => void>
-    onOperationEvent: MockFn<(listener: (event: ChatOperationEvent) => void) => () => void>
-    onSendMessageEvent: MockFn<(listener: (event: SendMessageEvent) => void) => () => void>
   }
   settings: {
     get: MockFn<() => Promise<AppSettings>>
@@ -336,12 +333,6 @@ function createMockWindowApi(options: MockWindowApiOptions = {}): MockMoonApi {
         })),
       onSessionEvent: vi
         .fn<(listener: (event: ChatOperationEvent) => void) => () => void>()
-        .mockReturnValue(() => undefined),
-      onOperationEvent: vi
-        .fn<(listener: (event: ChatOperationEvent) => void) => () => void>()
-        .mockReturnValue(() => undefined),
-      onSendMessageEvent: vi
-        .fn<(listener: (event: SendMessageEvent) => void) => () => void>()
         .mockReturnValue(() => undefined)
     },
     settings: {

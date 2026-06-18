@@ -184,35 +184,6 @@ describe('preload api', () => {
     expect(ipcOffMock).toHaveBeenCalledWith(ipcChannels.settings.onChange, handler)
   })
 
-  it('cleans up the chat operation event subscription', async () => {
-    await import('@preload/index')
-
-    const api = getExposedApi()
-    const listener = vi.fn()
-    const event = {
-      type: 'message-delta',
-      operationId: 'operation-1',
-      sessionId: 'session-1',
-      topicId: 'topic-1',
-      threadId: 'thread-1',
-      messageId: 'message-1',
-      delta: 'hello'
-    } as const
-
-    const unsubscribe = api.chat.onOperationEvent(listener)
-    const handler = ipcOnMock.mock.calls.find(
-      ([channel]) => channel === ipcChannels.chat.operationEvent
-    )?.[1]
-
-    expect(handler).toBeTypeOf('function')
-
-    handler?.({}, event)
-    unsubscribe()
-
-    expect(listener).toHaveBeenCalledWith(event)
-    expect(ipcOffMock).toHaveBeenCalledWith(ipcChannels.chat.operationEvent, handler)
-  })
-
   it('cleans up the unified session event subscription', async () => {
     await import('@preload/index')
 
@@ -266,32 +237,4 @@ describe('preload api', () => {
     expect(ipcOffMock).toHaveBeenCalledWith(ipcChannels.projects.onChange, handler)
   })
 
-  it('cleans up the legacy chat send message event subscription', async () => {
-    await import('@preload/index')
-
-    const api = getExposedApi()
-    const listener = vi.fn()
-    const event = {
-      type: 'message-delta',
-      operationId: 'operation-1',
-      sessionId: 'session-1',
-      topicId: 'topic-1',
-      threadId: 'thread-1',
-      messageId: 'message-1',
-      delta: 'hello'
-    } as const
-
-    const unsubscribe = api.chat.onSendMessageEvent(listener)
-    const handler = ipcOnMock.mock.calls.find(
-      ([channel]) => channel === ipcChannels.chat.sendMessageEvent
-    )?.[1]
-
-    expect(handler).toBeTypeOf('function')
-
-    handler?.({}, event)
-    unsubscribe()
-
-    expect(listener).toHaveBeenCalledWith(event)
-    expect(ipcOffMock).toHaveBeenCalledWith(ipcChannels.chat.sendMessageEvent, handler)
-  })
 })

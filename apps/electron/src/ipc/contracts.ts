@@ -10,7 +10,6 @@ import type {
   CreateMessageTurnResult,
   MessageRecord,
   RunChatOperationResult,
-  SendMessageEvent,
   SendMessageResult,
   SessionRecord,
   ThreadRecord,
@@ -196,8 +195,6 @@ export type MoonApi = {
     approveToolCall: (input: ApproveToolCallInput) => Promise<ToolInvocationRecord>
     rejectToolCall: (input: RejectToolCallInput) => Promise<ToolInvocationRecord>
     onSessionEvent: (listener: (event: ChatOperationEvent) => void) => () => void
-    onOperationEvent: (listener: (event: ChatOperationEvent) => void) => () => void
-    onSendMessageEvent: (listener: (event: SendMessageEvent) => void) => () => void
   }
   settings: {
     get: () => Promise<AppSettings>

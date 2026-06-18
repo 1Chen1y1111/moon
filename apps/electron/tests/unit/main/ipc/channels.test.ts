@@ -21,8 +21,6 @@ describe('ipcChannels', () => {
     expect(ipcChannels.chat.approveToolCall).toBe('chat:approveToolCall')
     expect(ipcChannels.chat.rejectToolCall).toBe('chat:rejectToolCall')
     expect(ipcChannels.chat.sessionEvent).toBe(RPC_CHANNELS.sessions.event)
-    expect(ipcChannels.chat.operationEvent).toBe('chat:operationEvent')
-    expect(ipcChannels.chat.sendMessageEvent).toBe('chat:sendMessageEvent')
   })
 
   it('defines a dedicated channel for opening the settings window', () => {

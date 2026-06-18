@@ -47,7 +47,7 @@ export function createSessionIpcRpcServer(): RpcServerPort<SessionRpcRequestCont
       const ipcChannel = resolveSessionIpcChannel(channel)
 
       ipcMain.handle(ipcChannel, (event, ...args: unknown[]) =>
-        handler(createSessionIpcRequestContext(channel, event), ...(args as unknown as TArgs))
+        handler(createSessionIpcRequestContext(event), ...(args as unknown as TArgs))
       )
     }
   }
@@ -70,21 +70,19 @@ function resolveSessionIpcChannel(channel: string): string {
  * 为单次 IPC 调用创建 request context，内部 `session:event` 会回到当前调用窗口。
  */
 function createSessionIpcRequestContext(
-  channel: string,
   event: IpcMainInvokeEvent
 ): SessionRpcRequestContext {
   return {
     emitSessionEvent: (eventChannel, operationEvent) => {
-      emitLegacyChatEvent(channel, eventChannel, operationEvent, event)
+      emitSessionEvent(eventChannel, operationEvent, event)
     }
   }
 }
 
 /**
- * 根据不同会话运行入口发送统一 `session:event`，并保留旧 IPC 事件 channel。
+ * 把内部 `session:event` 发送到当前调用窗口。
  */
-function emitLegacyChatEvent(
-  channel: string,
+function emitSessionEvent(
   eventChannel: typeof RPC_CHANNELS.sessions.event,
   operationEvent: ChatOperationEvent,
   event: IpcMainInvokeEvent
@@ -94,13 +92,4 @@ function emitLegacyChatEvent(
   }
 
   event.sender.send(ipcChannels.chat.sessionEvent, operationEvent)
-
-  if (channel === RPC_CHANNELS.sessions.runOperation) {
-    event.sender.send(ipcChannels.chat.operationEvent, operationEvent)
-    return
-  }
-
-  if (channel === RPC_CHANNELS.sessions.sendMessage) {
-    event.sender.send(ipcChannels.chat.sendMessageEvent, operationEvent)
-  }
 }
