@@ -10,7 +10,7 @@ import {
   createAgent,
   createBackend,
   getAvailableAgentProviders,
-  PiAgent
+  piBackendNotWiredMessage
 } from '../../../src/agent'
 
 describe('agent backend factory', () => {
@@ -30,81 +30,43 @@ describe('agent backend factory', () => {
     expect(backend.getModel()).toBe('claude-sonnet-4-5')
   })
 
-  it('creates a Pi placeholder for Anthropic Messages pi_compat config', async () => {
-    const backend = createAgent({
-      provider: 'pi_compat',
-      model: 'compat-model',
-      apiKey: 'test-key',
-      baseUrl: 'https://compat.example.com',
-      customEndpoint: { api: 'anthropic-messages' },
-      messages: [{ role: 'user', content: 'hello' }]
-    })
-    const events = []
-
-    for await (const event of backend.chat('hello')) {
-      events.push(event)
-    }
-
-    expect(backend).toBeInstanceOf(PiAgent)
-    expect(backend.getModel()).toBe('compat-model')
-    expect(events).toEqual([
-      {
-        type: 'error',
-        message:
-          'Pi backend is not wired yet. Configure an Anthropic-compatible connection for now.'
-      }
-    ])
+  it('rejects Anthropic Messages pi_compat config while Pi is not wired', () => {
+    expect(() =>
+      createAgent({
+        provider: 'pi_compat',
+        model: 'compat-model',
+        apiKey: 'test-key',
+        baseUrl: 'https://compat.example.com',
+        customEndpoint: { api: 'anthropic-messages' },
+        messages: [{ role: 'user', content: 'hello' }]
+      })
+    ).toThrow(piBackendNotWiredMessage)
   })
 
-  it('creates a Pi placeholder for OpenAI Chat Completions pi_compat config', async () => {
-    const backend = createAgent({
-      provider: 'pi_compat',
-      model: 'deepseek-v4-flash',
-      apiKey: 'test-key',
-      baseUrl: 'https://api.deepseek.com',
-      customEndpoint: { api: 'openai-completions' },
-      messages: [{ role: 'user', content: 'hello' }]
-    })
-    const events = []
-
-    for await (const event of backend.chat('hello')) {
-      events.push(event)
-    }
-
-    expect(backend).toBeInstanceOf(PiAgent)
-    expect(backend.getModel()).toBe('deepseek-v4-flash')
-    expect(events).toEqual([
-      {
-        type: 'error',
-        message:
-          'Pi backend is not wired yet. Configure an Anthropic-compatible connection for now.'
-      }
-    ])
+  it('rejects OpenAI Chat Completions pi_compat config while Pi is not wired', () => {
+    expect(() =>
+      createAgent({
+        provider: 'pi_compat',
+        model: 'deepseek-v4-flash',
+        apiKey: 'test-key',
+        baseUrl: 'https://api.deepseek.com',
+        customEndpoint: { api: 'openai-completions' },
+        messages: [{ role: 'user', content: 'hello' }]
+      })
+    ).toThrow(piBackendNotWiredMessage)
   })
 
   it('keeps createBackend as a compatibility alias', () => {
     expect(createBackend).toBe(createAgent)
   })
 
-  it('creates a Pi placeholder backend for Pi config', async () => {
-    const backend = createAgent({
-      provider: 'pi',
-      model: 'gpt-5',
-      messages: []
-    })
-    const events = []
-
-    for await (const event of backend.chat('hello')) {
-      events.push(event)
-    }
-
-    expect(backend).toBeInstanceOf(PiAgent)
-    expect(events).toEqual([
-      {
-        type: 'error',
-        message:
-          'Pi backend is not wired yet. Configure an Anthropic-compatible connection for now.'
-      }
-    ])
+  it('rejects Pi config while Pi is not wired', () => {
+    expect(() =>
+      createAgent({
+        provider: 'pi',
+        model: 'gpt-5',
+        messages: []
+      })
+    ).toThrow(piBackendNotWiredMessage)
   })
 })

@@ -1,9 +1,8 @@
 /**
  * 负责 Pi provider 的 agent backend driver。
- * 当前只创建占位 PiAgent，实际 Pi SDK/子进程接入会继续收敛在此 driver 下。
+ * 当前只保留未来 Pi 子进程 runtime 的接线边界，不创建占位 agent。
  */
 
-import { PiAgent } from '../../../pi-agent'
 import { piBackendNotWiredMessage } from '../../../connection-adapter'
 import type { AgentBackendDriver } from '../driver-types'
 
@@ -11,9 +10,9 @@ export const piDriver: AgentBackendDriver = {
   provider: 'pi',
 
   /**
-   * 创建当前阶段的 Pi 占位 agent 实例。
+   * 明确拒绝创建 Pi backend，直到 Pi 子进程和 JSONL 协议接入完成。
    */
-  createAgent(config) {
-    return new PiAgent({ model: config.model, notWiredMessage: piBackendNotWiredMessage })
+  createAgent() {
+    throw new Error(piBackendNotWiredMessage)
   }
 }

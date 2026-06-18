@@ -3,7 +3,6 @@
  * 当前 Pi-compatible 语义保留给未来 Pi 子进程 runtime，不再直连 HTTP 兼容端点。
  */
 
-import { PiAgent } from '../../../pi-agent'
 import { piBackendNotWiredMessage } from '../../../connection-adapter'
 import type { AgentBackendDriver } from '../driver-types'
 
@@ -11,12 +10,9 @@ export const piCompatDriver: AgentBackendDriver = {
   provider: 'pi_compat',
 
   /**
-   * 返回 Pi-compatible 占位 agent；真实执行会在 Pi 子进程协议接入后落到这里。
+   * 明确拒绝创建 Pi-compatible backend，直到 Pi 子进程协议接入完成。
    */
-  createAgent(config) {
-    return new PiAgent({
-      model: config.model,
-      notWiredMessage: piBackendNotWiredMessage
-    })
+  createAgent() {
+    throw new Error(piBackendNotWiredMessage)
   }
 }
