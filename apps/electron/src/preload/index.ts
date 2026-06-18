@@ -37,6 +37,17 @@ const api: MoonApi = {
     cancelOperation: (input) => invokeIpcChannel(ipcChannels.chat.cancelOperation, input),
     approveToolCall: (input) => invokeIpcChannel(ipcChannels.chat.approveToolCall, input),
     rejectToolCall: (input) => invokeIpcChannel(ipcChannels.chat.rejectToolCall, input),
+    onSessionEvent: (listener) => {
+      const channel = ipcChannels.chat.sessionEvent
+      const handler = (_event: unknown, payload: Parameters<typeof listener>[0]): void =>
+        listener(payload)
+
+      ipcRenderer.on(channel, handler)
+
+      return () => {
+        ipcRenderer.off(channel, handler)
+      }
+    },
     onOperationEvent: (listener) => {
       const channel = ipcChannels.chat.operationEvent
       const handler = (_event: unknown, payload: Parameters<typeof listener>[0]): void =>

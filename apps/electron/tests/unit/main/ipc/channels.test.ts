@@ -3,6 +3,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { ipcChannels } from '@ipc/channels'
+import { RPC_CHANNELS } from '@moon/shared/protocol'
 
 describe('ipcChannels', () => {
   it('defines chat IPC channels', () => {
@@ -19,6 +20,7 @@ describe('ipcChannels', () => {
     expect(ipcChannels.chat.cancelOperation).toBe('chat:cancelOperation')
     expect(ipcChannels.chat.approveToolCall).toBe('chat:approveToolCall')
     expect(ipcChannels.chat.rejectToolCall).toBe('chat:rejectToolCall')
+    expect(ipcChannels.chat.sessionEvent).toBe(RPC_CHANNELS.sessions.event)
     expect(ipcChannels.chat.operationEvent).toBe('chat:operationEvent')
     expect(ipcChannels.chat.sendMessageEvent).toBe('chat:sendMessageEvent')
   })

@@ -75,7 +75,7 @@ describe('createSessionIpcRpcServer', () => {
     handleMock.mockReset()
   })
 
-  it('maps runOperation session:event emissions to the legacy operation event channel', async () => {
+  it('maps runOperation session:event emissions to unified and legacy operation event channels', async () => {
     const { createSessionIpcRpcServer } = await import('@main/bootstrap/session-ipc-adapter')
     const { ipcChannels } = await import('@ipc/channels')
     const { RPC_CHANNELS } = await import('@moon/shared/protocol')
@@ -92,10 +92,11 @@ describe('createSessionIpcRpcServer', () => {
     expect(
       getRegisteredHandler(ipcChannels.chat.runOperation)?.({ sender }, { operationId: 'op-1' })
     ).toEqual({ operationId: 'op-1' })
+    expect(sender.send).toHaveBeenCalledWith(ipcChannels.chat.sessionEvent, operationEvent)
     expect(sender.send).toHaveBeenCalledWith(ipcChannels.chat.operationEvent, operationEvent)
   })
 
-  it('maps sendMessage session:event emissions to the legacy send message event channel', async () => {
+  it('maps sendMessage session:event emissions to unified and legacy send message event channels', async () => {
     const { createSessionIpcRpcServer } = await import('@main/bootstrap/session-ipc-adapter')
     const { ipcChannels } = await import('@ipc/channels')
     const { RPC_CHANNELS } = await import('@moon/shared/protocol')
@@ -112,6 +113,7 @@ describe('createSessionIpcRpcServer', () => {
     expect(
       getRegisteredHandler(ipcChannels.chat.sendMessage)?.({ sender }, { content: 'hello' })
     ).toEqual({ content: 'hello' })
+    expect(sender.send).toHaveBeenCalledWith(ipcChannels.chat.sessionEvent, operationEvent)
     expect(sender.send).toHaveBeenCalledWith(ipcChannels.chat.sendMessageEvent, operationEvent)
   })
 })

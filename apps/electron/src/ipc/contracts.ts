@@ -195,6 +195,7 @@ export type MoonApi = {
     cancelOperation: (input: CancelAgentOperationInput) => Promise<AgentOperationRecord>
     approveToolCall: (input: ApproveToolCallInput) => Promise<ToolInvocationRecord>
     rejectToolCall: (input: RejectToolCallInput) => Promise<ToolInvocationRecord>
+    onSessionEvent: (listener: (event: ChatOperationEvent) => void) => () => void
     onOperationEvent: (listener: (event: ChatOperationEvent) => void) => () => void
     onSendMessageEvent: (listener: (event: SendMessageEvent) => void) => () => void
   }

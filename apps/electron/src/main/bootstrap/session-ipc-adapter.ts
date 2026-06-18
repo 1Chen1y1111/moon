@@ -81,7 +81,7 @@ function createSessionIpcRequestContext(
 }
 
 /**
- * 根据不同会话运行入口把内部 `session:event` 转换成旧 IPC 事件 channel。
+ * 根据不同会话运行入口发送统一 `session:event`，并保留旧 IPC 事件 channel。
  */
 function emitLegacyChatEvent(
   channel: string,
@@ -92,6 +92,8 @@ function emitLegacyChatEvent(
   if (eventChannel !== RPC_CHANNELS.sessions.event) {
     return
   }
+
+  event.sender.send(ipcChannels.chat.sessionEvent, operationEvent)
 
   if (channel === RPC_CHANNELS.sessions.runOperation) {
     event.sender.send(ipcChannels.chat.operationEvent, operationEvent)

@@ -70,6 +70,7 @@ export type MockMoonApi = {
     cancelOperation: MockFn<(input: CancelAgentOperationInput) => Promise<AgentOperationRecord>>
     approveToolCall: MockFn<(input: ApproveToolCallInput) => Promise<ToolInvocationRecord>>
     rejectToolCall: MockFn<(input: RejectToolCallInput) => Promise<ToolInvocationRecord>>
+    onSessionEvent: MockFn<(listener: (event: ChatOperationEvent) => void) => () => void>
     onOperationEvent: MockFn<(listener: (event: ChatOperationEvent) => void) => () => void>
     onSendMessageEvent: MockFn<(listener: (event: SendMessageEvent) => void) => () => void>
   }
@@ -333,6 +334,9 @@ function createMockWindowApi(options: MockWindowApiOptions = {}): MockMoonApi {
           createdAt: '2026-05-09T00:00:00.000Z',
           updatedAt: '2026-05-09T00:00:01.000Z'
         })),
+      onSessionEvent: vi
+        .fn<(listener: (event: ChatOperationEvent) => void) => () => void>()
+        .mockReturnValue(() => undefined),
       onOperationEvent: vi
         .fn<(listener: (event: ChatOperationEvent) => void) => () => void>()
         .mockReturnValue(() => undefined),

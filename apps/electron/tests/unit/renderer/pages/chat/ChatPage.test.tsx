@@ -674,7 +674,7 @@ describe('ChatPage', () => {
 
     expect(screen.getByText('流式测试')).toBeInTheDocument()
 
-    const streamListener = api.chat.onOperationEvent.mock.calls[0][0]
+    const streamListener = api.chat.onSessionEvent.mock.calls[0][0]
     act(() => {
       streamListener({
         type: 'message-delta',
