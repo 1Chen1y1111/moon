@@ -14,7 +14,8 @@ import {
   type RpcRequestHandler,
   type RpcServerPort,
   type SessionEventSink,
-  type SessionHandlers
+  type SessionHandlers,
+  type SessionRpcRequestContext
 } from '@moon/server-core'
 import type {
   AgentOperationRecord,
@@ -29,7 +30,7 @@ import type {
   TopicRecord
 } from '@moon/shared/domain/chat'
 
-type RegisteredHandlers = Map<string, RpcRequestHandler>
+type RegisteredHandlers = Map<string, RpcRequestHandler<SessionRpcRequestContext>>
 
 const timestamp = '2026-05-09T00:00:00.000Z'
 
@@ -194,9 +195,9 @@ function createSessionHandlersFixture(): {
 
 function createRpcServerFixture() {
   const registeredHandlers: RegisteredHandlers = new Map()
-  const server: RpcServerPort = {
+  const server: RpcServerPort<SessionRpcRequestContext> = {
     handle: (channel, handler) => {
-      registeredHandlers.set(channel, handler as RpcRequestHandler)
+      registeredHandlers.set(channel, handler as RpcRequestHandler<SessionRpcRequestContext>)
     }
   }
   const handleSpy = vi.spyOn(server, 'handle')
@@ -211,7 +212,8 @@ function createRpcServerFixture() {
 async function invokeRegisteredHandler(
   registeredHandlers: RegisteredHandlers,
   channel: string,
-  input?: unknown
+  input?: unknown,
+  context: SessionRpcRequestContext = {}
 ): Promise<unknown> {
   const handler = registeredHandlers.get(channel)
 
@@ -219,7 +221,7 @@ async function invokeRegisteredHandler(
     throw new Error(`Missing registered handler for ${channel}`)
   }
 
-  return input === undefined ? handler() : handler(input)
+  return input === undefined ? handler(context) : handler(context, input)
 }
 
 describe('registerSessionHandlers', () => {
@@ -239,7 +241,7 @@ describe('registerSessionHandlers', () => {
     const { registeredHandlers, server } = createRpcServerFixture()
     const eventSink = vi.fn() satisfies SessionEventSink
 
-    registerSessionHandlers(server, { sessionHandlers, eventSink })
+    registerSessionHandlers(server, { sessionHandlers })
 
     await expect(
       invokeRegisteredHandler(registeredHandlers, RPC_CHANNELS.sessions.listSessions)
@@ -283,12 +285,12 @@ describe('registerSessionHandlers', () => {
     await expect(
       invokeRegisteredHandler(registeredHandlers, RPC_CHANNELS.sessions.runOperation, {
         operationId: 'operation-1'
-      })
+      }, { eventSink })
     ).resolves.toBe(values.runResult)
     await expect(
       invokeRegisteredHandler(registeredHandlers, RPC_CHANNELS.sessions.sendMessage, {
         content: 'hello'
-      })
+      }, { eventSink })
     ).resolves.toBe(values.sendResult)
     await expect(
       invokeRegisteredHandler(registeredHandlers, RPC_CHANNELS.sessions.cancelOperation, {

@@ -41,53 +41,62 @@ export const HANDLED_SESSION_CHANNELS = [
 ] as const
 
 /**
+ * sessions RPC 请求上下文，承载当前调用方可用的事件出口。
+ */
+export type SessionRpcRequestContext = {
+  eventSink?: SessionEventSink
+}
+
+/**
  * 注册 sessions RPC handlers 所需的运行时依赖。
  */
 export type RegisterSessionHandlersDependencies = {
   sessionHandlers: SessionHandlers
-  eventSink?: SessionEventSink
 }
 
 /**
  * 注册 sessions RPC handlers，并把所有调用委托给已创建好的 SessionHandlers。
  */
 export function registerSessionHandlers(
-  server: RpcServerPort,
-  { sessionHandlers, eventSink }: RegisterSessionHandlersDependencies
+  server: RpcServerPort<SessionRpcRequestContext>,
+  { sessionHandlers }: RegisterSessionHandlersDependencies
 ): void {
   server.handle(RPC_CHANNELS.sessions.listSessions, () => sessionHandlers.listSessions())
-  server.handle(RPC_CHANNELS.sessions.getMessages, (input: GetChatMessagesInput) =>
+  server.handle(RPC_CHANNELS.sessions.getMessages, (_context, input: GetChatMessagesInput) =>
     sessionHandlers.getMessages(input)
   )
-  server.handle(RPC_CHANNELS.sessions.listTopics, (input: ListChatTopicsInput) =>
+  server.handle(RPC_CHANNELS.sessions.listTopics, (_context, input: ListChatTopicsInput) =>
     sessionHandlers.listTopics(input)
   )
-  server.handle(RPC_CHANNELS.sessions.listThreads, (input: ListChatThreadsInput) =>
+  server.handle(RPC_CHANNELS.sessions.listThreads, (_context, input: ListChatThreadsInput) =>
     sessionHandlers.listThreads(input)
   )
   server.handle(RPC_CHANNELS.sessions.createSession, () => sessionHandlers.createSession())
-  server.handle(RPC_CHANNELS.sessions.deleteSession, (input: DeleteChatSessionInput) =>
+  server.handle(RPC_CHANNELS.sessions.deleteSession, (_context, input: DeleteChatSessionInput) =>
     sessionHandlers.deleteSession(input)
   )
-  server.handle(RPC_CHANNELS.sessions.importAttachment, (input: ImportChatAttachmentInput) =>
-    sessionHandlers.importAttachment(input)
+  server.handle(
+    RPC_CHANNELS.sessions.importAttachment,
+    (_context, input: ImportChatAttachmentInput) => sessionHandlers.importAttachment(input)
   )
-  server.handle(RPC_CHANNELS.sessions.createMessageTurn, (input: CreateMessageTurnInput) =>
-    sessionHandlers.createMessageTurn(input)
+  server.handle(
+    RPC_CHANNELS.sessions.createMessageTurn,
+    (_context, input: CreateMessageTurnInput) => sessionHandlers.createMessageTurn(input)
   )
-  server.handle(RPC_CHANNELS.sessions.runOperation, (input: RunChatOperationInput) =>
-    sessionHandlers.runOperation(input, eventSink)
+  server.handle(RPC_CHANNELS.sessions.runOperation, (context, input: RunChatOperationInput) =>
+    sessionHandlers.runOperation(input, context.eventSink)
   )
-  server.handle(RPC_CHANNELS.sessions.sendMessage, (input: SendChatMessageInput) =>
-    sessionHandlers.sendMessage(input, eventSink)
+  server.handle(RPC_CHANNELS.sessions.sendMessage, (context, input: SendChatMessageInput) =>
+    sessionHandlers.sendMessage(input, context.eventSink)
   )
-  server.handle(RPC_CHANNELS.sessions.cancelOperation, (input: CancelAgentOperationInput) =>
-    sessionHandlers.cancelOperation(input)
+  server.handle(
+    RPC_CHANNELS.sessions.cancelOperation,
+    (_context, input: CancelAgentOperationInput) => sessionHandlers.cancelOperation(input)
   )
-  server.handle(RPC_CHANNELS.sessions.approveToolCall, (input: ApproveToolCallInput) =>
+  server.handle(RPC_CHANNELS.sessions.approveToolCall, (_context, input: ApproveToolCallInput) =>
     sessionHandlers.approveToolCall(input)
   )
-  server.handle(RPC_CHANNELS.sessions.rejectToolCall, (input: RejectToolCallInput) =>
+  server.handle(RPC_CHANNELS.sessions.rejectToolCall, (_context, input: RejectToolCallInput) =>
     sessionHandlers.rejectToolCall(input)
   )
 }

@@ -7,19 +7,20 @@
  * transport adapter 调用 server-core handler 时使用的最小请求函数形态。
  */
 export type RpcRequestHandler<
+  TContext = unknown,
   TArgs extends readonly unknown[] = readonly unknown[],
   TResult = unknown
-> = (...args: TArgs) => TResult | Promise<TResult>
+> = (context: TContext, ...args: TArgs) => TResult | Promise<TResult>
 
 /**
  * server-core 注册 handler 所依赖的最小 RPC server 端口。
  */
-export type RpcServerPort = {
+export type RpcServerPort<TContext = unknown> = {
   /**
    * 注册一个 RPC channel 的请求处理函数，生命周期由具体 transport adapter 负责。
    */
   handle: <TArgs extends readonly unknown[], TResult>(
     channel: string,
-    handler: RpcRequestHandler<TArgs, TResult>
+    handler: RpcRequestHandler<TContext, TArgs, TResult>
   ) => void
 }

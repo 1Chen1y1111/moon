@@ -7,10 +7,12 @@ import { BrowserWindow, ipcMain } from 'electron'
 
 import { ipcChannels } from '@ipc/channels'
 import { openSettingsInputSchema } from '@ipc/window-contracts'
+import { registerSessionHandlers } from '@moon/server-core/handlers/rpc'
 import type { AppSettings } from '@moon/shared/domain/settings'
 import type { ChatService } from '../services/chat-service'
 import type { ProjectsService } from '../services/projects-service'
 import type { SettingsService } from '../services/settings-service'
+import { createSessionIpcRpcServer } from './session-ipc-adapter'
 
 type RegisterIpcDependencies = {
   chatService: ChatService
@@ -80,39 +82,7 @@ export function registerIpcHandlers({
   ipcMain.removeHandler(ipcChannels.window.openSettings)
   ipcMain.removeHandler(ipcChannels.window.getState)
 
-  ipcMain.handle(ipcChannels.chat.listSessions, () => chatService.listSessions())
-  ipcMain.handle(ipcChannels.chat.getMessages, (_event, input) => chatService.getMessages(input))
-  ipcMain.handle(ipcChannels.chat.listTopics, (_event, input) => chatService.listTopics(input))
-  ipcMain.handle(ipcChannels.chat.listThreads, (_event, input) => chatService.listThreads(input))
-  ipcMain.handle(ipcChannels.chat.createSession, () => chatService.createSession())
-  ipcMain.handle(ipcChannels.chat.deleteSession, (_event, input) =>
-    chatService.deleteSession(input)
-  )
-  ipcMain.handle(ipcChannels.chat.importAttachment, (_event, input) =>
-    chatService.importAttachment(input)
-  )
-  ipcMain.handle(ipcChannels.chat.createMessageTurn, (_event, input) =>
-    chatService.createMessageTurn(input)
-  )
-  ipcMain.handle(ipcChannels.chat.runOperation, (event, input) =>
-    chatService.runOperation(input, (operationEvent) => {
-      event.sender.send(ipcChannels.chat.operationEvent, operationEvent)
-    })
-  )
-  ipcMain.handle(ipcChannels.chat.sendMessage, (event, input) =>
-    chatService.sendMessage(input, (messageEvent) => {
-      event.sender.send(ipcChannels.chat.sendMessageEvent, messageEvent)
-    })
-  )
-  ipcMain.handle(ipcChannels.chat.cancelOperation, (_event, input) =>
-    chatService.cancelOperation(input)
-  )
-  ipcMain.handle(ipcChannels.chat.approveToolCall, (_event, input) =>
-    chatService.approveToolCall(input)
-  )
-  ipcMain.handle(ipcChannels.chat.rejectToolCall, (_event, input) =>
-    chatService.rejectToolCall(input)
-  )
+  registerSessionHandlers(createSessionIpcRpcServer(), { sessionHandlers: chatService })
   ipcMain.handle(ipcChannels.settings.get, () => settingsService.getSettings())
   ipcMain.handle(ipcChannels.settings.createCustomProvider, async (_event, input) => {
     const settings = await settingsService.createCustomProvider(input)
