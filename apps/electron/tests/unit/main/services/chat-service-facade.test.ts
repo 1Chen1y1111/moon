@@ -5,13 +5,17 @@
  * 会话运行时行为由 server-core SessionManager 单测覆盖。
  */
 
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { ChatService } from '@main/services/chat-service'
 import type { SessionRecord } from '@moon/shared/domain/chat'
 
 describe('ChatService facade', () => {
-  it('forwards listSessions to the injected session runtime dependencies', async () => {
+  afterEach(() => {
+    vi.resetModules()
+    vi.doUnmock('@moon/server-core/sessions')
+  })
+
+  it('forwards listSessions through server-core session handlers', async () => {
     const sessions: SessionRecord[] = [
       {
         id: 'session-1',
@@ -24,15 +28,39 @@ describe('ChatService facade', () => {
       }
     ]
     const list = vi.fn(async () => sessions)
-    const service = new ChatService({
+    const sessionManager = {}
+    const SessionManager = vi.fn(function MockSessionManager() {
+      return sessionManager
+    })
+    const createSessionHandlers = vi.fn(() => ({
+      listSessions: list
+    }))
+    const dependencies = {
       agentOperationsRepository: {} as never,
       messagesRepository: {} as never,
-      sessionsRepository: { list } as never,
+      sessionsRepository: {} as never,
       settingsRepository: {} as never,
       threadsRepository: {} as never,
       toolInvocationsRepository: {} as never,
       topicsRepository: {} as never
+    }
+
+    vi.doMock('@moon/server-core/sessions', async (importOriginal) => {
+      const actual = await importOriginal<typeof import('@moon/server-core/sessions')>()
+
+      return {
+        ...actual,
+        SessionManager,
+        createSessionHandlers
+      }
     })
+
+    const { ChatService } = await import('@main/services/chat-service')
+
+    const service = new ChatService(dependencies)
+
+    expect(SessionManager).toHaveBeenCalledWith(dependencies)
+    expect(createSessionHandlers).toHaveBeenCalledWith({ sessionManager })
 
     await expect(service.listSessions()).resolves.toBe(sessions)
     expect(list).toHaveBeenCalledOnce()

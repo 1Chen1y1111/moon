@@ -4,3 +4,4 @@
  */
 
 export * from './session-manager'
+export * from './handlers'

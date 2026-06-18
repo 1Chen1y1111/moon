@@ -5,13 +5,15 @@
 
 import {
   SessionManager,
+  createSessionHandlers,
   createChatTitle,
   isOpenAICompatibleProvider,
   isSupportedChatProvider,
   selectChatModel,
   selectDefaultChatProvider,
+  type SessionEventSink,
+  type SessionHandlers,
   type SessionManagerDependencies,
-  type SessionOperationEventListener
 } from '@moon/server-core/sessions'
 import type {
   AgentOperationRecord,
@@ -48,72 +50,74 @@ export {
 }
 
 export type ChatServiceDependencies = SessionManagerDependencies
-export type ChatOperationEventListener = SessionOperationEventListener
+export type ChatOperationEventListener = SessionEventSink
 
 /**
  * 维持 Electron main 侧原有 ChatService API，并把会话运行时调用转交给 SessionManager。
  */
 export class ChatService {
-  private readonly sessionManager: SessionManager
+  private readonly sessionHandlers: SessionHandlers
 
   constructor(dependencies: ChatServiceDependencies) {
-    this.sessionManager = new SessionManager(dependencies)
+    const sessionManager = new SessionManager(dependencies)
+
+    this.sessionHandlers = createSessionHandlers({ sessionManager })
   }
 
   /**
    * 列出当前持久化的聊天会话。
    */
   listSessions(): Promise<SessionRecord[]> {
-    return this.sessionManager.listSessions()
+    return this.sessionHandlers.listSessions()
   }
 
   /**
    * 列出指定会话下的话题。
    */
   listTopics(input: ListChatTopicsInput): Promise<TopicRecord[]> {
-    return this.sessionManager.listTopics(input)
+    return this.sessionHandlers.listTopics(input)
   }
 
   /**
    * 列出指定话题下的线程。
    */
   listThreads(input: ListChatThreadsInput): Promise<ThreadRecord[]> {
-    return this.sessionManager.listThreads(input)
+    return this.sessionHandlers.listThreads(input)
   }
 
   /**
    * 读取指定线程或会话默认线程的消息列表。
    */
   getMessages(input: GetChatMessagesInput): Promise<MessageRecord[]> {
-    return this.sessionManager.getMessages(input)
+    return this.sessionHandlers.getMessages(input)
   }
 
   /**
    * 创建一个空聊天会话并保留现有默认 provider/connection 解析语义。
    */
   createSession(): Promise<SessionRecord> {
-    return this.sessionManager.createSession()
+    return this.sessionHandlers.createSession()
   }
 
   /**
    * 删除指定聊天会话。
    */
   deleteSession(input: DeleteChatSessionInput): Promise<void> {
-    return this.sessionManager.deleteSession(input)
+    return this.sessionHandlers.deleteSession(input)
   }
 
   /**
    * 导入聊天附件并返回可持久化的附件记录。
    */
   importAttachment(input: ImportChatAttachmentInput): Promise<ChatAttachmentRecord> {
-    return this.sessionManager.importAttachment(input)
+    return this.sessionHandlers.importAttachment(input)
   }
 
   /**
    * 创建消息 turn，但不启动模型执行。
    */
   createMessageTurn(input: CreateMessageTurnInput): Promise<CreateMessageTurnResult> {
-    return this.sessionManager.createMessageTurn(input)
+    return this.sessionHandlers.createMessageTurn(input)
   }
 
   /**
@@ -123,7 +127,7 @@ export class ChatService {
     input: RunChatOperationInput,
     onEvent?: ChatOperationEventListener
   ): Promise<RunChatOperationResult> {
-    return this.sessionManager.runOperation(input, onEvent)
+    return this.sessionHandlers.runOperation(input, onEvent)
   }
 
   /**
@@ -133,27 +137,27 @@ export class ChatService {
     input: SendChatMessageInput,
     onEvent?: ChatOperationEventListener
   ): Promise<SendMessageResult> {
-    return this.sessionManager.sendMessage(input, onEvent)
+    return this.sessionHandlers.sendMessage(input, onEvent)
   }
 
   /**
    * 取消正在运行的 operation。
    */
   cancelOperation(input: CancelAgentOperationInput): Promise<AgentOperationRecord> {
-    return this.sessionManager.cancelOperation(input)
+    return this.sessionHandlers.cancelOperation(input)
   }
 
   /**
    * 允许一个等待人工确认的工具调用。
    */
   approveToolCall(input: ApproveToolCallInput): Promise<ToolInvocationRecord> {
-    return this.sessionManager.approveToolCall(input)
+    return this.sessionHandlers.approveToolCall(input)
   }
 
   /**
    * 拒绝一个等待人工确认的工具调用。
    */
   rejectToolCall(input: RejectToolCallInput): Promise<ToolInvocationRecord> {
-    return this.sessionManager.rejectToolCall(input)
+    return this.sessionHandlers.rejectToolCall(input)
   }
 }

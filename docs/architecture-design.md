@@ -37,7 +37,7 @@ pnpm --filter @moon/ui typecheck
 
 - `@moon/electron` 是唯一应用包，拥有 Electron main/preload/renderer、IPC 合同、数据库 schema、migration 和打包资源。
 - `@moon/core` 只放最底层的会话、消息、用量和 agent event 类型；不得依赖 Electron、React、Drizzle、Zod 或具体 SDK。
-- `@moon/server-core` 放可复用会话运行时，例如 `SessionManager`。它可以依赖 `@moon/core` 和 `@moon/shared`，但不得依赖 Electron、React、renderer、IPC、Drizzle schema 或具体 repository 类；持久化能力通过接口注入。
+- `@moon/server-core` 放可复用会话运行时，例如 `SessionManager` 和 sessions handler。它可以依赖 `@moon/core` 和 `@moon/shared`，但不得依赖 Electron、React、renderer、IPC、Drizzle schema 或具体 repository 类；持久化能力通过接口注入。
 - `@moon/shared` 只放跨进程共享的纯领域模型、默认值、校验逻辑和 `agent/config` 抽象；不得依赖 Electron、React、Drizzle 运行时代码或 renderer-only 模块。
 - `@moon/ui` 只放可复用 UI primitive、ai-elements 和 `cn` 等 UI helper；业务组合继续放在 `apps/electron/src/renderer/src/features`、`components`、`layouts` 等目录。
 
@@ -50,7 +50,7 @@ pnpm --filter @moon/ui typecheck
 @renderer/...             apps/electron renderer 内部引用
 @tests/...                apps/electron 测试 helper
 @moon/core/types            core session/message/agent event 类型
-@moon/server-core/sessions  server runtime 的 SessionManager 入口
+@moon/server-core/sessions  server runtime 的 SessionManager 和 sessions handler 入口
 @moon/shared/agent          agent backend 抽象入口
 @moon/shared/config         LLM connection 配置模型
 @moon/shared/domain/...   workspace shared 领域模型
@@ -67,6 +67,7 @@ renderer feature
   -> preload typed invoke
   -> ipcMain handler
   -> Electron service facade
+  -> @moon/server-core sessions handler
   -> @moon/server-core SessionManager
   -> repository
   -> PGlite/Drizzle

@@ -99,7 +99,7 @@ Moon is an Electron desktop app. Keep the process boundaries explicit.
   contracts here before wiring main/preload/renderer behavior.
 - `packages/core/src/` is for pure core session, message, usage, and agent event types. It must
   not depend on Electron, React, Drizzle, Zod, concrete SDKs, or renderer-only modules.
-- `packages/server-core/src/` is for reusable session runtime code such as `SessionManager`.
+- `packages/server-core/src/` is for reusable session runtime and handler boundaries such as `SessionManager` and sessions handlers.
   It may depend on `@moon/core` and `@moon/shared`, but must not depend on Electron, React,
   renderer modules, IPC contracts, Drizzle schema, or concrete repository classes.
 - `packages/shared/src/` is for pure cross-process domain code, validation, and
