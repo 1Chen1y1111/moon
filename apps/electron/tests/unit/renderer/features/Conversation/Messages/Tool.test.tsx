@@ -106,13 +106,13 @@ describe('ToolInvocationList', () => {
     expect(screen.queryByRole('button', { name: '拒绝' })).not.toBeInTheDocument()
   })
 
-  it('renders local runtime tool output from the result payload', () => {
+  it('renders tool output from the result payload', () => {
     renderWithProviders(
       <ToolInvocationList
         toolInvocations={[
           createToolInvocation({
             arguments: { path: '.' },
-            name: 'list_dir',
+            name: 'LS',
             result: {
               title: '目录列表：.',
               output: 'dir apps\nfile package.json'

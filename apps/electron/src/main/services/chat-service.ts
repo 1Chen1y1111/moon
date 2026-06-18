@@ -13,7 +13,6 @@ import {
   createAgent,
   createConnectionAgentBackendConfig,
   createAgentBackendMessage,
-  buildAgentRuntimeSystemPrompt,
   createProviderLlmConnection,
   resolveConnectionAgentBackendProvider,
   type AgentBackend,
@@ -81,7 +80,6 @@ import {
 import type { ProviderSettings } from '@moon/shared/domain/settings'
 import type { ProviderId } from '@moon/shared/domain/provider'
 import type { SettingsRepository } from '../repositories/settings-repository'
-import { createAgentRuntimeBackend } from './agent-runtime-backend'
 
 const newChatTitle = '新聊天'
 const defaultTopicTitle = '默认话题'
@@ -235,69 +233,6 @@ function createPermissionRequestArguments(
  */
 function resolveRejectedToolReason(reason?: string): string {
   return reason?.trim() || 'Rejected by user.'
-}
-
-/**
- * 生成只存在于本轮 backend 调用里的项目上下文消息，不持久化为聊天消息。
- */
-function createProjectContextMessage(project: ProjectRecord): AgentBackendMessage {
-  return {
-    role: 'system',
-    content: buildAgentRuntimeSystemPrompt({
-      permissionMode: defaultAgentPermissionMode,
-      workspace: {
-        name: project.name,
-        path: project.path
-      }
-    })
-  }
-}
-
-/**
- * 判断用户是否明确要求运行一条 shell 命令，用于非 Claude SDK backend 的能力提示。
- */
-function isShellRunRequest(content: string): boolean {
-  return /^(?:运行|执行|run)\s+\S+/i.test(content.trim())
-}
-
-/**
- * 生成非 Claude SDK 连接下的工具能力提示；只有绑定项目并明确运行命令时才短路。
- */
-function createUnsupportedClaudeToolMessage(
-  connection: NormalizedLlmConnection,
-  content: string,
-  workspace?: AgentBackendConfig['workspace']
-): string | null {
-  if (
-    workspace === undefined ||
-    resolveConnectionAgentBackendProvider(connection) === 'anthropic' ||
-    !isShellRunRequest(content)
-  ) {
-    return null
-  }
-
-  const endpointApi = connection.customEndpoint?.api
-  const connectionProtocol =
-    endpointApi === undefined
-      ? `backend: ${connection.backend}`
-      : `backend: ${connection.backend}, customEndpoint: ${endpointApi}`
-
-  return [
-    `当前连接「${connection.name}」不是 Claude SDK 后端，无法触发 Claude Code Bash 工具审批。`,
-    `当前连接为 ${connectionProtocol}。`,
-    '请切换到 Claude SDK 连接后再运行该命令。'
-  ].join('')
-}
-
-/**
- * 创建只返回固定事件的 agent 事件流，用于无需调用底层模型的本地提示。
- */
-async function* createStaticAgentEventStream(
-  events: AgentEvent[]
-): AsyncGenerator<AgentEvent, void, void> {
-  for (const event of events) {
-    yield event
-  }
 }
 
 /**
@@ -970,10 +905,6 @@ export class ChatService {
           .map((message) => toAgentBackendMessage(message, this.attachmentsDirectory))
       )
     ).filter((message): message is AgentBackendMessage => message !== null)
-    const scopedBackendMessages =
-      scope.project === null
-        ? backendMessages
-        : [createProjectContextMessage(scope.project), ...backendMessages]
     const currentUserMessage =
       [...previousMessages].reverse().find((message) => message.role === 'user')?.content ?? ''
     const workspace =
@@ -983,44 +914,25 @@ export class ChatService {
             name: scope.project.name,
             path: scope.project.path
           }
-    const unsupportedClaudeToolMessage = createUnsupportedClaudeToolMessage(
-      connection,
-      currentUserMessage,
-      workspace
+    const agentBackend = this.createAgentBackend(
+      createConnectionAgentBackendConfig(
+        connection,
+        backendMessages,
+        workspace,
+        defaultAgentPermissionMode
+      )
     )
-    const agentBackend =
-      unsupportedClaudeToolMessage === null
-        ? createAgentRuntimeBackend({
-            delegate: this.createAgentBackend(
-              createConnectionAgentBackendConfig(
-                connection,
-                scopedBackendMessages,
-                workspace,
-                defaultAgentPermissionMode
-              )
-            ),
-            permissionMode: defaultAgentPermissionMode,
-            ...(workspace === undefined ? {} : { workspace })
-          })
-        : null
 
-    if (agentBackend !== null) {
-      this.activeAgentBackends.set(operation.id, agentBackend)
-    }
+    this.activeAgentBackends.set(operation.id, agentBackend)
 
     if (onEvent !== undefined) {
       this.operationEventListeners.set(operation.id, onEvent)
     }
 
     try {
-      const agentEvents =
-        unsupportedClaudeToolMessage === null
-          ? agentBackend!.chat(currentUserMessage, undefined, {
-              abortSignal: abortController.signal
-            })
-          : createStaticAgentEventStream([
-              { type: 'text_complete', text: unsupportedClaudeToolMessage }
-            ])
+      const agentEvents = agentBackend.chat(currentUserMessage, undefined, {
+        abortSignal: abortController.signal
+      })
       let agentEventResult = await agentEvents.next()
 
       while (!agentEventResult.done) {

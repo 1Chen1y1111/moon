@@ -666,7 +666,7 @@ describe('ChatService.sendMessage', () => {
     expect(sessionsRepository.sessions[0].provider).toBe('openrouter')
   })
 
-  it('binds new sessions to the active project and injects project context', async () => {
+  it('binds new sessions to the active project and passes workspace to backend config', async () => {
     const project = {
       id: 'project-1',
       name: 'moon',
@@ -699,13 +699,7 @@ describe('ChatService.sendMessage', () => {
           name: project.name,
           path: project.path
         },
-        permissionMode: 'ask',
-        messages: expect.arrayContaining([
-          expect.objectContaining({
-            role: 'system',
-            content: expect.stringContaining('/workspace/moon')
-          })
-        ])
+        permissionMode: 'ask'
       })
     )
   })
@@ -1282,42 +1276,6 @@ describe('ChatService.sendMessage', () => {
     expect(events.map((event) => (event as { type: string }).type)).toContain('tool-finish')
   })
 
-  it('runs explicit workspace tool commands through the local runtime', async () => {
-    const workspacePath = await mkdtemp(join(tmpdir(), 'moon-chat-runtime-'))
-
-    await writeFile(join(workspacePath, 'README.md'), 'hello moon runtime')
-
-    const project = {
-      id: 'project-1',
-      name: 'moon',
-      path: workspacePath,
-      createdAt: '2026-05-09T00:00:00.000Z',
-      updatedAt: '2026-05-09T00:00:00.000Z'
-    }
-    const events: unknown[] = []
-    const { service, toolInvocationsRepository } = createService({
-      activeProjectId: project.id,
-      agentEvents: [{ type: 'text_delta', text: 'delegate should not run' }],
-      projects: [project],
-      settings: createClaudeSettings()
-    })
-
-    const result = await service.sendMessage({ content: '/ls .' }, (event) => events.push(event))
-
-    expect(result.messages.map((message) => message.content).at(-1)).toContain('README.md')
-    expect(toolInvocationsRepository.invocations).toEqual([
-      expect.objectContaining({
-        name: 'list_dir',
-        result: expect.objectContaining({
-          output: expect.stringContaining('README.md')
-        }),
-        status: 'done'
-      })
-    ])
-    expect(events.map((event) => (event as { type: string }).type)).toContain('tool-start')
-    expect(events.map((event) => (event as { type: string }).type)).toContain('tool-finish')
-  })
-
   it('rejects command-like requests for Pi-compatible connections before backend creation', async () => {
     const project: ProjectRecord = {
       id: 'project-1',
@@ -1609,7 +1567,7 @@ describe('ChatService.deleteSession', () => {
   })
 })
 
-describe('ChatService two-stage runtime', () => {
+describe('ChatService two-stage operations', () => {
   beforeEach(() => {
     vi.clearAllMocks()
   })
