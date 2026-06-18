@@ -825,45 +825,30 @@ describe('ChatService.sendMessage', () => {
     expect(createAgentBackend).not.toHaveBeenCalled()
   })
 
-  it('refreshes an explicit provider-backed LLM connection from current provider settings', async () => {
+  it('rejects an explicit provider-backed Pi-compatible LLM connection instead of refreshing it', async () => {
     const deepseek = createDeepSeekAnthropicProviderWithOpenAiModel()
-    const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
-      void config
-      return createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
-    })
+    const createAgentBackend = vi.fn()
     const { service, sessionsRepository } = createService({
       createAgentBackend,
       llmConnections: [createDeepSeekCompatConnection()],
       settings: createSettings([deepseek])
     })
 
-    await service.sendMessage({
-      llmConnectionId: 'deepseek',
-      provider: 'deepseek',
-      content: 'hello'
-    })
-
-    expect(sessionsRepository.sessions[0]).toMatchObject({
-      provider: 'deepseek',
-      llmConnectionId: 'deepseek'
-    })
-    expect(createAgentBackend).toHaveBeenCalledWith(
-      expect.objectContaining({
-        provider: 'anthropic',
-        model: 'deepseek-v4-flash',
-        apiKey: 'stored-key',
-        baseUrl: 'https://api.deepseek.com/anthropic'
+    await expect(
+      service.sendMessage({
+        llmConnectionId: 'deepseek',
+        provider: 'deepseek',
+        content: 'hello'
       })
-    )
-    expect(createAgentBackend.mock.calls[0]?.[0]).not.toHaveProperty('customEndpoint')
+    ).rejects.toThrow('Pi backend is not wired yet')
+
+    expect(sessionsRepository.sessions).toEqual([])
+    expect(createAgentBackend).not.toHaveBeenCalled()
   })
 
-  it('refreshes a provider-backed LLM connection even when its id differs from provider id', async () => {
+  it('rejects provider-backed Pi-compatible LLM connections when ids differ from provider id', async () => {
     const deepseek = createDeepSeekAnthropicProviderWithOpenAiModel()
-    const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
-      void config
-      return createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
-    })
+    const createAgentBackend = vi.fn()
     const { service, sessionsRepository } = createService({
       createAgentBackend,
       llmConnections: [
@@ -875,25 +860,16 @@ describe('ChatService.sendMessage', () => {
       settings: createSettings([deepseek])
     })
 
-    await service.sendMessage({
-      llmConnectionId: 'deepseek-legacy',
-      provider: 'deepseek',
-      content: 'hello'
-    })
-
-    expect(sessionsRepository.sessions[0]).toMatchObject({
-      provider: 'deepseek',
-      llmConnectionId: 'deepseek-legacy'
-    })
-    expect(createAgentBackend).toHaveBeenCalledWith(
-      expect.objectContaining({
-        provider: 'anthropic',
-        model: 'deepseek-v4-flash',
-        apiKey: 'stored-key',
-        baseUrl: 'https://api.deepseek.com/anthropic'
+    await expect(
+      service.sendMessage({
+        llmConnectionId: 'deepseek-legacy',
+        provider: 'deepseek',
+        content: 'hello'
       })
-    )
-    expect(createAgentBackend.mock.calls[0]?.[0]).not.toHaveProperty('customEndpoint')
+    ).rejects.toThrow('Pi backend is not wired yet')
+
+    expect(sessionsRepository.sessions).toEqual([])
+    expect(createAgentBackend).not.toHaveBeenCalled()
   })
 
   it('rejects an explicit Pi-compatible LLM connection before the requested provider', async () => {
@@ -967,7 +943,7 @@ describe('ChatService.sendMessage', () => {
     expect(createAgentBackend).not.toHaveBeenCalled()
   })
 
-  it('refreshes a session provider-backed LLM connection from current provider settings', async () => {
+  it('rejects a session provider-backed Pi-compatible LLM connection instead of refreshing it', async () => {
     const session: SessionRecord = {
       id: 'session-1',
       llmConnectionId: 'deepseek',
@@ -979,10 +955,7 @@ describe('ChatService.sendMessage', () => {
       updatedAt: '2026-05-09T00:00:00.000Z'
     }
     const deepseek = createDeepSeekAnthropicProviderWithOpenAiModel()
-    const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
-      void config
-      return createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
-    })
+    const createAgentBackend = vi.fn()
     const { service } = createService({
       createAgentBackend,
       llmConnections: [createDeepSeekCompatConnection()],
@@ -990,20 +963,14 @@ describe('ChatService.sendMessage', () => {
       settings: createSettings([deepseek])
     })
 
-    await service.sendMessage({ sessionId: 'session-1', content: 'continue' })
+    await expect(
+      service.sendMessage({ sessionId: 'session-1', content: 'continue' })
+    ).rejects.toThrow('Pi backend is not wired yet')
 
-    expect(createAgentBackend).toHaveBeenCalledWith(
-      expect.objectContaining({
-        provider: 'anthropic',
-        model: 'deepseek-v4-flash',
-        apiKey: 'stored-key',
-        baseUrl: 'https://api.deepseek.com/anthropic'
-      })
-    )
-    expect(createAgentBackend.mock.calls[0]?.[0]).not.toHaveProperty('customEndpoint')
+    expect(createAgentBackend).not.toHaveBeenCalled()
   })
 
-  it('refreshes a legacy session LLM connection without providerId from the session provider', async () => {
+  it('rejects a legacy session Pi-compatible LLM connection without providerId', async () => {
     const session: SessionRecord = {
       id: 'session-1',
       llmConnectionId: 'deepseek-legacy',
@@ -1015,10 +982,7 @@ describe('ChatService.sendMessage', () => {
       updatedAt: '2026-05-09T00:00:00.000Z'
     }
     const deepseek = createDeepSeekAnthropicProviderWithOpenAiModel()
-    const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
-      void config
-      return createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
-    })
+    const createAgentBackend = vi.fn()
     const { service } = createService({
       createAgentBackend,
       llmConnections: [
@@ -1031,17 +995,11 @@ describe('ChatService.sendMessage', () => {
       settings: createSettings([deepseek])
     })
 
-    await service.sendMessage({ sessionId: 'session-1', content: 'continue' })
+    await expect(
+      service.sendMessage({ sessionId: 'session-1', content: 'continue' })
+    ).rejects.toThrow('Pi backend is not wired yet')
 
-    expect(createAgentBackend).toHaveBeenCalledWith(
-      expect.objectContaining({
-        provider: 'anthropic',
-        model: 'deepseek-v4-flash',
-        apiKey: 'stored-key',
-        baseUrl: 'https://api.deepseek.com/anthropic'
-      })
-    )
-    expect(createAgentBackend.mock.calls[0]?.[0]).not.toHaveProperty('customEndpoint')
+    expect(createAgentBackend).not.toHaveBeenCalled()
   })
 
   it('uses the requested provider for an existing session', async () => {
@@ -1306,7 +1264,7 @@ describe('ChatService.sendMessage', () => {
     expect(createAgentBackend).not.toHaveBeenCalled()
   })
 
-  it('refreshes legacy Anthropic Messages Pi-compatible connections through provider settings', async () => {
+  it('keeps legacy Anthropic Messages Pi-compatible connections unavailable during provider refresh', async () => {
     const project: ProjectRecord = {
       id: 'project-1',
       name: 'moon',
@@ -1314,10 +1272,7 @@ describe('ChatService.sendMessage', () => {
       createdAt: '2026-05-09T00:00:00.000Z',
       updatedAt: '2026-05-09T00:00:00.000Z'
     }
-    const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
-      void config
-      return createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
-    })
+    const createAgentBackend = vi.fn()
     const { service } = createService({
       activeProjectId: project.id,
       createAgentBackend,
@@ -1326,18 +1281,11 @@ describe('ChatService.sendMessage', () => {
       settings: createSettings([createAnthropicCompatibleProvider({ provider: 'openrouter' })])
     })
 
-    const result = await service.sendMessage({ content: '运行 pwd' })
-
-    expect(createAgentBackend).toHaveBeenCalledWith(
-      expect.objectContaining({
-        provider: 'anthropic',
-        model: 'anthropic/claude-sonnet',
-        apiKey: 'stored-key',
-        baseUrl: 'https://api.example.com'
-      })
+    await expect(service.sendMessage({ content: '运行 pwd' })).rejects.toThrow(
+      'Pi backend is not wired yet'
     )
-    expect(createAgentBackend.mock.calls[0]?.[0]).not.toHaveProperty('customEndpoint')
-    expect(result.messages.map((message) => message.content).at(-1)).toBe('ok')
+
+    expect(createAgentBackend).not.toHaveBeenCalled()
   })
 
   it('waits for permission approval and resumes the backend through respondToPermission', async () => {

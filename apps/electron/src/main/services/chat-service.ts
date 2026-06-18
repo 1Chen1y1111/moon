@@ -1457,6 +1457,12 @@ export class ChatService {
     connection: NormalizedLlmConnection,
     fallbackProviderId?: ProviderId
   ): Promise<NormalizedLlmConnection> {
+    const currentBackend = resolveConnectionAgentBackendProvider(connection)
+
+    if (currentBackend === 'pi' || currentBackend === 'pi_compat') {
+      return connection
+    }
+
     const settings = await this.settingsRepository.getSettings()
     const providerId =
       connection.providerId ??
@@ -1488,7 +1494,6 @@ export class ChatService {
     }
 
     const providerConnection = createProviderLlmConnection(providerWithApiKey, model)
-    const currentBackend = resolveConnectionAgentBackendProvider(connection)
     const providerBackend = resolveConnectionAgentBackendProvider(providerConnection)
 
     if (currentBackend === providerBackend) {
