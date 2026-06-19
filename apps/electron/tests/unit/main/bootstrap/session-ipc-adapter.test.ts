@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 /**
- * 负责验证 Electron sessions IPC adapter 的旧事件通道兼容映射。
+ * 负责验证 Electron sessions IPC adapter 会通过内部 envelope dispatcher 保持旧 IPC 行为。
  * 测试只覆盖 transport adapter，不触发真实 Electron、renderer 或会话运行时。
  */
 
@@ -75,6 +75,22 @@ describe('createSessionIpcRpcServer', () => {
     handleMock.mockReset()
   })
 
+  it('returns legacy IPC results through the envelope dispatcher', async () => {
+    const { createSessionIpcRpcServer } = await import('@main/bootstrap/session-ipc-adapter')
+    const { ipcChannels } = await import('@ipc/channels')
+    const { RPC_CHANNELS } = await import('@moon/shared/protocol')
+    const rpcServer = createSessionIpcRpcServer()
+
+    rpcServer.handle(RPC_CHANNELS.sessions.listSessions, () => [{ id: 'session-1' }])
+
+    const registeredHandler = getRegisteredHandler(ipcChannels.chat.listSessions)
+
+    expect(registeredHandler).toBeTypeOf('function')
+    await expect(registeredHandler?.({ sender: { send: vi.fn() } })).resolves.toEqual([
+      { id: 'session-1' }
+    ])
+  })
+
   it('maps runOperation session:event emissions to the unified event channel', async () => {
     const { createSessionIpcRpcServer } = await import('@main/bootstrap/session-ipc-adapter')
     const { ipcChannels } = await import('@ipc/channels')
@@ -89,9 +105,12 @@ describe('createSessionIpcRpcServer', () => {
       return input
     })
 
-    expect(
-      getRegisteredHandler(ipcChannels.chat.runOperation)?.({ sender }, { operationId: 'op-1' })
-    ).toEqual({ operationId: 'op-1' })
+    const registeredHandler = getRegisteredHandler(ipcChannels.chat.runOperation)
+
+    expect(registeredHandler).toBeTypeOf('function')
+    await expect(registeredHandler?.({ sender }, { operationId: 'op-1' })).resolves.toEqual({
+      operationId: 'op-1'
+    })
     expect(sender.send).toHaveBeenCalledWith(ipcChannels.chat.sessionEvent, operationEvent)
     expect(sender.send).toHaveBeenCalledTimes(1)
   })
@@ -110,10 +129,61 @@ describe('createSessionIpcRpcServer', () => {
       return input
     })
 
-    expect(
-      getRegisteredHandler(ipcChannels.chat.sendMessage)?.({ sender }, { content: 'hello' })
-    ).toEqual({ content: 'hello' })
+    const registeredHandler = getRegisteredHandler(ipcChannels.chat.sendMessage)
+
+    expect(registeredHandler).toBeTypeOf('function')
+    await expect(registeredHandler?.({ sender }, { content: 'hello' })).resolves.toEqual({
+      content: 'hello'
+    })
     expect(sender.send).toHaveBeenCalledWith(ipcChannels.chat.sessionEvent, operationEvent)
     expect(sender.send).toHaveBeenCalledTimes(1)
+  })
+
+  it('rejects legacy IPC calls with HANDLER_ERROR for ordinary handler errors', async () => {
+    const { createSessionIpcRpcServer } = await import('@main/bootstrap/session-ipc-adapter')
+    const { ipcChannels } = await import('@ipc/channels')
+    const { RPC_CHANNELS } = await import('@moon/shared/protocol')
+    const rpcServer = createSessionIpcRpcServer()
+
+    rpcServer.handle(RPC_CHANNELS.sessions.getMessages, () => {
+      throw new Error('boom')
+    })
+
+    const registeredHandler = getRegisteredHandler(ipcChannels.chat.getMessages)
+
+    expect(registeredHandler).toBeTypeOf('function')
+
+    try {
+      await registeredHandler?.({ sender: { send: vi.fn() } }, { sessionId: 'session-1' })
+      throw new Error('expected handler to reject')
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error)
+      expect((error as Error).message).toBe('boom')
+      expect((error as Error & { code?: string }).code).toBe('HANDLER_ERROR')
+    }
+  })
+
+  it('preserves CodedError codes when legacy IPC calls reject', async () => {
+    const { createSessionIpcRpcServer } = await import('@main/bootstrap/session-ipc-adapter')
+    const { ipcChannels } = await import('@ipc/channels')
+    const { CodedError, RPC_CHANNELS } = await import('@moon/shared/protocol')
+    const rpcServer = createSessionIpcRpcServer()
+
+    rpcServer.handle(RPC_CHANNELS.sessions.cancelOperation, () => {
+      throw new CodedError('REQUEST_TIMEOUT', 'too slow')
+    })
+
+    const registeredHandler = getRegisteredHandler(ipcChannels.chat.cancelOperation)
+
+    expect(registeredHandler).toBeTypeOf('function')
+
+    try {
+      await registeredHandler?.({ sender: { send: vi.fn() } }, { operationId: 'operation-1' })
+      throw new Error('expected handler to reject')
+    } catch (error) {
+      expect(error).toBeInstanceOf(Error)
+      expect((error as Error).message).toBe('too slow')
+      expect((error as Error & { code?: string }).code).toBe('REQUEST_TIMEOUT')
+    }
   })
 })
