@@ -1,0 +1,285 @@
+// @vitest-environment node
+
+/**
+ * 负责验证 app-shell RPC handlers 的 service 委托、事件广播和窗口控制行为。
+ * 测试直接使用 fake RPC server，不触发真实 Electron IPC。
+ */
+
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+
+import type { RpcRequestHandler, RpcServerPort } from '@moon/server-core/handlers'
+import type { AppShellRpcRequestContext } from '@main/bootstrap/app-shell-ipc-adapter'
+
+const fromWebContentsMock = vi.fn()
+const getAllWindowsMock = vi.fn()
+
+vi.mock('electron', () => ({
+  BrowserWindow: {
+    fromWebContents: fromWebContentsMock,
+    getAllWindows: getAllWindowsMock
+  }
+}))
+
+function createRpcServerFixture(): {
+  server: RpcServerPort<AppShellRpcRequestContext>
+  getHandler: (channel: string) => RpcRequestHandler<AppShellRpcRequestContext> | undefined
+} {
+  const handlers = new Map<string, RpcRequestHandler<AppShellRpcRequestContext>>()
+
+  return {
+    server: {
+      handle: (channel, handler) => {
+        handlers.set(channel, handler as RpcRequestHandler<AppShellRpcRequestContext>)
+      }
+    },
+    getHandler: (channel) => handlers.get(channel)
+  }
+}
+
+describe('registerAppShellHandlers', () => {
+  const settingsService = {
+    createCustomAcpProvider: vi.fn(),
+    createCustomProvider: vi.fn(),
+    deleteProvider: vi.fn(),
+    fetchProviderModels: vi.fn(),
+    getSettings: vi.fn(),
+    saveAppearance: vi.fn(),
+    saveProvider: vi.fn(),
+    testProvider: vi.fn()
+  }
+  const projectsService = {
+    createChangeEvent: vi.fn(),
+    deleteProject: vi.fn(),
+    getActiveProject: vi.fn(),
+    listProjects: vi.fn(),
+    setActiveProject: vi.fn(),
+    useExistingFolder: vi.fn()
+  }
+  const openSettingsWindow = vi.fn()
+
+  beforeEach(() => {
+    fromWebContentsMock.mockReset()
+    getAllWindowsMock.mockReset()
+    getAllWindowsMock.mockReturnValue([])
+    openSettingsWindow.mockReset()
+    Object.values(settingsService).forEach((mock) => mock.mockReset())
+    Object.values(projectsService).forEach((mock) => mock.mockReset())
+  })
+
+  it('delegates settings handlers and broadcasts settings changes', async () => {
+    const { createDefaultAppSettings } = await import('@moon/shared/domain/settings')
+    const { RPC_CHANNELS } = await import('@moon/shared/protocol')
+    const { ipcChannels } = await import('@ipc/channels')
+    const { registerAppShellHandlers } = await import('@main/bootstrap/app-shell-rpc-handlers')
+    const settings = createDefaultAppSettings()
+    const firstWebContents = { send: vi.fn() }
+    const secondWebContents = { send: vi.fn() }
+    const { server, getHandler } = createRpcServerFixture()
+
+    settingsService.getSettings.mockResolvedValue(settings)
+    settingsService.createCustomProvider.mockResolvedValue(settings)
+    settingsService.createCustomAcpProvider.mockResolvedValue(settings)
+    settingsService.saveProvider.mockResolvedValue(settings)
+    settingsService.deleteProvider.mockResolvedValue(settings)
+    settingsService.fetchProviderModels.mockResolvedValue(settings)
+    settingsService.testProvider.mockResolvedValue({ ok: true })
+    settingsService.saveAppearance.mockResolvedValue(settings)
+    getAllWindowsMock.mockReturnValue([
+      { webContents: firstWebContents },
+      { webContents: secondWebContents }
+    ])
+
+    registerAppShellHandlers(server, {
+      openSettingsWindow,
+      projectsService: projectsService as never,
+      settingsService: settingsService as never
+    })
+
+    const providerInput = {
+      provider: 'claude',
+      apiKey: 'sk-ant-demo',
+      model: 'claude-3-7-sonnet-latest',
+      baseUrl: ''
+    }
+
+    await expect(getHandler(RPC_CHANNELS.settings.get)?.({ event: { sender: {} } as never })).resolves.toBe(
+      settings
+    )
+    await expect(
+      getHandler(RPC_CHANNELS.settings.saveProvider)?.(
+        { event: { sender: {} } as never },
+        providerInput
+      )
+    ).resolves.toBe(settings)
+    await expect(
+      getHandler(RPC_CHANNELS.settings.createCustomProvider)?.(
+        { event: { sender: {} } as never },
+        { name: 'Custom OpenAI' }
+      )
+    ).resolves.toBe(settings)
+    await expect(
+      getHandler(RPC_CHANNELS.settings.createCustomAcpProvider)?.(
+        { event: { sender: {} } as never },
+        { name: 'Custom ACP' }
+      )
+    ).resolves.toBe(settings)
+    await expect(
+      getHandler(RPC_CHANNELS.settings.deleteProvider)?.(
+        { event: { sender: {} } as never },
+        { provider: 'custom-openai' }
+      )
+    ).resolves.toBe(settings)
+    await expect(
+      getHandler(RPC_CHANNELS.settings.fetchProviderModels)?.(
+        { event: { sender: {} } as never },
+        providerInput
+      )
+    ).resolves.toBe(settings)
+    await expect(
+      getHandler(RPC_CHANNELS.settings.testProvider)?.(
+        { event: { sender: {} } as never },
+        providerInput
+      )
+    ).resolves.toEqual({ ok: true })
+    await expect(
+      getHandler(RPC_CHANNELS.settings.saveAppearance)?.(
+        { event: { sender: {} } as never },
+        { theme: 'dark' }
+      )
+    ).resolves.toBe(settings)
+
+    expect(settingsService.saveProvider).toHaveBeenCalledWith(providerInput)
+    expect(settingsService.createCustomProvider).toHaveBeenCalledWith({ name: 'Custom OpenAI' })
+    expect(settingsService.createCustomAcpProvider).toHaveBeenCalledWith({ name: 'Custom ACP' })
+    expect(settingsService.deleteProvider).toHaveBeenCalledWith({ provider: 'custom-openai' })
+    expect(settingsService.fetchProviderModels).toHaveBeenCalledWith(providerInput)
+    expect(settingsService.testProvider).toHaveBeenCalledWith(providerInput)
+    expect(settingsService.saveAppearance).toHaveBeenCalledWith({ theme: 'dark' })
+    expect(firstWebContents.send).toHaveBeenCalledWith(ipcChannels.settings.onChange, settings)
+    expect(secondWebContents.send).toHaveBeenCalledWith(ipcChannels.settings.onChange, settings)
+  })
+
+  it('delegates project handlers and broadcasts project changes', async () => {
+    const { RPC_CHANNELS } = await import('@moon/shared/protocol')
+    const { ipcChannels } = await import('@ipc/channels')
+    const { registerAppShellHandlers } = await import('@main/bootstrap/app-shell-rpc-handlers')
+    const project = {
+      id: 'project-1',
+      name: 'moon',
+      path: '/workspace/moon',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:00.000Z'
+    }
+    const event = {
+      activeProject: project,
+      projects: [project]
+    }
+    const firstWebContents = { send: vi.fn() }
+    const secondWebContents = { send: vi.fn() }
+    const { server, getHandler } = createRpcServerFixture()
+
+    projectsService.listProjects.mockResolvedValue([project])
+    projectsService.getActiveProject.mockResolvedValue(project)
+    projectsService.useExistingFolder.mockResolvedValue(project)
+    projectsService.setActiveProject.mockResolvedValue(project)
+    projectsService.deleteProject.mockResolvedValue(undefined)
+    projectsService.createChangeEvent.mockResolvedValue(event)
+    getAllWindowsMock.mockReturnValue([
+      { webContents: firstWebContents },
+      { webContents: secondWebContents }
+    ])
+
+    registerAppShellHandlers(server, {
+      openSettingsWindow,
+      projectsService: projectsService as never,
+      settingsService: settingsService as never
+    })
+
+    await expect(getHandler(RPC_CHANNELS.projects.list)?.({ event: { sender: {} } as never })).resolves.toEqual([
+      project
+    ])
+    await expect(getHandler(RPC_CHANNELS.projects.getActive)?.({ event: { sender: {} } as never })).resolves.toBe(
+      project
+    )
+    await expect(
+      getHandler(RPC_CHANNELS.projects.useExistingFolder)?.({ event: { sender: {} } as never })
+    ).resolves.toBe(project)
+    await expect(
+      getHandler(RPC_CHANNELS.projects.setActive)?.(
+        { event: { sender: {} } as never },
+        { projectId: 'project-1' }
+      )
+    ).resolves.toBe(project)
+    await expect(
+      getHandler(RPC_CHANNELS.projects.delete)?.(
+        { event: { sender: {} } as never },
+        { projectId: 'project-1' }
+      )
+    ).resolves.toBeUndefined()
+
+    expect(projectsService.setActiveProject).toHaveBeenCalledWith({ projectId: 'project-1' })
+    expect(projectsService.deleteProject).toHaveBeenCalledWith({ projectId: 'project-1' })
+    expect(firstWebContents.send).toHaveBeenCalledWith(ipcChannels.projects.onChange, event)
+    expect(secondWebContents.send).toHaveBeenCalledWith(ipcChannels.projects.onChange, event)
+  })
+
+  it('keeps window control behavior on the sender window', async () => {
+    const { RPC_CHANNELS } = await import('@moon/shared/protocol')
+    const { registerAppShellHandlers } = await import('@main/bootstrap/app-shell-rpc-handlers')
+    const browserWindow = {
+      close: vi.fn(),
+      minimize: vi.fn(),
+      isMaximized: vi.fn(() => false),
+      maximize: vi.fn(),
+      unmaximize: vi.fn()
+    }
+    const sender = {}
+    const { server, getHandler } = createRpcServerFixture()
+
+    fromWebContentsMock.mockReturnValue(browserWindow)
+
+    registerAppShellHandlers(server, {
+      openSettingsWindow,
+      projectsService: projectsService as never,
+      settingsService: settingsService as never
+    })
+
+    await getHandler(RPC_CHANNELS.window.close)?.({ event: { sender } as never })
+    await getHandler(RPC_CHANNELS.window.minimize)?.({ event: { sender } as never })
+    await getHandler(RPC_CHANNELS.window.toggleMaximize)?.({ event: { sender } as never })
+    expect(getHandler(RPC_CHANNELS.window.getState)?.({ event: { sender } as never })).toEqual({
+      isMaximized: false
+    })
+    await getHandler(RPC_CHANNELS.window.openSettings)?.(
+      { event: { sender } as never },
+      { section: 'providers' }
+    )
+
+    expect(fromWebContentsMock).toHaveBeenCalledWith(sender)
+    expect(browserWindow.close).toHaveBeenCalledTimes(1)
+    expect(browserWindow.minimize).toHaveBeenCalledTimes(1)
+    expect(browserWindow.maximize).toHaveBeenCalledTimes(1)
+    expect(browserWindow.unmaximize).not.toHaveBeenCalled()
+    expect(openSettingsWindow).toHaveBeenCalledWith({ section: 'providers' })
+  })
+
+  it('rejects unsupported settings-window sections before opening a window', async () => {
+    const { RPC_CHANNELS } = await import('@moon/shared/protocol')
+    const { registerAppShellHandlers } = await import('@main/bootstrap/app-shell-rpc-handlers')
+    const { server, getHandler } = createRpcServerFixture()
+
+    registerAppShellHandlers(server, {
+      openSettingsWindow,
+      projectsService: projectsService as never,
+      settingsService: settingsService as never
+    })
+
+    expect(() =>
+      getHandler(RPC_CHANNELS.window.openSettings)?.(
+        { event: { sender: {} } as never },
+        { section: 'general' }
+      )
+    ).toThrow()
+    expect(openSettingsWindow).not.toHaveBeenCalled()
+  })
+})

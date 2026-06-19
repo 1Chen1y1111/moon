@@ -538,7 +538,7 @@ describe('registerIpcHandlers', () => {
 
     const openSettingsHandler = getRegisteredHandler(ipcChannels.window.openSettings)
 
-    expect(() => openSettingsHandler?.({ sender: {} }, { section: 'general' })).toThrow()
+    await expect(openSettingsHandler?.({ sender: {} }, { section: 'general' })).rejects.toThrow()
     expect(openSettingsWindow).not.toHaveBeenCalled()
   })
 
@@ -562,6 +562,6 @@ describe('registerIpcHandlers', () => {
     const getStateHandler = getRegisteredHandler(ipcChannels.window.getState)
 
     expect(getStateHandler).toBeTypeOf('function')
-    expect(getStateHandler?.({ sender: {} })).toEqual({ isMaximized: true })
+    await expect(getStateHandler?.({ sender: {} })).resolves.toEqual({ isMaximized: true })
   })
 })

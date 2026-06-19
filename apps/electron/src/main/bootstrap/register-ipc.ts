@@ -3,15 +3,15 @@
  * 这里是跨进程 wire contract 的主进程入口，不直接实现业务持久化细节。
  */
 
-import { BrowserWindow, ipcMain } from 'electron'
+import { ipcMain, type BrowserWindow } from 'electron'
 
 import { ipcChannels } from '@ipc/channels'
-import { openSettingsInputSchema } from '@ipc/window-contracts'
 import { registerSessionHandlers } from '@moon/server-core/handlers/rpc'
-import type { AppSettings } from '@moon/shared/domain/settings'
 import type { ChatService } from '../services/chat-service'
 import type { ProjectsService } from '../services/projects-service'
 import type { SettingsService } from '../services/settings-service'
+import { createAppShellIpcRpcServer } from './app-shell-ipc-adapter'
+import { registerAppShellHandlers } from './app-shell-rpc-handlers'
 import { createSessionIpcRpcServer } from './session-ipc-adapter'
 
 type RegisterIpcDependencies = {
@@ -19,26 +19,6 @@ type RegisterIpcDependencies = {
   settingsService: SettingsService
   projectsService: ProjectsService
   openSettingsWindow: (input?: { section?: 'providers' }) => BrowserWindow
-}
-
-/**
- * 向所有已打开窗口广播最新设置快照。
- */
-function broadcastSettingsChange(settings: AppSettings): void {
-  BrowserWindow.getAllWindows().forEach((window) => {
-    window.webContents.send(ipcChannels.settings.onChange, settings)
-  })
-}
-
-/**
- * 生成项目快照并广播给所有 renderer 窗口。
- */
-async function broadcastProjectsChange(projectsService: ProjectsService): Promise<void> {
-  const event = await projectsService.createChangeEvent()
-
-  BrowserWindow.getAllWindows().forEach((window) => {
-    window.webContents.send(ipcChannels.projects.onChange, event)
-  })
 }
 
 /**
@@ -83,100 +63,9 @@ export function registerIpcHandlers({
   ipcMain.removeHandler(ipcChannels.window.getState)
 
   registerSessionHandlers(createSessionIpcRpcServer(), { sessionHandlers: chatService })
-  ipcMain.handle(ipcChannels.settings.get, () => settingsService.getSettings())
-  ipcMain.handle(ipcChannels.settings.createCustomProvider, async (_event, input) => {
-    const settings = await settingsService.createCustomProvider(input)
-
-    broadcastSettingsChange(settings)
-
-    return settings
-  })
-  ipcMain.handle(ipcChannels.settings.createCustomAcpProvider, async (_event, input) => {
-    const settings = await settingsService.createCustomAcpProvider(input)
-
-    broadcastSettingsChange(settings)
-
-    return settings
-  })
-  ipcMain.handle(ipcChannels.settings.saveProvider, async (_event, input) => {
-    const settings = await settingsService.saveProvider(input)
-
-    broadcastSettingsChange(settings)
-
-    return settings
-  })
-  ipcMain.handle(ipcChannels.settings.deleteProvider, async (_event, input) => {
-    const settings = await settingsService.deleteProvider(input)
-
-    broadcastSettingsChange(settings)
-
-    return settings
-  })
-  ipcMain.handle(ipcChannels.settings.fetchProviderModels, async (_event, input) => {
-    const settings = await settingsService.fetchProviderModels(input)
-
-    broadcastSettingsChange(settings)
-
-    return settings
-  })
-  ipcMain.handle(ipcChannels.settings.testProvider, (_event, input) =>
-    settingsService.testProvider(input)
-  )
-  ipcMain.handle(ipcChannels.settings.saveAppearance, async (_event, input) => {
-    const settings = await settingsService.saveAppearance(input)
-
-    broadcastSettingsChange(settings)
-
-    return settings
-  })
-  ipcMain.handle(ipcChannels.projects.list, () => projectsService.listProjects())
-  ipcMain.handle(ipcChannels.projects.getActive, () => projectsService.getActiveProject())
-  ipcMain.handle(ipcChannels.projects.useExistingFolder, async () => {
-    const project = await projectsService.useExistingFolder()
-
-    await broadcastProjectsChange(projectsService)
-
-    return project
-  })
-  ipcMain.handle(ipcChannels.projects.delete, async (_event, input) => {
-    await projectsService.deleteProject(input)
-    await broadcastProjectsChange(projectsService)
-  })
-  ipcMain.handle(ipcChannels.projects.setActive, async (_event, input) => {
-    const project = await projectsService.setActiveProject(input)
-
-    await broadcastProjectsChange(projectsService)
-
-    return project
-  })
-  ipcMain.handle(ipcChannels.window.close, (event) => {
-    BrowserWindow.fromWebContents(event.sender)?.close()
-  })
-  ipcMain.handle(ipcChannels.window.minimize, (event) => {
-    BrowserWindow.fromWebContents(event.sender)?.minimize()
-  })
-  ipcMain.handle(ipcChannels.window.toggleMaximize, (event) => {
-    const senderWindow = BrowserWindow.fromWebContents(event.sender)
-
-    if (senderWindow === null) {
-      return
-    }
-
-    if (senderWindow.isMaximized()) {
-      senderWindow.unmaximize()
-      return
-    }
-
-    senderWindow.maximize()
-  })
-  ipcMain.handle(ipcChannels.window.openSettings, (_event, input) => {
-    openSettingsWindow(openSettingsInputSchema.parse(input))
-  })
-  ipcMain.handle(ipcChannels.window.getState, (event) => {
-    const senderWindow = BrowserWindow.fromWebContents(event.sender)
-
-    return {
-      isMaximized: senderWindow?.isMaximized() ?? false
-    }
+  registerAppShellHandlers(createAppShellIpcRpcServer(), {
+    openSettingsWindow,
+    projectsService,
+    settingsService
   })
 }
