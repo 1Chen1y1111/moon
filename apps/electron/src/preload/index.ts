@@ -7,6 +7,8 @@ import { contextBridge, ipcRenderer } from 'electron'
 
 import { ipcChannels } from '@ipc/channels'
 import type { AppIpcContractMap, MoonApi } from '@ipc/contracts'
+import { buildChatApi } from './chat-api'
+import { createIpcRpcClient } from './ipc-rpc-client'
 
 /**
  * 调用指定 IPC channel，并在无请求体时避免传递额外 undefined 参数。
@@ -23,32 +25,7 @@ function invokeIpcChannel<TChannel extends keyof AppIpcContractMap>(
 }
 
 const api: MoonApi = {
-  chat: {
-    listSessions: () => invokeIpcChannel(ipcChannels.chat.listSessions),
-    getMessages: (input) => invokeIpcChannel(ipcChannels.chat.getMessages, input),
-    listTopics: (input) => invokeIpcChannel(ipcChannels.chat.listTopics, input),
-    listThreads: (input) => invokeIpcChannel(ipcChannels.chat.listThreads, input),
-    createSession: () => invokeIpcChannel(ipcChannels.chat.createSession),
-    deleteSession: (input) => invokeIpcChannel(ipcChannels.chat.deleteSession, input),
-    importAttachment: (input) => invokeIpcChannel(ipcChannels.chat.importAttachment, input),
-    createMessageTurn: (input) => invokeIpcChannel(ipcChannels.chat.createMessageTurn, input),
-    runOperation: (input) => invokeIpcChannel(ipcChannels.chat.runOperation, input),
-    sendMessage: (input) => invokeIpcChannel(ipcChannels.chat.sendMessage, input),
-    cancelOperation: (input) => invokeIpcChannel(ipcChannels.chat.cancelOperation, input),
-    approveToolCall: (input) => invokeIpcChannel(ipcChannels.chat.approveToolCall, input),
-    rejectToolCall: (input) => invokeIpcChannel(ipcChannels.chat.rejectToolCall, input),
-    onSessionEvent: (listener) => {
-      const channel = ipcChannels.chat.sessionEvent
-      const handler = (_event: unknown, payload: Parameters<typeof listener>[0]): void =>
-        listener(payload)
-
-      ipcRenderer.on(channel, handler)
-
-      return () => {
-        ipcRenderer.off(channel, handler)
-      }
-    }
-  },
+  chat: buildChatApi(createIpcRpcClient(ipcRenderer)),
   settings: {
     get: () => invokeIpcChannel(ipcChannels.settings.get),
     createCustomProvider: (input) =>

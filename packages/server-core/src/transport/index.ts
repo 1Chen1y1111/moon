@@ -5,3 +5,4 @@
 
 export * from './codec'
 export * from './envelope-rpc-server'
+export * from './types'
