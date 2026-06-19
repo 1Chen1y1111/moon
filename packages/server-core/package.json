@@ -12,7 +12,9 @@
     "./handlers/rpc": "./src/handlers/rpc/index.ts",
     "./handlers/rpc/*": "./src/handlers/rpc/*.ts",
     "./sessions": "./src/sessions/index.ts",
-    "./sessions/*": "./src/sessions/*.ts"
+    "./sessions/*": "./src/sessions/*.ts",
+    "./transport": "./src/transport/index.ts",
+    "./transport/*": "./src/transport/*.ts"
   },
   "scripts": {
     "typecheck": "tsc --noEmit -p tsconfig.json --composite false"
