@@ -1,13 +1,13 @@
 /**
  * 负责把 preload 内部 RPC client 端口适配到当前 Electron IPC。
- * 本文件优先映射 session RPC channel，其它 channel 透传为既有 Electron IPC channel。
+ * 本文件把已知 shared RPC channel 映射到既有 Electron IPC channel，未映射 channel 原样透传。
  */
 
 import type { IpcRenderer } from 'electron'
 
 import { ipcChannels } from '@ipc/channels'
 import type { RpcClientPort } from '@moon/server-core/transport'
-import { RPC_CHANNELS, type SessionRpcChannel } from '@moon/shared/protocol'
+import { RPC_CHANNELS, type RpcChannel } from '@moon/shared/protocol'
 
 /**
  * preload 中实际会调用的 Electron ipcRenderer 子集，方便单测注入 fake。
@@ -15,9 +15,9 @@ import { RPC_CHANNELS, type SessionRpcChannel } from '@moon/shared/protocol'
 type IpcRendererBridge = Pick<IpcRenderer, 'invoke' | 'on' | 'off'>
 
 /**
- * session RPC channel 到现有 Electron chat IPC channel 的映射表。
+ * 内部 RPC channel 到现有 Electron IPC channel 的映射表。
  */
-const sessionIpcChannelByRpcChannel: Record<SessionRpcChannel, string> = {
+const ipcChannelByRpcChannel: Partial<Record<RpcChannel, string>> = {
   [RPC_CHANNELS.sessions.listSessions]: ipcChannels.chat.listSessions,
   [RPC_CHANNELS.sessions.getMessages]: ipcChannels.chat.getMessages,
   [RPC_CHANNELS.sessions.listTopics]: ipcChannels.chat.listTopics,
@@ -31,7 +31,31 @@ const sessionIpcChannelByRpcChannel: Record<SessionRpcChannel, string> = {
   [RPC_CHANNELS.sessions.cancelOperation]: ipcChannels.chat.cancelOperation,
   [RPC_CHANNELS.sessions.approveToolCall]: ipcChannels.chat.approveToolCall,
   [RPC_CHANNELS.sessions.rejectToolCall]: ipcChannels.chat.rejectToolCall,
-  [RPC_CHANNELS.sessions.event]: ipcChannels.chat.sessionEvent
+  [RPC_CHANNELS.sessions.event]: ipcChannels.chat.sessionEvent,
+
+  [RPC_CHANNELS.settings.get]: ipcChannels.settings.get,
+  [RPC_CHANNELS.settings.createCustomProvider]: ipcChannels.settings.createCustomProvider,
+  [RPC_CHANNELS.settings.createCustomAcpProvider]: ipcChannels.settings.createCustomAcpProvider,
+  [RPC_CHANNELS.settings.saveProvider]: ipcChannels.settings.saveProvider,
+  [RPC_CHANNELS.settings.deleteProvider]: ipcChannels.settings.deleteProvider,
+  [RPC_CHANNELS.settings.fetchProviderModels]: ipcChannels.settings.fetchProviderModels,
+  [RPC_CHANNELS.settings.testProvider]: ipcChannels.settings.testProvider,
+  [RPC_CHANNELS.settings.saveAppearance]: ipcChannels.settings.saveAppearance,
+  [RPC_CHANNELS.settings.onChange]: ipcChannels.settings.onChange,
+
+  [RPC_CHANNELS.projects.list]: ipcChannels.projects.list,
+  [RPC_CHANNELS.projects.getActive]: ipcChannels.projects.getActive,
+  [RPC_CHANNELS.projects.useExistingFolder]: ipcChannels.projects.useExistingFolder,
+  [RPC_CHANNELS.projects.delete]: ipcChannels.projects.delete,
+  [RPC_CHANNELS.projects.setActive]: ipcChannels.projects.setActive,
+  [RPC_CHANNELS.projects.onChange]: ipcChannels.projects.onChange,
+
+  [RPC_CHANNELS.window.close]: ipcChannels.window.close,
+  [RPC_CHANNELS.window.minimize]: ipcChannels.window.minimize,
+  [RPC_CHANNELS.window.toggleMaximize]: ipcChannels.window.toggleMaximize,
+  [RPC_CHANNELS.window.openSettings]: ipcChannels.window.openSettings,
+  [RPC_CHANNELS.window.getState]: ipcChannels.window.getState,
+  [RPC_CHANNELS.window.onStateChange]: ipcChannels.window.onStateChange
 }
 
 /**
@@ -40,7 +64,7 @@ const sessionIpcChannelByRpcChannel: Record<SessionRpcChannel, string> = {
 export function createIpcRpcClient(ipcRenderer: IpcRendererBridge): RpcClientPort {
   return {
     invoke: (channel, ...args) => {
-      const ipcChannel = resolveSessionIpcChannel(channel)
+      const ipcChannel = resolveIpcChannel(channel)
 
       if (args.length === 0) {
         return ipcRenderer.invoke(ipcChannel)
@@ -49,7 +73,7 @@ export function createIpcRpcClient(ipcRenderer: IpcRendererBridge): RpcClientPor
       return ipcRenderer.invoke(ipcChannel, ...args)
     },
     on: (channel, listener) => {
-      const ipcChannel = resolveSessionIpcChannel(channel)
+      const ipcChannel = resolveIpcChannel(channel)
       const handler = (_event: unknown, ...args: unknown[]): void => {
         listener(...args)
       }
@@ -64,10 +88,10 @@ export function createIpcRpcClient(ipcRenderer: IpcRendererBridge): RpcClientPor
 }
 
 /**
- * 将内部 RPC channel 解析为当前 Electron IPC channel；非 session channel 暂时原样透传。
+ * 将内部 RPC channel 解析为当前 Electron IPC channel；未映射 channel 暂时原样透传。
  */
-function resolveSessionIpcChannel(channel: string): string {
-  const ipcChannel = sessionIpcChannelByRpcChannel[channel as SessionRpcChannel]
+function resolveIpcChannel(channel: string): string {
+  const ipcChannel = ipcChannelByRpcChannel[channel as RpcChannel]
 
   return ipcChannel ?? channel
 }

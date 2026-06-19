@@ -36,3 +36,41 @@ describe('RPC_CHANNELS.sessions', () => {
     expect(callableChannels.every((channel) => channel.startsWith('sessions:'))).toBe(true)
   })
 })
+
+describe('RPC_CHANNELS app-shell channels', () => {
+  it('keeps settings RPC channel values stable', () => {
+    expect(RPC_CHANNELS.settings).toEqual({
+      get: 'settings:get',
+      createCustomProvider: 'settings:createCustomProvider',
+      createCustomAcpProvider: 'settings:createCustomAcpProvider',
+      saveProvider: 'settings:saveProvider',
+      deleteProvider: 'settings:deleteProvider',
+      fetchProviderModels: 'settings:fetchProviderModels',
+      testProvider: 'settings:testProvider',
+      saveAppearance: 'settings:saveAppearance',
+      onChange: 'settings:onChange'
+    })
+  })
+
+  it('keeps projects RPC channel values stable', () => {
+    expect(RPC_CHANNELS.projects).toEqual({
+      list: 'projects:list',
+      getActive: 'projects:getActive',
+      useExistingFolder: 'projects:useExistingFolder',
+      delete: 'projects:delete',
+      setActive: 'projects:setActive',
+      onChange: 'projects:onChange'
+    })
+  })
+
+  it('keeps window RPC channel values stable', () => {
+    expect(RPC_CHANNELS.window).toEqual({
+      close: 'window:close',
+      minimize: 'window:minimize',
+      toggleMaximize: 'window:toggleMaximize',
+      openSettings: 'window:openSettings',
+      getState: 'window:getState',
+      onStateChange: 'window:onStateChange'
+    })
+  })
+})

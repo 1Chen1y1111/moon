@@ -1,9 +1,8 @@
 /**
  * 定义 preload MoonApi 方法到当前 RPC/IPC channel 的映射。
- * session 领域使用 shared RPC channel，其它领域暂时使用既有 Electron IPC channel。
+ * 所有 renderer API 都先绑定到 shared RPC channel，再由具体 transport adapter 映射到 IPC。
  */
 
-import { ipcChannels } from '@ipc/channels'
 import { RPC_CHANNELS } from '@moon/shared/protocol'
 import type { ChannelMap } from './build-client-api'
 
@@ -40,27 +39,27 @@ export const MOON_API_CHANNEL_MAP = {
   'chat.rejectToolCall': invoke(RPC_CHANNELS.sessions.rejectToolCall),
   'chat.onSessionEvent': listener(RPC_CHANNELS.sessions.event),
 
-  'settings.get': invoke(ipcChannels.settings.get),
-  'settings.createCustomProvider': invoke(ipcChannels.settings.createCustomProvider),
-  'settings.createCustomAcpProvider': invoke(ipcChannels.settings.createCustomAcpProvider),
-  'settings.saveProvider': invoke(ipcChannels.settings.saveProvider),
-  'settings.deleteProvider': invoke(ipcChannels.settings.deleteProvider),
-  'settings.fetchProviderModels': invoke(ipcChannels.settings.fetchProviderModels),
-  'settings.testProvider': invoke(ipcChannels.settings.testProvider),
-  'settings.saveAppearance': invoke(ipcChannels.settings.saveAppearance),
-  'settings.onChange': listener(ipcChannels.settings.onChange),
+  'settings.get': invoke(RPC_CHANNELS.settings.get),
+  'settings.createCustomProvider': invoke(RPC_CHANNELS.settings.createCustomProvider),
+  'settings.createCustomAcpProvider': invoke(RPC_CHANNELS.settings.createCustomAcpProvider),
+  'settings.saveProvider': invoke(RPC_CHANNELS.settings.saveProvider),
+  'settings.deleteProvider': invoke(RPC_CHANNELS.settings.deleteProvider),
+  'settings.fetchProviderModels': invoke(RPC_CHANNELS.settings.fetchProviderModels),
+  'settings.testProvider': invoke(RPC_CHANNELS.settings.testProvider),
+  'settings.saveAppearance': invoke(RPC_CHANNELS.settings.saveAppearance),
+  'settings.onChange': listener(RPC_CHANNELS.settings.onChange),
 
-  'projects.list': invoke(ipcChannels.projects.list),
-  'projects.getActive': invoke(ipcChannels.projects.getActive),
-  'projects.useExistingFolder': invoke(ipcChannels.projects.useExistingFolder),
-  'projects.delete': invoke(ipcChannels.projects.delete),
-  'projects.setActive': invoke(ipcChannels.projects.setActive),
-  'projects.onChange': listener(ipcChannels.projects.onChange),
+  'projects.list': invoke(RPC_CHANNELS.projects.list),
+  'projects.getActive': invoke(RPC_CHANNELS.projects.getActive),
+  'projects.useExistingFolder': invoke(RPC_CHANNELS.projects.useExistingFolder),
+  'projects.delete': invoke(RPC_CHANNELS.projects.delete),
+  'projects.setActive': invoke(RPC_CHANNELS.projects.setActive),
+  'projects.onChange': listener(RPC_CHANNELS.projects.onChange),
 
-  'windowControls.close': invoke(ipcChannels.window.close),
-  'windowControls.minimize': invoke(ipcChannels.window.minimize),
-  'windowControls.toggleMaximize': invoke(ipcChannels.window.toggleMaximize),
-  'windowControls.openSettings': invoke(ipcChannels.window.openSettings),
-  'windowControls.getState': invoke(ipcChannels.window.getState),
-  'windowControls.onStateChange': listener(ipcChannels.window.onStateChange)
+  'windowControls.close': invoke(RPC_CHANNELS.window.close),
+  'windowControls.minimize': invoke(RPC_CHANNELS.window.minimize),
+  'windowControls.toggleMaximize': invoke(RPC_CHANNELS.window.toggleMaximize),
+  'windowControls.openSettings': invoke(RPC_CHANNELS.window.openSettings),
+  'windowControls.getState': invoke(RPC_CHANNELS.window.getState),
+  'windowControls.onStateChange': listener(RPC_CHANNELS.window.onStateChange)
 } satisfies ChannelMap

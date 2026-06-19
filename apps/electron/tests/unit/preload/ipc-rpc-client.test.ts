@@ -58,17 +58,31 @@ describe('createIpcRpcClient', () => {
     expect(invoke).not.toHaveBeenCalledWith(ipcChannels.chat.listSessions, undefined)
   })
 
-  it('passes non-session channels through as legacy IPC channels', async () => {
+  it('maps app-shell protocol channels to legacy IPC channels', async () => {
     const { ipcRenderer, invoke } = createIpcRendererFixture()
     const client = createIpcRpcClient(ipcRenderer)
-    const input = { theme: 'dark' }
+    const settingsInput = { providerId: 'provider-1' }
+    const projectInput = { projectId: 'project-1' }
 
-    invoke.mockResolvedValue({ appearance: input })
+    invoke.mockResolvedValue(undefined)
 
-    await expect(client.invoke(ipcChannels.settings.saveAppearance, input)).resolves.toEqual({
-      appearance: input
-    })
-    expect(invoke).toHaveBeenCalledWith(ipcChannels.settings.saveAppearance, input)
+    await client.invoke(RPC_CHANNELS.settings.deleteProvider, settingsInput)
+    await client.invoke(RPC_CHANNELS.projects.setActive, projectInput)
+    await client.invoke(RPC_CHANNELS.window.openSettings, { section: 'providers' })
+
+    expect(invoke).toHaveBeenCalledWith(ipcChannels.settings.deleteProvider, settingsInput)
+    expect(invoke).toHaveBeenCalledWith(ipcChannels.projects.setActive, projectInput)
+    expect(invoke).toHaveBeenCalledWith(ipcChannels.window.openSettings, { section: 'providers' })
+  })
+
+  it('passes unknown channels through unchanged', async () => {
+    const { ipcRenderer, invoke } = createIpcRendererFixture()
+    const client = createIpcRpcClient(ipcRenderer)
+
+    invoke.mockResolvedValue('ok')
+
+    await expect(client.invoke('custom:echo', { ok: true })).resolves.toBe('ok')
+    expect(invoke).toHaveBeenCalledWith('custom:echo', { ok: true })
   })
 
   it('maps session:event subscriptions to the unified IPC event channel', () => {
