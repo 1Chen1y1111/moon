@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 /**
- * 负责验证 preload IPC RPC client 的 session channel 映射。
+ * 负责验证 preload IPC RPC client 的 channel 映射。
  * 测试只覆盖 preload transport adapter，不触发真实 Electron 或 renderer。
  */
 
@@ -56,6 +56,19 @@ describe('createIpcRpcClient', () => {
     await expect(client.invoke(RPC_CHANNELS.sessions.listSessions)).resolves.toEqual([])
     expect(invoke).toHaveBeenCalledWith(ipcChannels.chat.listSessions)
     expect(invoke).not.toHaveBeenCalledWith(ipcChannels.chat.listSessions, undefined)
+  })
+
+  it('passes non-session channels through as legacy IPC channels', async () => {
+    const { ipcRenderer, invoke } = createIpcRendererFixture()
+    const client = createIpcRpcClient(ipcRenderer)
+    const input = { theme: 'dark' }
+
+    invoke.mockResolvedValue({ appearance: input })
+
+    await expect(client.invoke(ipcChannels.settings.saveAppearance, input)).resolves.toEqual({
+      appearance: input
+    })
+    expect(invoke).toHaveBeenCalledWith(ipcChannels.settings.saveAppearance, input)
   })
 
   it('maps session:event subscriptions to the unified IPC event channel', () => {

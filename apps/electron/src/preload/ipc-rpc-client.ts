@@ -1,6 +1,6 @@
 /**
  * 负责把 preload 内部 RPC client 端口适配到当前 Electron IPC。
- * 本文件只映射 session RPC channel 到既有 `chat:*` IPC channel，不改变 renderer API。
+ * 本文件优先映射 session RPC channel，其它 channel 透传为既有 Electron IPC channel。
  */
 
 import type { IpcRenderer } from 'electron'
@@ -35,7 +35,7 @@ const sessionIpcChannelByRpcChannel: Record<SessionRpcChannel, string> = {
 }
 
 /**
- * 创建基于 Electron IPC 的 RPC client，作为 preload chat API 的内部 transport。
+ * 创建基于 Electron IPC 的 RPC client，作为 preload API 的内部 transport。
  */
 export function createIpcRpcClient(ipcRenderer: IpcRendererBridge): RpcClientPort {
   return {
@@ -64,14 +64,10 @@ export function createIpcRpcClient(ipcRenderer: IpcRendererBridge): RpcClientPor
 }
 
 /**
- * 将 session RPC channel 解析为当前 Electron IPC channel。
+ * 将内部 RPC channel 解析为当前 Electron IPC channel；非 session channel 暂时原样透传。
  */
 function resolveSessionIpcChannel(channel: string): string {
   const ipcChannel = sessionIpcChannelByRpcChannel[channel as SessionRpcChannel]
 
-  if (ipcChannel === undefined) {
-    throw new Error(`Unsupported session RPC channel: ${channel}`)
-  }
-
-  return ipcChannel
+  return ipcChannel ?? channel
 }
