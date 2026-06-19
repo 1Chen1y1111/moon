@@ -5,7 +5,6 @@
 
 import { BrowserWindow } from 'electron'
 
-import { ipcChannels } from '@ipc/channels'
 import { openSettingsInputSchema } from '@ipc/window-contracts'
 import type { RpcServerPort } from '@moon/server-core/handlers'
 import type {
@@ -22,6 +21,7 @@ import { RPC_CHANNELS } from '@moon/shared/protocol'
 import type { ProjectsService } from '../services/projects-service'
 import type { SettingsService } from '../services/settings-service'
 import type { AppShellRpcRequestContext } from './app-shell-ipc-adapter'
+import { emitLegacyRpcEvent } from './legacy-rpc-event-bridge'
 
 /**
  * 注册 app-shell RPC handlers 所需的 Electron main 依赖。
@@ -48,9 +48,7 @@ export function registerAppShellHandlers(
  * 向所有已打开窗口广播最新设置快照。
  */
 function broadcastSettingsChange(settings: AppSettings): void {
-  BrowserWindow.getAllWindows().forEach((window) => {
-    window.webContents.send(ipcChannels.settings.onChange, settings)
-  })
+  emitLegacyRpcEvent(RPC_CHANNELS.settings.onChange, { to: 'all' }, settings)
 }
 
 /**
@@ -59,9 +57,7 @@ function broadcastSettingsChange(settings: AppSettings): void {
 async function broadcastProjectsChange(projectsService: ProjectsService): Promise<void> {
   const event = await projectsService.createChangeEvent()
 
-  BrowserWindow.getAllWindows().forEach((window) => {
-    window.webContents.send(ipcChannels.projects.onChange, event)
-  })
+  emitLegacyRpcEvent(RPC_CHANNELS.projects.onChange, { to: 'all' }, event)
 }
 
 /**
