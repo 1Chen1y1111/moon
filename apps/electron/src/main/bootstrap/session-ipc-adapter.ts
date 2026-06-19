@@ -10,6 +10,7 @@ import type { RpcServerPort, SessionRpcRequestContext } from '@moon/server-core/
 import type { ChatOperationEvent } from '@moon/shared/domain/chat'
 import { RPC_CHANNELS, type SessionRpcChannel } from '@moon/shared/protocol'
 import { createLegacyIpcRpcServer } from './legacy-ipc-rpc-server'
+import { emitLegacyRpcEvent } from './legacy-rpc-event-bridge'
 
 type CallableSessionRpcChannel = Exclude<SessionRpcChannel, typeof RPC_CHANNELS.sessions.event>
 
@@ -62,5 +63,5 @@ function emitSessionEvent(
     return
   }
 
-  event.sender.send(ipcChannels.chat.sessionEvent, operationEvent)
+  emitLegacyRpcEvent(eventChannel, { to: 'webContents', sender: event.sender }, operationEvent)
 }

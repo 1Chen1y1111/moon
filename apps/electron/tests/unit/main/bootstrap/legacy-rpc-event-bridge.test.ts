@@ -56,6 +56,23 @@ describe('emitLegacyRpcEvent', () => {
     expect(getAllWindowsMock).not.toHaveBeenCalled()
   })
 
+  it('maps session:event to the selected webContents legacy IPC event', async () => {
+    const { ipcChannels } = await import('@ipc/channels')
+    const { RPC_CHANNELS } = await import('@moon/shared/protocol')
+    const { emitLegacyRpcEvent } = await import('@main/bootstrap/legacy-rpc-event-bridge')
+    const sender = { send: vi.fn() }
+    const event = {
+      type: 'message-delta',
+      operationId: 'operation-1',
+      delta: 'hello'
+    }
+
+    emitLegacyRpcEvent(RPC_CHANNELS.sessions.event, { to: 'webContents', sender }, event)
+
+    expect(sender.send).toHaveBeenCalledWith(ipcChannels.chat.sessionEvent, event)
+    expect(getAllWindowsMock).not.toHaveBeenCalled()
+  })
+
   it('throws a clear error for unsupported RPC event channels', async () => {
     const { emitLegacyRpcEvent } = await import('@main/bootstrap/legacy-rpc-event-bridge')
 

@@ -9,11 +9,13 @@ import { ipcChannels } from '@ipc/channels'
 import {
   RPC_CHANNELS,
   type ProjectsRpcChannel,
+  type SessionRpcChannel,
   type SettingsRpcChannel,
   type WindowRpcChannel
 } from '@moon/shared/protocol'
 
 type AppShellRpcEventChannel =
+  | typeof RPC_CHANNELS.sessions.event
   | typeof RPC_CHANNELS.settings.onChange
   | typeof RPC_CHANNELS.projects.onChange
   | typeof RPC_CHANNELS.window.onStateChange
@@ -26,6 +28,7 @@ export type LegacyRpcEventTarget =
   | { to: 'webContents'; sender: Pick<WebContents, 'send'> }
 
 const legacyIpcEventChannelByRpcChannel: Record<AppShellRpcEventChannel, string> = {
+  [RPC_CHANNELS.sessions.event]: ipcChannels.chat.sessionEvent,
   [RPC_CHANNELS.settings.onChange]: ipcChannels.settings.onChange,
   [RPC_CHANNELS.projects.onChange]: ipcChannels.projects.onChange,
   [RPC_CHANNELS.window.onStateChange]: ipcChannels.window.onStateChange
@@ -35,7 +38,7 @@ const legacyIpcEventChannelByRpcChannel: Record<AppShellRpcEventChannel, string>
  * 通过 shared RPC event channel 发送本地 legacy IPC 事件，保持 renderer 订阅方式不变。
  */
 export function emitLegacyRpcEvent(
-  channel: SettingsRpcChannel | ProjectsRpcChannel | WindowRpcChannel | string,
+  channel: SessionRpcChannel | SettingsRpcChannel | ProjectsRpcChannel | WindowRpcChannel | string,
   target: LegacyRpcEventTarget,
   ...args: unknown[]
 ): void {
