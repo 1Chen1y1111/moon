@@ -4,5 +4,6 @@
  */
 
 export * from './channels'
+export * from './events'
 export * from './routing'
 export * from './types'

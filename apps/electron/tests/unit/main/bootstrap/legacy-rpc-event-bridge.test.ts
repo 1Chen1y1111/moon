@@ -23,10 +23,11 @@ describe('emitLegacyRpcEvent', () => {
   it('maps settings and projects RPC events to legacy IPC event broadcasts', async () => {
     const { ipcChannels } = await import('@ipc/channels')
     const { RPC_CHANNELS } = await import('@moon/shared/protocol')
+    const { createDefaultAppSettings } = await import('@moon/shared/domain/settings')
     const { emitLegacyRpcEvent } = await import('@main/bootstrap/legacy-rpc-event-bridge')
     const firstWebContents = { send: vi.fn() }
     const secondWebContents = { send: vi.fn() }
-    const settings = { theme: 'dark' }
+    const settings = createDefaultAppSettings()
     const projectEvent = { projects: [], activeProject: null }
 
     getAllWindowsMock.mockReturnValue([
@@ -64,8 +65,12 @@ describe('emitLegacyRpcEvent', () => {
     const event = {
       type: 'message-delta',
       operationId: 'operation-1',
+      sessionId: 'session-1',
+      topicId: 'topic-1',
+      threadId: 'thread-1',
+      messageId: 'message-1',
       delta: 'hello'
-    }
+    } as const
 
     emitLegacyRpcEvent(RPC_CHANNELS.sessions.event, { to: 'webContents', sender }, event)
 
@@ -75,8 +80,13 @@ describe('emitLegacyRpcEvent', () => {
 
   it('throws a clear error for unsupported RPC event channels', async () => {
     const { emitLegacyRpcEvent } = await import('@main/bootstrap/legacy-rpc-event-bridge')
+    const unsafeEmitLegacyRpcEvent = emitLegacyRpcEvent as unknown as (
+      channel: string,
+      target: { to: 'all' },
+      ...args: unknown[]
+    ) => void
 
-    expect(() => emitLegacyRpcEvent('sessions:listSessions', { to: 'all' })).toThrow(
+    expect(() => unsafeEmitLegacyRpcEvent('sessions:listSessions', { to: 'all' })).toThrow(
       'Unsupported legacy RPC event channel: sessions:listSessions'
     )
   })

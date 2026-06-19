@@ -8,17 +8,9 @@ import { BrowserWindow, type WebContents } from 'electron'
 import { ipcChannels } from '@ipc/channels'
 import {
   RPC_CHANNELS,
-  type ProjectsRpcChannel,
-  type SessionRpcChannel,
-  type SettingsRpcChannel,
-  type WindowRpcChannel
+  type BroadcastEventArgs,
+  type BroadcastEventChannel
 } from '@moon/shared/protocol'
-
-type AppShellRpcEventChannel =
-  | typeof RPC_CHANNELS.sessions.event
-  | typeof RPC_CHANNELS.settings.onChange
-  | typeof RPC_CHANNELS.projects.onChange
-  | typeof RPC_CHANNELS.window.onStateChange
 
 /**
  * Electron legacy IPC event bridge 当前支持的本地发送目标。
@@ -27,7 +19,7 @@ export type LegacyRpcEventTarget =
   | { to: 'all' }
   | { to: 'webContents'; sender: Pick<WebContents, 'send'> }
 
-const legacyIpcEventChannelByRpcChannel: Record<AppShellRpcEventChannel, string> = {
+const legacyIpcEventChannelByRpcChannel: Record<BroadcastEventChannel, string> = {
   [RPC_CHANNELS.sessions.event]: ipcChannels.chat.sessionEvent,
   [RPC_CHANNELS.settings.onChange]: ipcChannels.settings.onChange,
   [RPC_CHANNELS.projects.onChange]: ipcChannels.projects.onChange,
@@ -37,10 +29,10 @@ const legacyIpcEventChannelByRpcChannel: Record<AppShellRpcEventChannel, string>
 /**
  * 通过 shared RPC event channel 发送本地 legacy IPC 事件，保持 renderer 订阅方式不变。
  */
-export function emitLegacyRpcEvent(
-  channel: SessionRpcChannel | SettingsRpcChannel | ProjectsRpcChannel | WindowRpcChannel | string,
+export function emitLegacyRpcEvent<TChannel extends BroadcastEventChannel>(
+  channel: TChannel,
   target: LegacyRpcEventTarget,
-  ...args: unknown[]
+  ...args: BroadcastEventArgs<TChannel>
 ): void {
   const legacyChannel = resolveLegacyIpcEventChannel(channel)
 
@@ -58,7 +50,7 @@ export function emitLegacyRpcEvent(
  * 将 shared RPC event channel 解析为当前 Electron legacy IPC event channel。
  */
 function resolveLegacyIpcEventChannel(channel: string): string {
-  const legacyChannel = legacyIpcEventChannelByRpcChannel[channel as AppShellRpcEventChannel]
+  const legacyChannel = legacyIpcEventChannelByRpcChannel[channel as BroadcastEventChannel]
 
   if (legacyChannel === undefined) {
     throw new Error(`Unsupported legacy RPC event channel: ${channel}`)
