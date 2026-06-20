@@ -33,14 +33,26 @@ type WorkspaceWebSocketLike = {
 
 type WorkspaceWebSocketConstructor = new (url: string) => WorkspaceWebSocketLike
 
+export type WorkspaceWebSocketConnectionState =
+  | 'idle'
+  | 'connecting'
+  | 'handshaking'
+  | 'connected'
+  | 'disconnected'
+  | 'reconnecting'
+  | 'terminal-error'
+
 export type WorkspaceWebSocketRpcClientOptions = {
   createId?: () => string
   getTransportInfo: () => Promise<WorkspaceWebSocketTransportInfo>
+  onConnectionStateChange?: (state: WorkspaceWebSocketConnectionState) => void
+  reconnectDelayMs?: number
   WebSocketCtor?: WorkspaceWebSocketConstructor
 }
 
 const WEBSOCKET_OPEN = 1
 const WORKSPACE_HANDSHAKE_ID = 'workspace-handshake'
+const DEFAULT_RECONNECT_DELAY_MS = 100
 
 /**
  * 创建基于本机 WebSocket 的 workspace RPC client。
@@ -48,10 +60,14 @@ const WORKSPACE_HANDSHAKE_ID = 'workspace-handshake'
 export function createWorkspaceWebSocketRpcClient({
   createId,
   getTransportInfo,
+  onConnectionStateChange,
+  reconnectDelayMs = DEFAULT_RECONNECT_DELAY_MS,
   WebSocketCtor
 }: WorkspaceWebSocketRpcClientOptions): RpcClientPort {
   const transport = createWorkspaceWebSocketTransport({
     getTransportInfo,
+    onConnectionStateChange,
+    reconnectDelayMs,
     WebSocketCtor
   })
 
@@ -67,8 +83,13 @@ export function createWorkspaceWebSocketRpcClient({
  */
 function createWorkspaceWebSocketTransport({
   getTransportInfo,
+  onConnectionStateChange,
+  reconnectDelayMs,
   WebSocketCtor
-}: Pick<WorkspaceWebSocketRpcClientOptions, 'getTransportInfo' | 'WebSocketCtor'>): {
+}: Pick<
+  WorkspaceWebSocketRpcClientOptions,
+  'getTransportInfo' | 'onConnectionStateChange' | 'reconnectDelayMs' | 'WebSocketCtor'
+>): {
   request: (envelope: MessageEnvelope) => Promise<MessageEnvelope>
   subscribe: EnvelopeRpcClientSubscribe
 } {
@@ -83,6 +104,8 @@ function createWorkspaceWebSocketTransport({
       resolve: (envelope: MessageEnvelope) => void
     }
   >()
+  let connectionState: WorkspaceWebSocketConnectionState = 'idle'
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null
   let terminalError: Error | null = null
   let socket: WorkspaceWebSocketLike | null = null
   let socketPromise: Promise<WorkspaceWebSocketLike> | null = null
@@ -102,6 +125,12 @@ function createWorkspaceWebSocketTransport({
 
       return () => {
         envelopeListeners.delete(listener)
+        if (envelopeListeners.size === 0) {
+          cancelReconnectTimer()
+          if (connectionState === 'reconnecting') {
+            setConnectionState('disconnected')
+          }
+        }
       }
     }
   }
@@ -119,38 +148,51 @@ function createWorkspaceWebSocketTransport({
     }
 
     if (socketPromise === null) {
-      socketPromise = getTransportInfo().then(
-        (transportInfo) =>
-          new Promise<WorkspaceWebSocketLike>((resolve, reject) => {
-            const SocketCtor = WebSocketCtor ?? getDefaultWebSocketConstructor()
-            const nextSocket = new SocketCtor(transportInfo.url)
-
-            socket = nextSocket
-            const handleHandshake = (event: WorkspaceWebSocketEvent): void => {
-              handleHandshakeMessage(nextSocket, event, handleHandshake, resolve, reject)
-            }
-
-            nextSocket.addEventListener('open', () => {
-              sendHandshake(nextSocket)
-            })
-            nextSocket.addEventListener('message', handleHandshake)
-            nextSocket.addEventListener('close', () => {
-              const error = new Error('Workspace WebSocket closed')
-
-              reject(error)
-              markSocketDisconnected(error)
-            })
-            nextSocket.addEventListener('error', () => {
-              const error = new Error('Workspace WebSocket connection failed')
-
-              reject(error)
-              markSocketDisconnected(error)
-            })
-          })
-      )
+      cancelReconnectTimer()
+      socketPromise = createSocketConnection('connecting')
     }
 
     return socketPromise
+  }
+
+  /**
+   * 创建新的 WebSocket 连接，并在 open 后进入 handshake 阶段。
+   */
+  function createSocketConnection(
+    startState: 'connecting' | 'reconnecting'
+  ): Promise<WorkspaceWebSocketLike> {
+    setConnectionState(startState)
+
+    return getTransportInfo().then(
+      (transportInfo) =>
+        new Promise<WorkspaceWebSocketLike>((resolve, reject) => {
+          const SocketCtor = WebSocketCtor ?? getDefaultWebSocketConstructor()
+          const nextSocket = new SocketCtor(transportInfo.url)
+
+          socket = nextSocket
+          const handleHandshake = (event: WorkspaceWebSocketEvent): void => {
+            handleHandshakeMessage(nextSocket, event, handleHandshake, resolve, reject)
+          }
+
+          nextSocket.addEventListener('open', () => {
+            setConnectionState('handshaking')
+            sendHandshake(nextSocket)
+          })
+          nextSocket.addEventListener('message', handleHandshake)
+          nextSocket.addEventListener('close', () => {
+            const error = new Error('Workspace WebSocket closed')
+
+            reject(error)
+            markSocketDisconnected(error)
+          })
+          nextSocket.addEventListener('error', () => {
+            const error = new Error('Workspace WebSocket connection failed')
+
+            reject(error)
+            markSocketDisconnected(error)
+          })
+        })
+    )
   }
 
   /**
@@ -211,6 +253,7 @@ function createWorkspaceWebSocketTransport({
     handshakeState.clientId = envelope.clientId
     activeSocket.removeEventListener('message', handleHandshake)
     activeSocket.addEventListener('message', handleSocketMessage)
+    setConnectionState('connected')
     resolve(activeSocket)
   }
 
@@ -251,10 +294,16 @@ function createWorkspaceWebSocketTransport({
    * 标记普通连接断开；后续请求会重新创建 WebSocket 并重新握手。
    */
   function markSocketDisconnected(error: Error): void {
+    if (terminalError !== null) {
+      return
+    }
+
     handshakeState.clientId = null
     socket = null
     socketPromise = null
     rejectPendingRequests(error)
+    setConnectionState('disconnected')
+    scheduleBackgroundReconnect()
   }
 
   /**
@@ -262,7 +311,57 @@ function createWorkspaceWebSocketTransport({
    */
   function markTerminalFailure(error: Error): void {
     terminalError = error
-    markSocketDisconnected(error)
+    cancelReconnectTimer()
+    handshakeState.clientId = null
+    socket = null
+    socketPromise = null
+    rejectPendingRequests(error)
+    setConnectionState('terminal-error')
+  }
+
+  /**
+   * 若仍有事件订阅者，安排一次后台重连；业务 request 不会被自动重放。
+   */
+  function scheduleBackgroundReconnect(): void {
+    if (terminalError !== null || envelopeListeners.size === 0 || reconnectTimer !== null) {
+      return
+    }
+
+    setConnectionState('reconnecting')
+    reconnectTimer = setTimeout(() => {
+      reconnectTimer = null
+
+      if (terminalError !== null || envelopeListeners.size === 0) {
+        return
+      }
+
+      socketPromise = createSocketConnection('reconnecting')
+      void socketPromise.catch(() => undefined)
+    }, reconnectDelayMs)
+  }
+
+  /**
+   * 取消尚未执行的后台重连 timer。
+   */
+  function cancelReconnectTimer(): void {
+    if (reconnectTimer === null) {
+      return
+    }
+
+    clearTimeout(reconnectTimer)
+    reconnectTimer = null
+  }
+
+  /**
+   * 更新内部连接状态，并把状态变化通知给测试/未来内部适配层。
+   */
+  function setConnectionState(nextState: WorkspaceWebSocketConnectionState): void {
+    if (connectionState === nextState) {
+      return
+    }
+
+    connectionState = nextState
+    onConnectionStateChange?.(nextState)
   }
 }
 
