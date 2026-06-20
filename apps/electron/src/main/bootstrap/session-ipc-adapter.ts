@@ -11,6 +11,7 @@ import { pushTyped, type RpcPushPort } from '@moon/server-core/transport'
 import type { ChatOperationEvent } from '@moon/shared/domain/chat'
 import { RPC_CHANNELS, type SessionRpcChannel } from '@moon/shared/protocol'
 import { createLegacyIpcRpcServer } from './legacy-ipc-rpc-server'
+import { getLegacyWebContentsClientId } from './legacy-webcontents-client-registry'
 
 type CallableSessionRpcChannel = Exclude<SessionRpcChannel, typeof RPC_CHANNELS.sessions.event>
 
@@ -52,7 +53,7 @@ function createSessionIpcRequestContext(
   event: IpcMainInvokeEvent,
   rpcServer: RpcPushPort
 ): SessionRpcRequestContext {
-  const clientId = String(event.sender.id)
+  const clientId = getLegacyWebContentsClientId(event.sender)
 
   return {
     emitSessionEvent: (eventChannel, operationEvent) => {

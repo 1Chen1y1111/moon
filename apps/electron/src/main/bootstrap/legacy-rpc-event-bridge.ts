@@ -3,7 +3,7 @@
  * 本文件只处理本地窗口事件分发和临时 client 定向，不引入 WebSocket 或 workspace routing。
  */
 
-import { BrowserWindow, type WebContents } from 'electron'
+import type { WebContents } from 'electron'
 
 import { ipcChannels } from '@ipc/channels'
 import {
@@ -12,6 +12,10 @@ import {
   type BroadcastEventChannel,
   type PushTarget
 } from '@moon/shared/protocol'
+import {
+  findLegacyWebContentsClient,
+  listLegacyWebContentsClients
+} from './legacy-webcontents-client-registry'
 
 /**
  * Electron legacy IPC event bridge 当前支持的本地发送目标。
@@ -60,14 +64,12 @@ export function emitLegacyRpcEvent<TChannel extends BroadcastEventChannel>(
  * 向所有窗口发送 legacy IPC 事件，可按 WebContents id 字符串排除某个 client。
  */
 function sendToAllWindows(legacyChannel: string, exclude: string | undefined, args: unknown[]): void {
-  BrowserWindow.getAllWindows().forEach((window) => {
-    const webContents = window.webContents
-
-    if (exclude !== undefined && String(webContents.id) === exclude) {
+  listLegacyWebContentsClients().forEach((client) => {
+    if (exclude !== undefined && client.clientId === exclude) {
       return
     }
 
-    webContents.send(legacyChannel, ...args)
+    client.webContents.send(legacyChannel, ...args)
   })
 }
 
@@ -75,15 +77,9 @@ function sendToAllWindows(legacyChannel: string, exclude: string | undefined, ar
  * 按临时 clientId 语义把事件发送给匹配 WebContents id 的窗口。
  */
 function sendToClientWindow(legacyChannel: string, clientId: string, args: unknown[]): void {
-  BrowserWindow.getAllWindows().forEach((window) => {
-    const webContents = window.webContents
+  const client = findLegacyWebContentsClient(clientId)
 
-    if (String(webContents.id) !== clientId) {
-      return
-    }
-
-    webContents.send(legacyChannel, ...args)
-  })
+  client?.webContents.send(legacyChannel, ...args)
 }
 
 /**
