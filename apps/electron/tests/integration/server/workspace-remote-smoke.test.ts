@@ -132,12 +132,20 @@ describe('workspace remote smoke', () => {
 
       workspaceServer = await startMoonWorkspaceServer({
         attachmentsDirectory: join(directory, 'attachments'),
+        authToken: 'workspace-secret',
         dataDir: 'memory://',
         migrationsFolder
       })
 
+      const rejectedClient = createWorkspaceWebSocketRpcClient({
+        createId: () => 'bad-request',
+        getAuthToken: async () => 'bad-secret',
+        getTransportUrl: async () => workspaceServer?.url ?? '',
+        WebSocketCtor: NodeWebSocketAdapter as WorkspaceWebSocketConstructor
+      })
       const client = createWorkspaceWebSocketRpcClient({
         createId: () => 'request-1',
+        getAuthToken: async () => 'workspace-secret',
         getTransportUrl: async () => workspaceServer?.url ?? '',
         WebSocketCtor: NodeWebSocketAdapter as WorkspaceWebSocketConstructor
       })
@@ -154,6 +162,11 @@ describe('workspace remote smoke', () => {
 
       client.on(RPC_CHANNELS.sessions.event, listener)
 
+      await expect(rejectedClient.invoke(RPC_CHANNELS.sessions.listSessions)).rejects.toMatchObject(
+        {
+          code: 'AUTHENTICATION_FAILED'
+        }
+      )
       await expect(client.invoke(RPC_CHANNELS.sessions.listSessions)).resolves.toEqual([])
 
       workspaceServer.workspaceRpcServer.push(RPC_CHANNELS.sessions.event, { to: 'all' }, event)

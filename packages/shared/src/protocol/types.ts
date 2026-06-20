@@ -22,12 +22,14 @@ export type ErrorCode =
   | 'CHANNEL_NOT_FOUND'
   | 'REQUEST_TIMEOUT'
   | 'PROTOCOL_VERSION_UNSUPPORTED'
+  | 'AUTHENTICATION_FAILED'
 
 const KNOWN_ERROR_CODES: ReadonlySet<string> = new Set<ErrorCode>([
   'HANDLER_ERROR',
   'CHANNEL_NOT_FOUND',
   'REQUEST_TIMEOUT',
-  'PROTOCOL_VERSION_UNSUPPORTED'
+  'PROTOCOL_VERSION_UNSUPPORTED',
+  'AUTHENTICATION_FAILED'
 ])
 
 /**
@@ -50,6 +52,7 @@ export type MessageEnvelope = {
   result?: unknown
   error?: WireError
   protocolVersion?: string
+  authToken?: string
   clientId?: string
   workspaceId?: string
 }

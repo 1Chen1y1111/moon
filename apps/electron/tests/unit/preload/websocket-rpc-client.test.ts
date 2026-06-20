@@ -103,6 +103,7 @@ describe('createWorkspaceWebSocketRpcClient preload wrapper', () => {
 
   it('connects to the URL returned by Electron workspace transport info', async () => {
     const getTransportInfo = vi.fn(async () => ({
+      authToken: 'workspace-secret',
       mode: 'remote' as const,
       url: 'ws://remote-workspace.local:48123'
     }))
@@ -117,6 +118,14 @@ describe('createWorkspaceWebSocketRpcClient preload wrapper', () => {
     const socket = FakeWebSocket.instances[0]
 
     socket.emit('open')
+    await flushPromises()
+    expect(JSON.parse(socket.sent[0])).toEqual({
+      id: 'workspace-handshake',
+      type: 'handshake',
+      protocolVersion: PROTOCOL_VERSION,
+      authToken: 'workspace-secret'
+    })
+
     acknowledgeHandshake(socket)
     await flushPromises()
     socket.emit('message', {

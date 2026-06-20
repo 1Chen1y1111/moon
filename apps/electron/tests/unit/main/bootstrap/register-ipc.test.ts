@@ -52,6 +52,7 @@ function createWorkspaceRpcServerFixture() {
   const handlers = new Map<string, (...args: unknown[]) => unknown>()
   const close = vi.fn(async () => undefined)
   const getTransportInfo = vi.fn(async () => ({
+    authToken: 'local-workspace-secret',
     mode: 'local',
     url: 'ws://127.0.0.1:48123'
   }))
@@ -106,6 +107,7 @@ describe('registerIpcHandlers', () => {
 
   beforeEach(() => {
     delete process.env.MOON_WORKSPACE_WS_URL
+    delete process.env.MOON_WORKSPACE_WS_TOKEN
     removeHandlerMock.mockReset()
     handleMock.mockReset()
     fromWebContentsMock.mockReset()
@@ -138,6 +140,7 @@ describe('registerIpcHandlers', () => {
 
   afterEach(() => {
     delete process.env.MOON_WORKSPACE_WS_URL
+    delete process.env.MOON_WORKSPACE_WS_TOKEN
   })
 
   it('registers a single unified rpc request handler', async () => {
@@ -197,6 +200,7 @@ describe('registerIpcHandlers', () => {
         workspaceWebSocketTransportInfoChannel
       )
     ).resolves.toEqual({
+      authToken: 'local-workspace-secret',
       mode: 'local',
       url: 'ws://127.0.0.1:48123'
     })
@@ -205,6 +209,7 @@ describe('registerIpcHandlers', () => {
 
   it('returns remote workspace transport info without creating the local workspace server', async () => {
     process.env.MOON_WORKSPACE_WS_URL = ' ws://remote-workspace.local:48123 '
+    process.env.MOON_WORKSPACE_WS_TOKEN = ' remote-workspace-secret '
     const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
     const { ipcChannels } = await import('@ipc/channels')
     const { workspaceWebSocketTransportInfoChannel } = await import(
@@ -227,6 +232,7 @@ describe('registerIpcHandlers', () => {
         workspaceWebSocketTransportInfoChannel
       )
     ).resolves.toEqual({
+      authToken: 'remote-workspace-secret',
       mode: 'remote',
       url: 'ws://remote-workspace.local:48123'
     })

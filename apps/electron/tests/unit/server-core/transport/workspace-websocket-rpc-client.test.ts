@@ -82,12 +82,14 @@ async function flushPromises(): Promise<void> {
 }
 
 function createClient(options: {
+  getAuthToken?: () => Promise<string | undefined>
   getTransportUrl?: () => Promise<string>
   onConnectionStateChange?: (state: WorkspaceWebSocketConnectionState) => void
   reconnectDelayMs?: number
 } = {}) {
   return createWorkspaceWebSocketRpcClient({
     createId: () => 'request-1',
+    getAuthToken: options.getAuthToken,
     getTransportUrl: options.getTransportUrl ?? (async () => 'ws://127.0.0.1:48123'),
     onConnectionStateChange: options.onConnectionStateChange,
     reconnectDelayMs: options.reconnectDelayMs,
@@ -155,6 +157,40 @@ describe('createWorkspaceWebSocketRpcClient', () => {
     })
 
     await expect(resultPromise).resolves.toEqual([{ id: 'message-1' }])
+  })
+
+  it('includes the optional auth token in handshake envelopes', async () => {
+    FakeWebSocket.instances = []
+    const client = createClient({
+      getAuthToken: async () => 'workspace-secret'
+    })
+    const resultPromise = client.invoke(RPC_CHANNELS.sessions.listSessions)
+
+    await flushPromises()
+    const socket = FakeWebSocket.instances[0]
+
+    socket.emit('open')
+    await flushPromises()
+
+    expect(parseSentEnvelope(socket, 0)).toEqual({
+      id: 'workspace-handshake',
+      type: 'handshake',
+      protocolVersion: PROTOCOL_VERSION,
+      authToken: 'workspace-secret'
+    })
+
+    acknowledgeHandshake(socket)
+    await flushPromises()
+    socket.emit('message', {
+      data: serializeEnvelope({
+        id: 'request-1',
+        type: 'response',
+        channel: RPC_CHANNELS.sessions.listSessions,
+        result: []
+      })
+    })
+
+    await expect(resultPromise).resolves.toEqual([])
   })
 
   it('connects to the workspace URL returned by the transport provider', async () => {
@@ -637,6 +673,38 @@ describe('createWorkspaceWebSocketRpcClient', () => {
     await expect(client.invoke(RPC_CHANNELS.sessions.listSessions)).rejects.toMatchObject({
       code: 'PROTOCOL_VERSION_UNSUPPORTED',
       message: 'unsupported'
+    })
+    expect(FakeWebSocket.instances).toHaveLength(1)
+  })
+
+  it('does not reconnect after terminal handshake authentication errors', async () => {
+    FakeWebSocket.instances = []
+    const client = createClient()
+    const firstResultPromise = client.invoke(RPC_CHANNELS.sessions.listSessions)
+
+    await flushPromises()
+    const socket = FakeWebSocket.instances[0]
+
+    socket.emit('open')
+    socket.emit('message', {
+      data: serializeEnvelope({
+        id: 'workspace-handshake',
+        type: 'error',
+        error: {
+          code: 'AUTHENTICATION_FAILED',
+          message: 'bad workspace token'
+        }
+      })
+    })
+
+    await expect(firstResultPromise).rejects.toMatchObject({
+      code: 'AUTHENTICATION_FAILED',
+      message: 'bad workspace token'
+    })
+
+    await expect(client.invoke(RPC_CHANNELS.sessions.listSessions)).rejects.toMatchObject({
+      code: 'AUTHENTICATION_FAILED',
+      message: 'bad workspace token'
     })
     expect(FakeWebSocket.instances).toHaveLength(1)
   })

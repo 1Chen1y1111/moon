@@ -17,7 +17,7 @@ const defaultStateDir = join(repositoryRoot, '.moon-server')
  * 从环境变量读取可选端口，未配置时使用随机端口。
  */
 function readPort(): number | undefined {
-  const rawPort = process.env.MOON_SERVER_PORT?.trim()
+  const rawPort = readOptionalEnv('MOON_SERVER_PORT')
 
   if (!rawPort) {
     return undefined
@@ -30,6 +30,15 @@ function readPort(): number | undefined {
   }
 
   return port
+}
+
+/**
+ * 读取可选环境变量，并把空白字符串视为未配置。
+ */
+function readOptionalEnv(name: string): string | undefined {
+  const value = process.env[name]?.trim()
+
+  return value ? value : undefined
 }
 
 /**
@@ -46,6 +55,7 @@ async function main(): Promise<void> {
 
   const server = await startMoonWorkspaceServer({
     attachmentsDirectory,
+    authToken: readOptionalEnv('MOON_SERVER_AUTH_TOKEN'),
     dataDir,
     host: process.env.MOON_SERVER_HOST,
     migrationsFolder,

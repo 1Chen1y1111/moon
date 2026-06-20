@@ -31,10 +31,17 @@ export function createWorkspaceWebSocketRpcClient({
   reconnectDelayMs,
   WebSocketCtor = getDefaultWebSocketConstructor()
 }: WorkspaceWebSocketRpcClientOptions): RpcClientPort {
+  const readTransportInfo = createTransportInfoReader(getTransportInfo)
+
   return createServerCoreWorkspaceWebSocketRpcClient({
     createId,
+    getAuthToken: async () => {
+      const transportInfo = await readTransportInfo()
+
+      return transportInfo.authToken
+    },
     getTransportUrl: async () => {
-      const transportInfo = await getTransportInfo()
+      const transportInfo = await readTransportInfo()
 
       return transportInfo.url
     },
@@ -42,6 +49,26 @@ export function createWorkspaceWebSocketRpcClient({
     reconnectDelayMs,
     WebSocketCtor
   })
+}
+
+/**
+ * 缓存一次 preload discovery，确保同次连接的 URL 和 auth token 来自同一份 main 响应。
+ */
+function createTransportInfoReader(
+  getTransportInfo: () => Promise<WorkspaceWebSocketTransportInfo>
+): () => Promise<WorkspaceWebSocketTransportInfo> {
+  let transportInfoPromise: Promise<WorkspaceWebSocketTransportInfo> | null = null
+
+  return () => {
+    if (transportInfoPromise === null) {
+      transportInfoPromise = getTransportInfo().catch((error) => {
+        transportInfoPromise = null
+        throw error
+      })
+    }
+
+    return transportInfoPromise
+  }
 }
 
 /**

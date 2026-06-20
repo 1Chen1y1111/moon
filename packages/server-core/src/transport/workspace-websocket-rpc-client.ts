@@ -43,6 +43,7 @@ export type WorkspaceWebSocketConnectionState =
 
 export type WorkspaceWebSocketRpcClientOptions = {
   createId?: () => string
+  getAuthToken?: () => Promise<string | undefined>
   getTransportUrl: () => Promise<string>
   onConnectionStateChange?: (state: WorkspaceWebSocketConnectionState) => void
   reconnectDelayMs?: number
@@ -58,12 +59,14 @@ const DEFAULT_RECONNECT_DELAY_MS = 100
  */
 export function createWorkspaceWebSocketRpcClient({
   createId,
+  getAuthToken,
   getTransportUrl,
   onConnectionStateChange,
   reconnectDelayMs = DEFAULT_RECONNECT_DELAY_MS,
   WebSocketCtor
 }: WorkspaceWebSocketRpcClientOptions): RpcClientPort {
   const transport = createWorkspaceWebSocketTransport({
+    getAuthToken,
     getTransportUrl,
     onConnectionStateChange,
     reconnectDelayMs,
@@ -81,13 +84,18 @@ export function createWorkspaceWebSocketRpcClient({
  * 创建 WebSocket transport 状态机，负责连接、请求关联和事件广播。
  */
 function createWorkspaceWebSocketTransport({
+  getAuthToken,
   getTransportUrl,
   onConnectionStateChange,
   reconnectDelayMs,
   WebSocketCtor
 }: Pick<
   WorkspaceWebSocketRpcClientOptions,
-  'getTransportUrl' | 'onConnectionStateChange' | 'reconnectDelayMs' | 'WebSocketCtor'
+  | 'getAuthToken'
+  | 'getTransportUrl'
+  | 'onConnectionStateChange'
+  | 'reconnectDelayMs'
+  | 'WebSocketCtor'
 >): {
   request: (envelope: MessageEnvelope) => Promise<MessageEnvelope>
   subscribe: EnvelopeRpcClientSubscribe
@@ -174,7 +182,13 @@ function createWorkspaceWebSocketTransport({
 
           nextSocket.addEventListener('open', () => {
             setConnectionState('handshaking')
-            sendHandshake(nextSocket)
+            void sendHandshake(nextSocket).catch((error) => {
+              const connectionError = toError(error)
+
+              reject(connectionError)
+              markSocketDisconnected(connectionError)
+              nextSocket.close()
+            })
           })
           nextSocket.addEventListener('message', handleHandshake)
           nextSocket.addEventListener('close', () => {
@@ -196,14 +210,35 @@ function createWorkspaceWebSocketTransport({
   /**
    * WebSocket 打开后先发送协议握手 envelope。
    */
-  function sendHandshake(activeSocket: WorkspaceWebSocketLike): void {
-    activeSocket.send(
-      serializeEnvelope({
-        id: WORKSPACE_HANDSHAKE_ID,
-        type: 'handshake',
-        protocolVersion: PROTOCOL_VERSION
-      })
-    )
+  function sendHandshake(activeSocket: WorkspaceWebSocketLike): Promise<void> {
+    if (getAuthToken === undefined) {
+      writeHandshakeEnvelope(activeSocket)
+      return Promise.resolve()
+    }
+
+    return getAuthToken().then((authToken) => {
+      writeHandshakeEnvelope(activeSocket, authToken)
+    })
+  }
+
+  /**
+   * 写入 handshake envelope；无 token 的开发路径保持同步发送，避免握手时序漂移。
+   */
+  function writeHandshakeEnvelope(
+    activeSocket: WorkspaceWebSocketLike,
+    authToken?: string
+  ): void {
+    const envelope: MessageEnvelope = {
+      id: WORKSPACE_HANDSHAKE_ID,
+      type: 'handshake',
+      protocolVersion: PROTOCOL_VERSION
+    }
+
+    if (authToken !== undefined) {
+      envelope.authToken = authToken
+    }
+
+    activeSocket.send(serializeEnvelope(envelope))
   }
 
   /**

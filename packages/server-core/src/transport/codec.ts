@@ -60,6 +60,10 @@ export function validateEnvelopeShape(value: unknown): value is MessageEnvelope 
     return false
   }
 
+  if (value.authToken !== undefined && typeof value.authToken !== 'string') {
+    return false
+  }
+
   if (value.clientId !== undefined && typeof value.clientId !== 'string') {
     return false
   }

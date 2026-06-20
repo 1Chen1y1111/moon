@@ -52,6 +52,7 @@ describe('protocol wire types', () => {
       id: 'handshake-1',
       type: 'handshake',
       protocolVersion: PROTOCOL_VERSION,
+      authToken: 'workspace-secret',
       clientId: 'client-1',
       workspaceId: 'workspace-1'
     } satisfies MessageEnvelope
@@ -61,6 +62,7 @@ describe('protocol wire types', () => {
     expect(event.channel).toBe('session:event')
     expect(error.error?.code).toBe('HANDLER_ERROR')
     expect(handshake.protocolVersion).toBe(PROTOCOL_VERSION)
+    expect(handshake.authToken).toBe('workspace-secret')
   })
 
   it('recognizes supported error codes only', () => {
@@ -68,7 +70,8 @@ describe('protocol wire types', () => {
       'HANDLER_ERROR',
       'CHANNEL_NOT_FOUND',
       'REQUEST_TIMEOUT',
-      'PROTOCOL_VERSION_UNSUPPORTED'
+      'PROTOCOL_VERSION_UNSUPPORTED',
+      'AUTHENTICATION_FAILED'
     ]
 
     expect(supportedCodes.every(isErrorCode)).toBe(true)

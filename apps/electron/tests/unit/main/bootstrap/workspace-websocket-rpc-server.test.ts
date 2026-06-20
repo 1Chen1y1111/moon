@@ -37,11 +37,13 @@ describe('createWorkspaceWebSocketRpcServer', () => {
     const fakeServer = new FakeSocketServer()
     const createWebSocketServer = vi.fn(() => fakeServer)
     const server = createWorkspaceWebSocketRpcServer({
+      createAuthToken: () => 'local-workspace-secret',
       createClientId: () => 'client-1',
       createWebSocketServer
     })
 
     await expect(server.getTransportInfo()).resolves.toEqual({
+      authToken: 'local-workspace-secret',
       mode: 'local',
       url: 'ws://127.0.0.1:48123'
     })

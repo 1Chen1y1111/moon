@@ -40,6 +40,7 @@ type WorkspaceTransportRegistration =
     }
 
 const WORKSPACE_WS_URL_ENV = 'MOON_WORKSPACE_WS_URL'
+const WORKSPACE_WS_TOKEN_ENV = 'MOON_WORKSPACE_WS_TOKEN'
 
 /**
  * 主进程注册 IPC 后需要在应用退出时释放的资源。
@@ -87,12 +88,15 @@ export function registerIpcHandlers({
 function createWorkspaceTransportRegistration(
   createWorkspaceRpcServer: () => WorkspaceWebSocketRpcServer
 ): WorkspaceTransportRegistration {
-  const remoteUrl = process.env[WORKSPACE_WS_URL_ENV]?.trim()
+  const remoteUrl = readOptionalEnv(WORKSPACE_WS_URL_ENV)
 
   if (remoteUrl) {
+    const authToken = readOptionalEnv(WORKSPACE_WS_TOKEN_ENV)
+
     return {
       mode: 'remote',
       transportInfo: {
+        ...(authToken === undefined ? {} : { authToken }),
         mode: 'remote',
         url: remoteUrl
       }
@@ -103,6 +107,15 @@ function createWorkspaceTransportRegistration(
     mode: 'local',
     workspaceRpcServer: createWorkspaceRpcServer()
   }
+}
+
+/**
+ * 读取可选环境变量，并把空白字符串视为未配置。
+ */
+function readOptionalEnv(name: string): string | undefined {
+  const value = process.env[name]?.trim()
+
+  return value ? value : undefined
 }
 
 /**

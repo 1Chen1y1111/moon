@@ -135,9 +135,10 @@ async function waitForSentEnvelope(socket: FakeSocket, index: number): Promise<u
 /**
  * 完成 workspace WebSocket 协议握手。
  */
-async function performHandshake(socket: FakeSocket): Promise<void> {
+async function performHandshake(socket: FakeSocket, authToken?: string): Promise<void> {
   socket.emitMessage(
     serializeEnvelope({
+      authToken,
       id: 'handshake-1',
       type: 'handshake',
       protocolVersion: PROTOCOL_VERSION
@@ -194,6 +195,39 @@ describe('startMoonWorkspaceServer', () => {
       type: 'response',
       channel: RPC_CHANNELS.sessions.listSessions,
       result: []
+    })
+  })
+
+  it('passes the configured auth token to the workspace WebSocket runtime', async () => {
+    const fakeServer = new FakeSocketServer()
+
+    workspaceServer = await startMoonWorkspaceServer({
+      attachmentsDirectory: await createAttachmentsDirectory(),
+      authToken: 'workspace-secret',
+      createClientId: () => 'client-1',
+      createWebSocketServer: () => fakeServer,
+      dataDir: 'memory://',
+      migrationsFolder
+    })
+
+    const missingTokenSocket = fakeServer.connect()
+    const validSocket = fakeServer.connect()
+
+    await performHandshake(missingTokenSocket)
+    await performHandshake(validSocket, 'workspace-secret')
+
+    expect(await waitForSentEnvelope(missingTokenSocket, 0)).toMatchObject({
+      id: 'handshake-1',
+      type: 'error',
+      error: {
+        code: 'AUTHENTICATION_FAILED'
+      }
+    })
+    expect(await waitForSentEnvelope(validSocket, 0)).toEqual({
+      id: 'handshake-1',
+      type: 'handshake_ack',
+      clientId: 'client-1',
+      protocolVersion: PROTOCOL_VERSION
     })
   })
 

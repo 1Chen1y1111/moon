@@ -115,9 +115,14 @@ function parseSentEnvelope(socket: FakeSocket, index: number): unknown {
   return JSON.parse(socket.sent[index])
 }
 
-async function performHandshake(socket: FakeSocket, id = 'handshake-1'): Promise<void> {
+async function performHandshake(
+  socket: FakeSocket,
+  id = 'handshake-1',
+  authToken?: string
+): Promise<void> {
   socket.emitMessage(
     serializeEnvelope({
+      authToken,
       id,
       type: 'handshake',
       protocolVersion: PROTOCOL_VERSION
@@ -183,6 +188,65 @@ describe('createWorkspaceWebSocketRpcServer', () => {
       clientId: 'client-1',
       protocolVersion: PROTOCOL_VERSION
     })
+  })
+
+  it('requires a matching auth token when the workspace server is configured with one', async () => {
+    const fakeServer = new FakeSocketServer()
+    const handler = vi.fn()
+    const server = createWorkspaceWebSocketRpcServer({
+      authToken: 'workspace-secret',
+      createClientId: () => 'client-1',
+      createWebSocketServer: () => fakeServer
+    })
+
+    server.handle(RPC_CHANNELS.sessions.listSessions, handler)
+
+    await server.getTransportUrl()
+    const missingTokenSocket = fakeServer.connect()
+    const wrongTokenSocket = fakeServer.connect()
+    const validSocket = fakeServer.connect()
+
+    await performHandshake(missingTokenSocket, 'missing-token')
+    await performHandshake(wrongTokenSocket, 'wrong-token', 'nope')
+    await performHandshake(validSocket, 'valid-token', 'workspace-secret')
+    validSocket.emitMessage(
+      serializeEnvelope({
+        id: 'request-1',
+        type: 'request',
+        channel: RPC_CHANNELS.sessions.listSessions,
+        args: []
+      })
+    )
+    await flushPromises()
+
+    expect(parseSentEnvelope(missingTokenSocket, 0)).toMatchObject({
+      id: 'missing-token',
+      type: 'error',
+      error: {
+        code: 'AUTHENTICATION_FAILED'
+      }
+    })
+    expect(parseSentEnvelope(wrongTokenSocket, 0)).toMatchObject({
+      id: 'wrong-token',
+      type: 'error',
+      error: {
+        code: 'AUTHENTICATION_FAILED'
+      }
+    })
+    expect(missingTokenSocket.readyState).toBe(3)
+    expect(wrongTokenSocket.readyState).toBe(3)
+    expect(parseSentEnvelope(validSocket, 0)).toEqual({
+      id: 'valid-token',
+      type: 'handshake_ack',
+      clientId: 'client-1',
+      protocolVersion: PROTOCOL_VERSION
+    })
+    expect(parseSentEnvelope(validSocket, 1)).toMatchObject({
+      id: 'request-1',
+      type: 'response',
+      channel: RPC_CHANNELS.sessions.listSessions
+    })
+    expect(handler).toHaveBeenCalledOnce()
   })
 
   it('rejects unsupported protocol versions and closes the socket', async () => {

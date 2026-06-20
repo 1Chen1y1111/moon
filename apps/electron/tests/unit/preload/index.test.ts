@@ -150,6 +150,7 @@ function mockEnvelopeIpcInvoke(): void {
           type: 'response',
           channel: envelope.channel,
           result: {
+            authToken: 'workspace-secret',
             mode: 'local',
             url: 'ws://127.0.0.1:48123'
           }
@@ -281,7 +282,14 @@ describe('preload api', () => {
       .map((raw) => JSON.parse(raw))
       .filter((envelope) => envelope.type === 'request')
       .map((envelope) => envelope.channel)
+    const workspaceHandshake = FakeWebSocket.instances[0].sent
+      .map((raw) => JSON.parse(raw))
+      .find((envelope) => envelope.type === 'handshake')
 
+    expect(workspaceHandshake).toMatchObject({
+      type: 'handshake',
+      authToken: 'workspace-secret'
+    })
     expect(workspaceRequestChannels).toEqual([
       RPC_CHANNELS.sessions.listSessions,
       RPC_CHANNELS.sessions.getMessages,

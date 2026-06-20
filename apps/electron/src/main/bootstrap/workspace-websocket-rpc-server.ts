@@ -15,6 +15,7 @@ import {
 } from '@moon/server-core/transport'
 
 export type WorkspaceWebSocketRpcServerOptions = {
+  createAuthToken?: () => string
   createClientId?: () => string
   createWebSocketServer?: CreateWorkspaceSocketServer
 }
@@ -30,10 +31,13 @@ export type WorkspaceWebSocketRpcServer = Omit<
  * 创建 Electron 本机 workspace WebSocket RPC server，并把 URL 包装成 IPC discovery contract。
  */
 export function createWorkspaceWebSocketRpcServer({
+  createAuthToken = randomUUID,
   createClientId = randomUUID,
   createWebSocketServer = createDefaultWebSocketServer
 }: WorkspaceWebSocketRpcServerOptions = {}): WorkspaceWebSocketRpcServer {
+  const authToken = createAuthToken()
   const runtime = createServerCoreWorkspaceWebSocketRpcServer({
+    authToken,
     createClientId,
     createWebSocketServer
   })
@@ -41,6 +45,7 @@ export function createWorkspaceWebSocketRpcServer({
   return {
     close: () => runtime.close(),
     getTransportInfo: async () => ({
+      authToken,
       mode: 'local',
       url: await runtime.getTransportUrl()
     }),

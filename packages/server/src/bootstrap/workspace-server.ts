@@ -21,6 +21,7 @@ import {
 } from './runtime'
 
 export type StartMoonWorkspaceServerOptions = CreateMoonServerRuntimeOptions & {
+  authToken?: string
   createClientId?: () => string
   createWebSocketServer?: CreateWorkspaceSocketServer
   host?: string
@@ -38,6 +39,7 @@ export type MoonWorkspaceServer = {
  * 创建本地 runtime、注册 session handlers，并启动 workspace WebSocket endpoint。
  */
 export async function startMoonWorkspaceServer({
+  authToken,
   createClientId = randomUUID,
   createWebSocketServer = createDefaultWebSocketServer,
   host,
@@ -46,6 +48,7 @@ export async function startMoonWorkspaceServer({
 }: StartMoonWorkspaceServerOptions): Promise<MoonWorkspaceServer> {
   const runtime = await createMoonServerRuntime(runtimeOptions)
   const workspaceRpcServer = createWorkspaceWebSocketRpcServer({
+    authToken,
     createClientId,
     createWebSocketServer,
     host,

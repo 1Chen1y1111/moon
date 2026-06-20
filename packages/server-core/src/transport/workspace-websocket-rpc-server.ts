@@ -61,6 +61,7 @@ type WorkspaceSocketClient = {
 }
 
 export type WorkspaceWebSocketRpcServerOptions = {
+  authToken?: string
   createClientId?: () => string
   createWebSocketServer: CreateWorkspaceSocketServer
   host?: string
@@ -82,6 +83,7 @@ const HEARTBEAT_INTERVAL_MS = 30_000
  * 创建 workspace WebSocket RPC runtime；实际 socket server 会在首次查询 URL 时懒启动。
  */
 export function createWorkspaceWebSocketRpcServer({
+  authToken,
   createClientId = createDefaultClientId,
   createWebSocketServer,
   host = LOCALHOST,
@@ -165,6 +167,7 @@ export function createWorkspaceWebSocketRpcServer({
             clients,
             envelopeServer,
             rpcServer,
+            authToken,
             createClientId(),
             socket as WorkspaceSocket
           )
@@ -197,6 +200,7 @@ function acceptSocketClient(
   clients: Set<WorkspaceSocketClient>,
   envelopeServer: EnvelopeRpcServer<SessionRpcRequestContext>,
   rpcServer: RpcPushPort,
+  authToken: string | undefined,
   clientId: string,
   socket: WorkspaceSocket
 ): void {
@@ -210,7 +214,7 @@ function acceptSocketClient(
 
   clients.add(client)
   socket.on('message', (rawMessage) => {
-    void dispatchSocketMessage(envelopeServer, rpcServer, client, rawMessage)
+    void dispatchSocketMessage(envelopeServer, rpcServer, client, authToken, rawMessage)
   })
   socket.on('close', () => {
     clients.delete(client)
@@ -230,6 +234,7 @@ async function dispatchSocketMessage(
   envelopeServer: EnvelopeRpcServer<SessionRpcRequestContext>,
   rpcServer: RpcPushPort,
   client: WorkspaceSocketClient,
+  authToken: string | undefined,
   rawMessage: unknown
 ): Promise<void> {
   let envelope: MessageEnvelope
@@ -245,7 +250,7 @@ async function dispatchSocketMessage(
   }
 
   if (!client.handshakeComplete) {
-    handleHandshakeEnvelope(client, envelope)
+    handleHandshakeEnvelope(client, envelope, authToken)
     return
   }
 
@@ -257,7 +262,11 @@ async function dispatchSocketMessage(
 /**
  * 校验 workspace WebSocket 握手；只有成功握手后的连接才能承载 session RPC。
  */
-function handleHandshakeEnvelope(client: WorkspaceSocketClient, envelope: MessageEnvelope): void {
+function handleHandshakeEnvelope(
+  client: WorkspaceSocketClient,
+  envelope: MessageEnvelope,
+  authToken: string | undefined
+): void {
   if (envelope.type !== 'handshake') {
     sendErrorEnvelope(client.socket, envelope.id, {
       code: 'HANDLER_ERROR',
@@ -270,6 +279,15 @@ function handleHandshakeEnvelope(client: WorkspaceSocketClient, envelope: Messag
     sendErrorEnvelope(client.socket, envelope.id, {
       code: 'PROTOCOL_VERSION_UNSUPPORTED',
       message: `Unsupported protocol version: ${envelope.protocolVersion ?? 'missing'}`
+    })
+    client.socket.close?.()
+    return
+  }
+
+  if (authToken !== undefined && envelope.authToken !== authToken) {
+    sendErrorEnvelope(client.socket, envelope.id, {
+      code: 'AUTHENTICATION_FAILED',
+      message: 'Workspace WebSocket authentication failed'
     })
     client.socket.close?.()
     return
