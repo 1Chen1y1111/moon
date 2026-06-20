@@ -5,6 +5,7 @@
 
 export * from './codec'
 export * from './envelope-push-port'
+export * from './envelope-rpc-client'
 export * from './envelope-rpc-server'
 export * from './push'
 export * from './types'
