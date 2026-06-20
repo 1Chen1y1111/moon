@@ -12,7 +12,7 @@ import { registerAppLifecycle } from './bootstrap/app-lifecycle'
 import { setApplicationIcon } from './bootstrap/app-icon'
 import { openSettingsWindow } from './bootstrap/create-settings-window'
 import { createMainWindow } from './bootstrap/create-window'
-import { registerIpcHandlers } from './bootstrap/register-ipc'
+import { registerIpcHandlers, type RegisteredIpcHandlers } from './bootstrap/register-ipc'
 import { bootstrapDatabase } from './db/bootstrap'
 import { createDatabaseConnection, type AppDatabaseConnection } from './db/connection'
 import { AgentOperationsRepository } from './repositories/agent-operations-repository'
@@ -30,6 +30,7 @@ import { SettingsService } from './services/settings-service'
 
 let databaseConnection: AppDatabaseConnection | null = null
 let providerProxyServer: ProviderProxyServer | null = null
+let registeredIpcHandlers: RegisteredIpcHandlers | null = null
 
 /**
  * 根据运行环境解析 Drizzle migration 目录。
@@ -57,8 +58,16 @@ async function closeDatabaseConnection(): Promise<void> {
  */
 async function closeApplicationResources(): Promise<void> {
   const proxyServer = providerProxyServer
+  const ipcHandlers = registeredIpcHandlers
 
   providerProxyServer = null
+  registeredIpcHandlers = null
+
+  try {
+    await ipcHandlers?.close()
+  } catch (error) {
+    console.error('Failed to close IPC resources', error)
+  }
 
   try {
     await proxyServer?.stop()
@@ -104,7 +113,7 @@ app.whenReady().then(async () => {
   providerProxyServer.start()
   const projectsService = new ProjectsService({ projectsRepository })
 
-  registerIpcHandlers({
+  registeredIpcHandlers = registerIpcHandlers({
     chatService: new ChatService({
       agentOperationsRepository,
       attachmentsDirectory: join(app.getPath('userData'), 'attachments'),

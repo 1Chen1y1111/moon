@@ -6,14 +6,25 @@
 import { contextBridge, ipcRenderer } from 'electron'
 
 import type { MoonApi } from '@ipc/contracts'
+import {
+  workspaceWebSocketTransportInfoChannel,
+  type WorkspaceWebSocketTransportInfo
+} from '@ipc/workspace-transport-contract'
 import { buildClientApi } from './build-client-api'
 import { MOON_API_CHANNEL_MAP } from './channel-map'
 import { createEnvelopeIpcRpcClient } from './envelope-ipc-rpc-client'
 import { RoutedClient } from './routed-client'
+import { createWorkspaceWebSocketRpcClient } from './websocket-rpc-client'
 
-const envelopeClient = createEnvelopeIpcRpcClient(ipcRenderer)
+const localClient = createEnvelopeIpcRpcClient(ipcRenderer)
+const workspaceClient = createWorkspaceWebSocketRpcClient({
+  getTransportInfo: () =>
+    localClient.invoke(
+      workspaceWebSocketTransportInfoChannel
+    ) as Promise<WorkspaceWebSocketTransportInfo>
+})
 const api: MoonApi = buildClientApi(
-  new RoutedClient(envelopeClient, envelopeClient),
+  new RoutedClient(localClient, workspaceClient),
   MOON_API_CHANNEL_MAP
 )
 

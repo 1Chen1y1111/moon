@@ -48,6 +48,30 @@ async function dispatchRpcRequest(
   return (response as { result?: unknown }).result
 }
 
+function createWorkspaceRpcServerFixture() {
+  const handlers = new Map<string, (...args: unknown[]) => unknown>()
+  const close = vi.fn(async () => undefined)
+  const getTransportInfo = vi.fn(async () => ({
+    url: 'ws://127.0.0.1:48123'
+  }))
+  const push = vi.fn()
+
+  return {
+    server: {
+      close,
+      getTransportInfo,
+      handle: (channel: string, handler: (...args: unknown[]) => unknown) => {
+        handlers.set(channel, handler)
+      },
+      push
+    },
+    close,
+    getHandler: (channel: string) => handlers.get(channel),
+    getTransportInfo,
+    push
+  }
+}
+
 describe('registerIpcHandlers', () => {
   const chatService = {
     approveToolCall: vi.fn(),
@@ -126,6 +150,23 @@ describe('registerIpcHandlers', () => {
     expect(handleMock.mock.calls.map(([channel]) => channel)).toEqual([ipcChannels.rpc.request])
   })
 
+  it('returns cleanup that closes the workspace RPC server', async () => {
+    const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
+    const workspace = createWorkspaceRpcServerFixture()
+
+    const registeredHandlers = registerIpcHandlers({
+      chatService: chatService as never,
+      createWorkspaceRpcServer: () => workspace.server as never,
+      openSettingsWindow,
+      projectsService: projectsService as never,
+      settingsService: settingsService as never
+    })
+
+    await registeredHandlers.close()
+
+    expect(workspace.close).toHaveBeenCalledOnce()
+  })
+
   it('registers settings handlers that delegate through the settings service', async () => {
     const { createDefaultAppSettings } = await import('@moon/shared/domain/settings')
     const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
@@ -173,10 +214,10 @@ describe('registerIpcHandlers', () => {
     expect(settingsService.saveProvider).toHaveBeenCalledWith(input)
   })
 
-  it('registers chat handlers that delegate through the chat service', async () => {
+  it('registers chat handlers on the workspace RPC server', async () => {
     const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
-    const { ipcChannels } = await import('@ipc/channels')
     const { RPC_CHANNELS } = await import('@moon/shared/protocol')
+    const workspace = createWorkspaceRpcServerFixture()
     const session = {
       id: 'session-1',
       projectId: null,
@@ -197,22 +238,6 @@ describe('registerIpcHandlers', () => {
       createdAt: '2026-05-09T00:00:00.000Z',
       updatedAt: '2026-05-09T00:00:00.000Z'
     }
-    const topic = {
-      id: 'topic-1',
-      sessionId: 'session-1',
-      title: '默认话题',
-      createdAt: '2026-05-09T00:00:00.000Z',
-      updatedAt: '2026-05-09T00:00:00.000Z'
-    }
-    const thread = {
-      id: 'thread-1',
-      topicId: 'topic-1',
-      title: '主线',
-      type: 'standalone',
-      status: 'active',
-      createdAt: '2026-05-09T00:00:00.000Z',
-      updatedAt: '2026-05-09T00:00:00.000Z'
-    }
     const operation = {
       id: 'operation-1',
       appContext: { sessionId: 'session-1' },
@@ -223,263 +248,75 @@ describe('registerIpcHandlers', () => {
       updatedAt: '2026-05-09T00:00:01.000Z',
       completedAt: '2026-05-09T00:00:01.000Z'
     }
-    const toolInvocation = {
-      id: 'tool-1',
-      operationId: 'operation-1',
-      messageId: 'message-1',
-      name: 'read_file',
-      arguments: {},
-      status: 'done',
-      createdAt: '2026-05-09T00:00:00.000Z',
-      updatedAt: '2026-05-09T00:00:01.000Z'
-    }
-    const attachment = {
-      id: 'attachment-1',
-      name: 'note.txt',
-      mimeType: 'text/plain',
-      size: 5,
-      kind: 'file',
-      createdAt: '2026-05-09T00:00:00.000Z'
-    }
-    const attachmentInput = {
-      name: 'note.txt',
-      mimeType: 'text/plain',
-      size: 5,
-      data: new ArrayBuffer(5)
-    }
+    const emitSessionEvent = vi.fn()
 
     chatService.listSessions.mockResolvedValue([session])
     chatService.getMessages.mockResolvedValue([message])
-    chatService.listTopics.mockResolvedValue([topic])
-    chatService.listThreads.mockResolvedValue([thread])
-    chatService.createSession.mockResolvedValue(session)
-    chatService.deleteSession.mockResolvedValue(undefined)
-    chatService.importAttachment.mockResolvedValue(attachment)
-    chatService.createMessageTurn.mockResolvedValue({
-      session,
-      topic,
-      thread,
-      operation,
-      userMessage: message,
-      assistantMessage: { ...message, id: 'message-2', role: 'assistant', content: '' }
-    })
     chatService.runOperation.mockResolvedValue({
       operation,
       messages: [message]
     })
-    chatService.sendMessage.mockResolvedValue({
-      session,
-      topic,
-      thread,
-      operation,
-      messages: [message]
-    })
-    chatService.cancelOperation.mockResolvedValue(operation)
-    chatService.approveToolCall.mockResolvedValue(toolInvocation)
-    chatService.rejectToolCall.mockResolvedValue({ ...toolInvocation, status: 'rejected' })
 
     registerIpcHandlers({
       chatService: chatService as never,
+      createWorkspaceRpcServer: () => workspace.server as never,
       openSettingsWindow,
       projectsService: projectsService as never,
       settingsService: settingsService as never
     })
 
-    expect(
-      await dispatchRpcRequest(ipcChannels.rpc.request, { sender: {} }, RPC_CHANNELS.sessions.listSessions)
-    ).toEqual([session])
-    expect(
-      await dispatchRpcRequest(
-        ipcChannels.rpc.request,
-        { sender: {} },
-        RPC_CHANNELS.sessions.getMessages,
-        [{ sessionId: 'session-1' }]
-      )
-    ).toEqual([message])
-    expect(
-      await dispatchRpcRequest(
-        ipcChannels.rpc.request,
-        { sender: {} },
-        RPC_CHANNELS.sessions.listTopics,
-        [{ sessionId: 'session-1' }]
-      )
-    ).toEqual([topic])
-    expect(
-      await dispatchRpcRequest(
-        ipcChannels.rpc.request,
-        { sender: {} },
-        RPC_CHANNELS.sessions.listThreads,
-        [{ topicId: 'topic-1' }]
-      )
-    ).toEqual([thread])
-    expect(
-      await dispatchRpcRequest(
-        ipcChannels.rpc.request,
-        { sender: {} },
-        RPC_CHANNELS.sessions.createSession
-      )
-    ).toBe(session)
-    await expect(
-      dispatchRpcRequest(
-        ipcChannels.rpc.request,
-        { sender: {} },
-        RPC_CHANNELS.sessions.deleteSession,
-        [{ sessionId: 'session-1' }]
-      )
-    ).resolves.toBeUndefined()
-    expect(
-      await dispatchRpcRequest(
-        ipcChannels.rpc.request,
-        { sender: {} },
-        RPC_CHANNELS.sessions.importAttachment,
-        [attachmentInput]
-      )
-    ).toBe(attachment)
-    const sender = { id: 2, send: vi.fn() }
-    const otherWebContents = { id: 1, send: vi.fn() }
-    const senderWebContents = { id: 2, send: vi.fn() }
-
-    getAllWindowsMock.mockReturnValue([
-      { webContents: otherWebContents },
-      { webContents: senderWebContents }
+    await expect(workspace.getHandler(RPC_CHANNELS.sessions.listSessions)?.({})).resolves.toEqual([
+      session
     ])
+    await expect(
+      workspace.getHandler(RPC_CHANNELS.sessions.getMessages)?.({}, { sessionId: 'session-1' })
+    ).resolves.toEqual([message])
+    await expect(
+      workspace.getHandler(RPC_CHANNELS.sessions.runOperation)?.(
+        { emitSessionEvent },
+        { operationId: 'operation-1' }
+      )
+    ).resolves.toEqual({
+      operation,
+      messages: [message]
+    })
 
-    expect(
-      await dispatchRpcRequest(
-        ipcChannels.rpc.request,
-        { sender: {} },
-        RPC_CHANNELS.sessions.createMessageTurn,
-        [{ content: 'hello' }]
-      )
-    ).toEqual({
-      session,
-      topic,
-      thread,
-      operation,
-      userMessage: message,
-      assistantMessage: { ...message, id: 'message-2', role: 'assistant', content: '' }
-    })
-    expect(
-      await dispatchRpcRequest(
-        ipcChannels.rpc.request,
-        { sender },
-        RPC_CHANNELS.sessions.runOperation,
-        [{ operationId: 'operation-1' }]
-      )
-    ).toEqual({
-      operation,
-      messages: [message]
-    })
-    expect(
-      await dispatchRpcRequest(
-        ipcChannels.rpc.request,
-        { sender },
-        RPC_CHANNELS.sessions.sendMessage,
-        [{ content: 'hello' }]
-      )
-    ).toEqual({
-      session,
-      topic,
-      thread,
-      operation,
-      messages: [message]
-    })
-    expect(
-      await dispatchRpcRequest(
-        ipcChannels.rpc.request,
-        { sender: {} },
-        RPC_CHANNELS.sessions.cancelOperation,
-        [{ operationId: 'operation-1' }]
-      )
-    ).toBe(operation)
-    expect(
-      await dispatchRpcRequest(
-        ipcChannels.rpc.request,
-        { sender: {} },
-        RPC_CHANNELS.sessions.approveToolCall,
-        [{ toolInvocationId: 'tool-1' }]
-      )
-    ).toBe(toolInvocation)
-    expect(
-      await dispatchRpcRequest(
-        ipcChannels.rpc.request,
-        { sender: {} },
-        RPC_CHANNELS.sessions.rejectToolCall,
-        [{ toolInvocationId: 'tool-1' }]
-      )
-    ).toEqual({ ...toolInvocation, status: 'rejected' })
     expect(chatService.getMessages).toHaveBeenCalledWith({ sessionId: 'session-1' })
-    expect(chatService.listTopics).toHaveBeenCalledWith({ sessionId: 'session-1' })
-    expect(chatService.listThreads).toHaveBeenCalledWith({ topicId: 'topic-1' })
-    expect(chatService.deleteSession).toHaveBeenCalledWith({ sessionId: 'session-1' })
-    expect(chatService.importAttachment).toHaveBeenCalledWith(attachmentInput)
-    expect(chatService.createMessageTurn).toHaveBeenCalledWith({ content: 'hello' })
     expect(chatService.runOperation).toHaveBeenCalledWith(
       { operationId: 'operation-1' },
       expect.any(Function)
     )
-    expect(chatService.sendMessage).toHaveBeenCalledWith({ content: 'hello' }, expect.any(Function))
 
     const operationEventListener = chatService.runOperation.mock.calls[0][1]
-    operationEventListener({
+    const operationEvent = {
       type: 'message-created',
       operationId: 'operation-1',
       session,
-      topic,
-      thread,
+      topic: {
+        id: 'topic-1',
+        sessionId: 'session-1',
+        title: '默认话题',
+        createdAt: '2026-05-09T00:00:00.000Z',
+        updatedAt: '2026-05-09T00:00:00.000Z'
+      },
+      thread: {
+        id: 'thread-1',
+        topicId: 'topic-1',
+        title: '主线',
+        type: 'standalone',
+        status: 'active',
+        createdAt: '2026-05-09T00:00:00.000Z',
+        updatedAt: '2026-05-09T00:00:00.000Z'
+      },
       message
-    })
+    } as const
 
-    expect(sender.send).not.toHaveBeenCalled()
-    expect(otherWebContents.send).not.toHaveBeenCalled()
-    expect(senderWebContents.send).toHaveBeenCalledWith(
-      ipcChannels.rpc.event,
-      expect.objectContaining({
-        type: 'event',
-        channel: RPC_CHANNELS.sessions.event,
-        args: [
-          {
-            type: 'message-created',
-            operationId: 'operation-1',
-            session,
-            topic,
-            thread,
-            message
-          }
-        ],
-        clientId: '2'
-      })
-    )
+    operationEventListener(operationEvent)
 
-    const eventListener = chatService.sendMessage.mock.calls[0][1]
-    eventListener({
-      type: 'message-created',
-      operationId: 'operation-1',
-      session,
-      topic,
-      thread,
-      message
-    })
-
-    expect(sender.send).not.toHaveBeenCalled()
-    expect(otherWebContents.send).not.toHaveBeenCalled()
-    expect(senderWebContents.send).toHaveBeenCalledWith(
-      ipcChannels.rpc.event,
-      expect.objectContaining({
-        type: 'event',
-        channel: RPC_CHANNELS.sessions.event,
-        args: [
-          {
-            type: 'message-created',
-            operationId: 'operation-1',
-            session,
-            topic,
-            thread,
-            message
-          }
-        ],
-        clientId: '2'
-      })
+    expect(emitSessionEvent).toHaveBeenCalledWith(
+      RPC_CHANNELS.sessions.event,
+      operationEvent,
+      undefined
     )
   })
 

@@ -1,9 +1,15 @@
 // @vitest-environment node
 
+/**
+ * 负责验证 preload 暴露的 MoonApi 形状和内部 transport routing。
+ * 测试不触发真实 Electron、renderer 或 WebSocket 网络连接。
+ */
+
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ipcChannels } from '@ipc/channels'
 import type { MoonApi } from '@ipc/contracts'
+import { workspaceWebSocketTransportInfoChannel } from '@ipc/workspace-transport-contract'
 import { RPC_CHANNELS } from '@moon/shared/protocol'
 
 const exposeInMainWorldMock = vi.fn()
@@ -22,8 +28,129 @@ vi.mock('electron', () => ({
   }
 }))
 
+type FakeWebSocketEvent = 'open' | 'message' | 'close' | 'error'
+
+class FakeWebSocket {
+  static instances: FakeWebSocket[] = []
+
+  readonly sent: string[] = []
+  readyState = 0
+  private readonly listeners = new Map<
+    FakeWebSocketEvent,
+    Array<(event: { data?: unknown }) => void>
+  >()
+
+  /**
+   * 创建 fake WebSocket，并在微任务中模拟连接成功。
+   */
+  constructor(readonly url: string) {
+    FakeWebSocket.instances.push(this)
+    queueMicrotask(() => {
+      this.readyState = 1
+      this.emit('open')
+    })
+  }
+
+  /**
+   * 注册 fake WebSocket 事件监听器。
+   */
+  addEventListener(event: FakeWebSocketEvent, listener: (event: { data?: unknown }) => void): void {
+    this.listeners.set(event, [...(this.listeners.get(event) ?? []), listener])
+  }
+
+  /**
+   * 移除 fake WebSocket 事件监听器。
+   */
+  removeEventListener(
+    event: FakeWebSocketEvent,
+    listener: (event: { data?: unknown }) => void
+  ): void {
+    this.listeners.set(
+      event,
+      (this.listeners.get(event) ?? []).filter((candidate) => candidate !== listener)
+    )
+  }
+
+  /**
+   * 记录 workspace request，并在微任务中回写同 id/channel 的 response envelope。
+   */
+  send(data: string): void {
+    this.sent.push(data)
+    const request = JSON.parse(data)
+
+    queueMicrotask(() => {
+      this.emit('message', {
+        data: JSON.stringify({
+          id: request.id,
+          type: 'response',
+          channel: request.channel,
+          result: undefined
+        })
+      })
+    })
+  }
+
+  /**
+   * 关闭 fake WebSocket。
+   */
+  close(): void {
+    this.readyState = 3
+    this.emit('close')
+  }
+
+  /**
+   * 触发 fake WebSocket 事件。
+   */
+  emit(event: FakeWebSocketEvent, payload: { data?: unknown } = {}): void {
+    this.listeners.get(event)?.forEach((listener) => {
+      listener(payload)
+    })
+  }
+}
+
+/**
+ * 读取 preload 注入的 MoonApi。
+ */
 function getExposedApi(): MoonApi {
   return exposeInMainWorldMock.mock.calls.find(([key]) => key === 'api')?.[1] as MoonApi
+}
+
+/**
+ * 等待 fake WebSocket 的微任务 response 被消费。
+ */
+async function flushPromises(): Promise<void> {
+  await new Promise((resolve) => {
+    setTimeout(resolve, 0)
+  })
+}
+
+/**
+ * 让 fake ipcRenderer.invoke 返回同 id/channel 的 response envelope。
+ */
+function mockEnvelopeIpcInvoke(): void {
+  ipcInvokeMock.mockImplementation((channel, envelope) => {
+    if (channel === ipcChannels.rpc.request) {
+      if (envelope.channel === workspaceWebSocketTransportInfoChannel) {
+        return Promise.resolve({
+          id: envelope.id,
+          type: 'response',
+          channel: envelope.channel,
+          result: {
+            url: 'ws://127.0.0.1:48123'
+          }
+        })
+      }
+
+      return Promise.resolve({
+        id: envelope.id,
+        type: 'response',
+        channel: envelope.channel,
+        result: undefined
+      })
+    }
+
+    return Promise.resolve(undefined)
+  })
 }
 
 describe('preload api', () => {
@@ -33,6 +160,11 @@ describe('preload api', () => {
     ipcInvokeMock.mockReset()
     ipcOnMock.mockReset()
     ipcOffMock.mockReset()
+    FakeWebSocket.instances = []
+    Object.defineProperty(globalThis, 'WebSocket', {
+      configurable: true,
+      value: FakeWebSocket
+    })
     Object.defineProperty(process, 'contextIsolated', {
       configurable: true,
       value: true
@@ -48,7 +180,7 @@ describe('preload api', () => {
     expect(exposeInMainWorldMock.mock.calls.some(([key]) => key === 'electron')).toBe(false)
   })
 
-  it('routes public api calls through the typed IPC channels', async () => {
+  it('routes app-shell through IPC and sessions through workspace WebSocket', async () => {
     const input = {
       provider: 'claude',
       apiKey: 'sk-ant-demo',
@@ -56,19 +188,7 @@ describe('preload api', () => {
       baseUrl: ''
     } as const
 
-    ipcInvokeMock.mockImplementation((channel, envelope) => {
-      if (channel === ipcChannels.rpc.request) {
-        return Promise.resolve({
-          id: envelope.id,
-          type: 'response',
-          channel: envelope.channel,
-          result: undefined
-        })
-      }
-
-      return Promise.resolve(undefined)
-    })
-
+    mockEnvelopeIpcInvoke()
     await import('@preload/index')
 
     const api = getExposedApi()
@@ -105,6 +225,14 @@ describe('preload api', () => {
       ipcChannels.rpc.request,
       expect.objectContaining({
         type: 'request',
+        channel: workspaceWebSocketTransportInfoChannel,
+        args: []
+      })
+    )
+    expect(ipcInvokeMock).toHaveBeenCalledWith(
+      ipcChannels.rpc.request,
+      expect.objectContaining({
+        type: 'request',
         channel: RPC_CHANNELS.settings.get,
         args: []
       })
@@ -113,159 +241,8 @@ describe('preload api', () => {
       ipcChannels.rpc.request,
       expect.objectContaining({
         type: 'request',
-        channel: RPC_CHANNELS.sessions.listSessions,
-        args: []
-      })
-    )
-    expect(ipcInvokeMock).toHaveBeenCalledWith(
-      ipcChannels.rpc.request,
-      expect.objectContaining({
-        type: 'request',
-        channel: RPC_CHANNELS.sessions.getMessages,
-        args: [{ sessionId: 'session-1' }]
-      })
-    )
-    expect(ipcInvokeMock).toHaveBeenCalledWith(
-      ipcChannels.rpc.request,
-      expect.objectContaining({
-        type: 'request',
-        channel: RPC_CHANNELS.sessions.listTopics,
-        args: [{ sessionId: 'session-1' }]
-      })
-    )
-    expect(ipcInvokeMock).toHaveBeenCalledWith(
-      ipcChannels.rpc.request,
-      expect.objectContaining({
-        type: 'request',
-        channel: RPC_CHANNELS.sessions.listThreads,
-        args: [{ topicId: 'topic-1' }]
-      })
-    )
-    expect(ipcInvokeMock).toHaveBeenCalledWith(
-      ipcChannels.rpc.request,
-      expect.objectContaining({
-        type: 'request',
-        channel: RPC_CHANNELS.sessions.createSession,
-        args: []
-      })
-    )
-    expect(ipcInvokeMock).toHaveBeenCalledWith(
-      ipcChannels.rpc.request,
-      expect.objectContaining({
-        type: 'request',
-        channel: RPC_CHANNELS.sessions.deleteSession,
-        args: [{ sessionId: 'session-1' }]
-      })
-    )
-    expect(ipcInvokeMock).toHaveBeenCalledWith(
-      ipcChannels.rpc.request,
-      expect.objectContaining({
-        type: 'request',
-        channel: RPC_CHANNELS.sessions.importAttachment,
-        args: [
-          {
-            name: 'note.txt',
-            mimeType: 'text/plain',
-            size: 5,
-            data: expect.any(ArrayBuffer)
-          }
-        ]
-      })
-    )
-    expect(ipcInvokeMock).toHaveBeenCalledWith(
-      ipcChannels.rpc.request,
-      expect.objectContaining({
-        type: 'request',
-        channel: RPC_CHANNELS.sessions.createMessageTurn,
-        args: [{ content: 'hello' }]
-      })
-    )
-    expect(ipcInvokeMock).toHaveBeenCalledWith(
-      ipcChannels.rpc.request,
-      expect.objectContaining({
-        type: 'request',
-        channel: RPC_CHANNELS.sessions.runOperation,
-        args: [{ operationId: 'operation-1' }]
-      })
-    )
-    expect(ipcInvokeMock).toHaveBeenCalledWith(
-      ipcChannels.rpc.request,
-      expect.objectContaining({
-        type: 'request',
-        channel: RPC_CHANNELS.sessions.sendMessage,
-        args: [{ content: 'hello' }]
-      })
-    )
-    expect(ipcInvokeMock).toHaveBeenCalledWith(
-      ipcChannels.rpc.request,
-      expect.objectContaining({
-        type: 'request',
-        channel: RPC_CHANNELS.sessions.cancelOperation,
-        args: [{ operationId: 'operation-1' }]
-      })
-    )
-    expect(ipcInvokeMock).toHaveBeenCalledWith(
-      ipcChannels.rpc.request,
-      expect.objectContaining({
-        type: 'request',
-        channel: RPC_CHANNELS.sessions.approveToolCall,
-        args: [{ toolInvocationId: 'tool-1' }]
-      })
-    )
-    expect(ipcInvokeMock).toHaveBeenCalledWith(
-      ipcChannels.rpc.request,
-      expect.objectContaining({
-        type: 'request',
-        channel: RPC_CHANNELS.sessions.rejectToolCall,
-        args: [{ toolInvocationId: 'tool-1' }]
-      })
-    )
-    expect(ipcInvokeMock).toHaveBeenCalledWith(
-      ipcChannels.rpc.request,
-      expect.objectContaining({
-        type: 'request',
-        channel: RPC_CHANNELS.settings.saveAppearance,
-        args: [{ theme: 'dark' }]
-      })
-    )
-    expect(ipcInvokeMock).toHaveBeenCalledWith(
-      ipcChannels.rpc.request,
-      expect.objectContaining({
-        type: 'request',
         channel: RPC_CHANNELS.settings.saveProvider,
         args: [input]
-      })
-    )
-    expect(ipcInvokeMock).toHaveBeenCalledWith(
-      ipcChannels.rpc.request,
-      expect.objectContaining({
-        type: 'request',
-        channel: RPC_CHANNELS.projects.list,
-        args: []
-      })
-    )
-    expect(ipcInvokeMock).toHaveBeenCalledWith(
-      ipcChannels.rpc.request,
-      expect.objectContaining({
-        type: 'request',
-        channel: RPC_CHANNELS.projects.getActive,
-        args: []
-      })
-    )
-    expect(ipcInvokeMock).toHaveBeenCalledWith(
-      ipcChannels.rpc.request,
-      expect.objectContaining({
-        type: 'request',
-        channel: RPC_CHANNELS.projects.useExistingFolder,
-        args: []
-      })
-    )
-    expect(ipcInvokeMock).toHaveBeenCalledWith(
-      ipcChannels.rpc.request,
-      expect.objectContaining({
-        type: 'request',
-        channel: RPC_CHANNELS.projects.delete,
-        args: [{ projectId: 'project-1' }]
       })
     )
     expect(ipcInvokeMock).toHaveBeenCalledWith(
@@ -284,6 +261,26 @@ describe('preload api', () => {
         args: [{ section: 'providers' }]
       })
     )
+
+    const workspaceRequestChannels = FakeWebSocket.instances[0].sent.map((raw) => {
+      return JSON.parse(raw).channel
+    })
+
+    expect(workspaceRequestChannels).toEqual([
+      RPC_CHANNELS.sessions.listSessions,
+      RPC_CHANNELS.sessions.getMessages,
+      RPC_CHANNELS.sessions.listTopics,
+      RPC_CHANNELS.sessions.listThreads,
+      RPC_CHANNELS.sessions.createSession,
+      RPC_CHANNELS.sessions.deleteSession,
+      RPC_CHANNELS.sessions.importAttachment,
+      RPC_CHANNELS.sessions.createMessageTurn,
+      RPC_CHANNELS.sessions.runOperation,
+      RPC_CHANNELS.sessions.sendMessage,
+      RPC_CHANNELS.sessions.cancelOperation,
+      RPC_CHANNELS.sessions.approveToolCall,
+      RPC_CHANNELS.sessions.rejectToolCall
+    ])
   })
 
   it('cleans up the window state event subscription', async () => {
@@ -341,6 +338,7 @@ describe('preload api', () => {
   })
 
   it('cleans up the unified session event subscription', async () => {
+    mockEnvelopeIpcInvoke()
     await import('@preload/index')
 
     const api = getExposedApi()
@@ -356,23 +354,20 @@ describe('preload api', () => {
     } as const
 
     const unsubscribe = api.chat.onSessionEvent(listener)
-    const handler = ipcOnMock.mock.calls.find(([channel]) => channel === ipcChannels.rpc.event)?.[1]
 
-    expect(handler).toBeTypeOf('function')
-
-    handler?.(
-      {},
-      {
+    await flushPromises()
+    FakeWebSocket.instances[0].emit('message', {
+      data: JSON.stringify({
         id: 'event-1',
         type: 'event',
         channel: RPC_CHANNELS.sessions.event,
         args: [event]
-      }
-    )
+      })
+    })
     unsubscribe()
 
     expect(listener).toHaveBeenCalledWith(event)
-    expect(ipcOffMock).toHaveBeenCalledWith(ipcChannels.rpc.event, handler)
+    expect(ipcOffMock).not.toHaveBeenCalled()
   })
 
   it('cleans up the projects change event subscription', async () => {
@@ -404,5 +399,4 @@ describe('preload api', () => {
     expect(listener).toHaveBeenCalledWith(event)
     expect(ipcOffMock).toHaveBeenCalledWith(ipcChannels.rpc.event, handler)
   })
-
 })
