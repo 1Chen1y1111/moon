@@ -25,12 +25,13 @@ export default defineConfig({
   preload: {
     build: {
       externalizeDeps: {
-        exclude: ['@moon/shared']
+        exclude: ['@moon/server-core', '@moon/shared']
       }
     },
     resolve: {
       alias: {
         '@ipc': resolve('src/ipc'),
+        '@moon/server-core': resolve('../../packages/server-core/src'),
         '@moon/shared': resolve('../../packages/shared/src')
       }
     }

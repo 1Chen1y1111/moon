@@ -4,8 +4,6 @@
  * 它不负责具体 client 查找、广播或网络连接。
  */
 
-import { randomUUID } from 'node:crypto'
-
 import type { MessageEnvelope, PushTarget } from '@moon/shared/protocol'
 import type { RpcPushPort } from './types'
 
@@ -18,7 +16,7 @@ export type EnvelopePushPortOptions = {
   send: EnvelopePushPortSend
 
   /**
-   * 创建 event envelope id；测试可注入固定 id，运行时默认使用 randomUUID。
+   * 创建 event envelope id；测试可注入固定 id，运行时默认使用 Web Crypto。
    */
   createId?: () => string
 }
@@ -33,7 +31,7 @@ export class EnvelopePushPort implements RpcPushPort {
   /**
    * 创建 envelope push port，只注入发送函数，不绑定任何具体 transport。
    */
-  constructor({ createId = randomUUID, send }: EnvelopePushPortOptions) {
+  constructor({ createId = createEnvelopeId, send }: EnvelopePushPortOptions) {
     this.createId = createId
     this.send = send
   }
@@ -77,4 +75,17 @@ function createEventEnvelope(
   }
 
   return envelope
+}
+
+/**
+ * 创建跨 Node/Electron preload 可用的 envelope id，避免 transport helper 绑定 Node builtin。
+ */
+function createEnvelopeId(): string {
+  const randomUUID = globalThis.crypto?.randomUUID
+
+  if (typeof randomUUID === 'function') {
+    return randomUUID.call(globalThis.crypto)
+  }
+
+  return `envelope-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }

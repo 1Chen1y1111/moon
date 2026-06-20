@@ -374,4 +374,83 @@ describe('createWorkspaceWebSocketRpcServer', () => {
     )
     expect(pendingSocket.sent).toEqual([])
   })
+
+  it('does not push event envelopes to closed clients', async () => {
+    const fakeServer = new FakeSocketServer()
+    let nextClientNumber = 1
+    const server = createWorkspaceWebSocketRpcServer({
+      createClientId: () => `client-${nextClientNumber++}`,
+      createWebSocketServer: () => fakeServer
+    })
+    const event = {
+      type: 'message-delta',
+      operationId: 'operation-1',
+      sessionId: 'session-1',
+      topicId: 'topic-1',
+      threadId: 'thread-1',
+      messageId: 'message-1',
+      delta: 'hello'
+    } as const
+
+    await server.getTransportInfo()
+    const closedSocket = fakeServer.connect()
+    const activeSocket = fakeServer.connect()
+
+    await performHandshake(closedSocket, 'handshake-1')
+    await performHandshake(activeSocket, 'handshake-2')
+    closedSocket.close()
+    server.push(RPC_CHANNELS.sessions.event, { to: 'all' }, event)
+
+    expect(closedSocket.sent).toHaveLength(1)
+    expect(activeSocket.sent.map((raw) => JSON.parse(raw))).toContainEqual(
+      expect.objectContaining({
+        type: 'event',
+        channel: RPC_CHANNELS.sessions.event,
+        args: [event]
+      })
+    )
+  })
+
+  it('allows a new socket to handshake and dispatch after a previous socket closes', async () => {
+    const fakeServer = new FakeSocketServer()
+    let nextClientNumber = 1
+    const server = createWorkspaceWebSocketRpcServer({
+      createClientId: () => `client-${nextClientNumber++}`,
+      createWebSocketServer: () => fakeServer
+    })
+
+    server.handle(RPC_CHANNELS.sessions.listSessions, () => [{ id: 'session-2' }])
+
+    await server.getTransportInfo()
+    const firstSocket = fakeServer.connect()
+
+    await performHandshake(firstSocket, 'handshake-1')
+    firstSocket.close()
+
+    const secondSocket = fakeServer.connect()
+
+    await performHandshake(secondSocket, 'handshake-2')
+    secondSocket.emitMessage(
+      serializeEnvelope({
+        id: 'request-1',
+        type: 'request',
+        channel: RPC_CHANNELS.sessions.listSessions,
+        args: []
+      })
+    )
+    await flushPromises()
+
+    expect(parseSentEnvelope(secondSocket, 0)).toEqual({
+      id: 'handshake-2',
+      type: 'handshake_ack',
+      clientId: 'client-2',
+      protocolVersion: PROTOCOL_VERSION
+    })
+    expect(parseSentEnvelope(secondSocket, 1)).toEqual({
+      id: 'request-1',
+      type: 'response',
+      channel: RPC_CHANNELS.sessions.listSessions,
+      result: [{ id: 'session-2' }]
+    })
+  })
 })

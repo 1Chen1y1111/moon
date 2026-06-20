@@ -83,7 +83,7 @@ function createWorkspaceWebSocketTransport({
       resolve: (envelope: MessageEnvelope) => void
     }
   >()
-  let closedError: Error | null = null
+  let terminalError: Error | null = null
   let socket: WorkspaceWebSocketLike | null = null
   let socketPromise: Promise<WorkspaceWebSocketLike> | null = null
 
@@ -107,11 +107,11 @@ function createWorkspaceWebSocketTransport({
   }
 
   /**
-   * 懒连接 workspace WebSocket；v1 不做断线重连。
+   * 懒连接 workspace WebSocket；普通断线后会在下一次调用时重新握手。
    */
   async function ensureSocket(): Promise<WorkspaceWebSocketLike> {
-    if (closedError !== null) {
-      throw closedError
+    if (terminalError !== null) {
+      throw terminalError
     }
 
     if (socket !== null && socket.readyState === WEBSOCKET_OPEN) {
@@ -135,13 +135,16 @@ function createWorkspaceWebSocketTransport({
             })
             nextSocket.addEventListener('message', handleHandshake)
             nextSocket.addEventListener('close', () => {
-              markSocketClosed(new Error('Workspace WebSocket closed'))
+              const error = new Error('Workspace WebSocket closed')
+
+              reject(error)
+              markSocketDisconnected(error)
             })
             nextSocket.addEventListener('error', () => {
               const error = new Error('Workspace WebSocket connection failed')
 
               reject(error)
-              markSocketClosed(error)
+              markSocketDisconnected(error)
             })
           })
       )
@@ -181,7 +184,7 @@ function createWorkspaceWebSocketTransport({
       const connectionError = toError(error)
 
       reject(connectionError)
-      markSocketClosed(connectionError)
+      markTerminalFailure(connectionError)
       return
     }
 
@@ -189,7 +192,7 @@ function createWorkspaceWebSocketTransport({
       const connectionError = createWireError(envelope.error)
 
       reject(connectionError)
-      markSocketClosed(connectionError)
+      markTerminalFailure(connectionError)
       return
     }
 
@@ -201,7 +204,7 @@ function createWorkspaceWebSocketTransport({
       const connectionError = new Error('Workspace WebSocket handshake failed')
 
       reject(connectionError)
-      markSocketClosed(connectionError)
+      markTerminalFailure(connectionError)
       return
     }
 
@@ -245,14 +248,21 @@ function createWorkspaceWebSocketTransport({
   }
 
   /**
-   * 标记 v1 WebSocket transport 已关闭；后续请求不会尝试自动重连。
+   * 标记普通连接断开；后续请求会重新创建 WebSocket 并重新握手。
    */
-  function markSocketClosed(error: Error): void {
+  function markSocketDisconnected(error: Error): void {
     handshakeState.clientId = null
-    closedError = error
     socket = null
     socketPromise = null
     rejectPendingRequests(error)
+  }
+
+  /**
+   * 标记不可恢复的协议失败；后续调用直接失败，不再盲目重连。
+   */
+  function markTerminalFailure(error: Error): void {
+    terminalError = error
+    markSocketDisconnected(error)
   }
 }
 

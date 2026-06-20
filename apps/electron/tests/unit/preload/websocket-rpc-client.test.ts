@@ -275,4 +275,170 @@ describe('createWorkspaceWebSocketRpcClient', () => {
 
     await expect(resultPromise).rejects.toThrow('Workspace WebSocket closed')
   })
+
+  it('reconnects and handshakes again after a recoverable close', async () => {
+    FakeWebSocket.instances = []
+    const client = createClient()
+    const firstResultPromise = client.invoke(RPC_CHANNELS.sessions.listSessions)
+
+    await flushPromises()
+    const firstSocket = FakeWebSocket.instances[0]
+
+    firstSocket.emit('open')
+    acknowledgeHandshake(firstSocket)
+    await flushPromises()
+    firstSocket.close()
+
+    await expect(firstResultPromise).rejects.toThrow('Workspace WebSocket closed')
+
+    const secondResultPromise = client.invoke(RPC_CHANNELS.sessions.listSessions)
+
+    await flushPromises()
+    const secondSocket = FakeWebSocket.instances[1]
+
+    secondSocket.emit('open')
+    await flushPromises()
+
+    expect(parseSentEnvelope(secondSocket, 0)).toEqual({
+      id: 'workspace-handshake',
+      type: 'handshake',
+      protocolVersion: PROTOCOL_VERSION
+    })
+
+    acknowledgeHandshake(secondSocket, 'client-2')
+    await flushPromises()
+
+    expect(parseSentEnvelope(secondSocket, 1)).toMatchObject({
+      id: 'request-1',
+      type: 'request',
+      channel: RPC_CHANNELS.sessions.listSessions
+    })
+
+    secondSocket.emit('message', {
+      data: serializeEnvelope({
+        id: 'request-1',
+        type: 'response',
+        channel: RPC_CHANNELS.sessions.listSessions,
+        result: [{ id: 'session-2' }]
+      })
+    })
+
+    await expect(secondResultPromise).resolves.toEqual([{ id: 'session-2' }])
+  })
+
+  it('recovers when the WebSocket closes before handshake completes', async () => {
+    FakeWebSocket.instances = []
+    const client = createClient()
+    const firstResultPromise = client.invoke(RPC_CHANNELS.sessions.listSessions)
+
+    await flushPromises()
+    const firstSocket = FakeWebSocket.instances[0]
+
+    firstSocket.emit('open')
+    firstSocket.close()
+
+    await expect(firstResultPromise).rejects.toThrow('Workspace WebSocket closed')
+
+    const secondResultPromise = client.invoke(RPC_CHANNELS.sessions.listSessions)
+
+    await flushPromises()
+    const secondSocket = FakeWebSocket.instances[1]
+
+    secondSocket.emit('open')
+    acknowledgeHandshake(secondSocket, 'client-2')
+    await flushPromises()
+    secondSocket.emit('message', {
+      data: serializeEnvelope({
+        id: 'request-1',
+        type: 'response',
+        channel: RPC_CHANNELS.sessions.listSessions,
+        result: [{ id: 'session-2' }]
+      })
+    })
+
+    await expect(secondResultPromise).resolves.toEqual([{ id: 'session-2' }])
+  })
+
+  it('keeps active event listeners across reconnects', async () => {
+    FakeWebSocket.instances = []
+    const client = createClient()
+    const listener = vi.fn()
+    const event = {
+      type: 'message-delta',
+      operationId: 'operation-1',
+      sessionId: 'session-1',
+      topicId: 'topic-1',
+      threadId: 'thread-1',
+      messageId: 'message-1',
+      delta: 'after reconnect'
+    }
+
+    client.on(RPC_CHANNELS.sessions.event, listener)
+    await flushPromises()
+    const firstSocket = FakeWebSocket.instances[0]
+
+    firstSocket.emit('open')
+    acknowledgeHandshake(firstSocket)
+    firstSocket.close()
+
+    const reconnectPromise = client.invoke(RPC_CHANNELS.sessions.listSessions)
+
+    await flushPromises()
+    const secondSocket = FakeWebSocket.instances[1]
+
+    secondSocket.emit('open')
+    acknowledgeHandshake(secondSocket, 'client-2')
+    await flushPromises()
+    secondSocket.emit('message', {
+      data: serializeEnvelope({
+        id: 'request-1',
+        type: 'response',
+        channel: RPC_CHANNELS.sessions.listSessions,
+        result: []
+      })
+    })
+    secondSocket.emit('message', {
+      data: serializeEnvelope({
+        id: 'event-1',
+        type: 'event',
+        channel: RPC_CHANNELS.sessions.event,
+        args: [event]
+      })
+    })
+
+    await expect(reconnectPromise).resolves.toEqual([])
+    expect(listener).toHaveBeenCalledWith(event)
+  })
+
+  it('does not reconnect after terminal handshake protocol errors', async () => {
+    FakeWebSocket.instances = []
+    const client = createClient()
+    const firstResultPromise = client.invoke(RPC_CHANNELS.sessions.listSessions)
+
+    await flushPromises()
+    const socket = FakeWebSocket.instances[0]
+
+    socket.emit('open')
+    socket.emit('message', {
+      data: serializeEnvelope({
+        id: 'workspace-handshake',
+        type: 'error',
+        error: {
+          code: 'PROTOCOL_VERSION_UNSUPPORTED',
+          message: 'unsupported'
+        }
+      })
+    })
+
+    await expect(firstResultPromise).rejects.toMatchObject({
+      code: 'PROTOCOL_VERSION_UNSUPPORTED',
+      message: 'unsupported'
+    })
+
+    await expect(client.invoke(RPC_CHANNELS.sessions.listSessions)).rejects.toMatchObject({
+      code: 'PROTOCOL_VERSION_UNSUPPORTED',
+      message: 'unsupported'
+    })
+    expect(FakeWebSocket.instances).toHaveLength(1)
+  })
 })

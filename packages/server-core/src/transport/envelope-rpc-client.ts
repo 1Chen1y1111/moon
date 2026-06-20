@@ -3,8 +3,6 @@
  * 它只负责 request envelope 编码、response 解包和 event envelope 订阅过滤。
  */
 
-import { randomUUID } from 'node:crypto'
-
 import type { MessageEnvelope, WireError } from '@moon/shared/protocol'
 
 import type { RpcClientListener, RpcClientPort } from './types'
@@ -29,7 +27,7 @@ export type EnvelopeRpcClientOptions = {
   subscribe: EnvelopeRpcClientSubscribe
 
   /**
-   * 创建 request envelope id；测试可注入固定 id，运行时默认使用 randomUUID。
+   * 创建 request envelope id；测试可注入固定 id，运行时默认使用 Web Crypto。
    */
   createId?: () => string
 }
@@ -45,7 +43,7 @@ export class EnvelopeRpcClient implements RpcClientPort {
   /**
    * 创建 envelope RPC client，只依赖底层 transport 的 request 和 subscribe 能力。
    */
-  constructor({ createId = randomUUID, request, subscribe }: EnvelopeRpcClientOptions) {
+  constructor({ createId = createEnvelopeId, request, subscribe }: EnvelopeRpcClientOptions) {
     this.createId = createId
     this.request = request
     this.subscribeToEnvelopes = subscribe
@@ -102,4 +100,17 @@ function createResponseError(error: WireError): Error & { code: WireError['code'
   const responseError = new Error(error.message) as Error & { code: WireError['code'] }
   responseError.code = error.code
   return responseError
+}
+
+/**
+ * 创建跨 Node/Electron preload 可用的 envelope id，避免把 node:crypto 泄漏到 sandbox preload。
+ */
+function createEnvelopeId(): string {
+  const randomUUID = globalThis.crypto?.randomUUID
+
+  if (typeof randomUUID === 'function') {
+    return randomUUID.call(globalThis.crypto)
+  }
+
+  return `envelope-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
