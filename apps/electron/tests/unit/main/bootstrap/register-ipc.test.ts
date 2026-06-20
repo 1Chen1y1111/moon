@@ -1,6 +1,6 @@
 // @vitest-environment node
 
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const removeHandlerMock = vi.fn()
 const handleMock = vi.fn()
@@ -52,6 +52,7 @@ function createWorkspaceRpcServerFixture() {
   const handlers = new Map<string, (...args: unknown[]) => unknown>()
   const close = vi.fn(async () => undefined)
   const getTransportInfo = vi.fn(async () => ({
+    mode: 'local',
     url: 'ws://127.0.0.1:48123'
   }))
   const push = vi.fn()
@@ -104,6 +105,7 @@ describe('registerIpcHandlers', () => {
   const openSettingsWindow = vi.fn()
 
   beforeEach(() => {
+    delete process.env.MOON_WORKSPACE_WS_URL
     removeHandlerMock.mockReset()
     handleMock.mockReset()
     fromWebContentsMock.mockReset()
@@ -132,6 +134,10 @@ describe('registerIpcHandlers', () => {
     projectsService.setActiveProject.mockReset()
     projectsService.useExistingFolder.mockReset()
     openSettingsWindow.mockReset()
+  })
+
+  afterEach(() => {
+    delete process.env.MOON_WORKSPACE_WS_URL
   })
 
   it('registers a single unified rpc request handler', async () => {
@@ -165,6 +171,67 @@ describe('registerIpcHandlers', () => {
     await registeredHandlers.close()
 
     expect(workspace.close).toHaveBeenCalledOnce()
+  })
+
+  it('returns local workspace transport info through the unified rpc handler', async () => {
+    const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
+    const { ipcChannels } = await import('@ipc/channels')
+    const { workspaceWebSocketTransportInfoChannel } = await import(
+      '@ipc/workspace-transport-contract'
+    )
+    const workspace = createWorkspaceRpcServerFixture()
+
+    registerIpcHandlers({
+      chatService: chatService as never,
+      createWorkspaceRpcServer: () => workspace.server as never,
+      openSettingsWindow,
+      projectsService: projectsService as never,
+      settingsService: settingsService as never
+    })
+
+    expect(workspace.getTransportInfo).not.toHaveBeenCalled()
+    await expect(
+      dispatchRpcRequest(
+        ipcChannels.rpc.request,
+        { sender: {} },
+        workspaceWebSocketTransportInfoChannel
+      )
+    ).resolves.toEqual({
+      mode: 'local',
+      url: 'ws://127.0.0.1:48123'
+    })
+    expect(workspace.getTransportInfo).toHaveBeenCalledOnce()
+  })
+
+  it('returns remote workspace transport info without creating the local workspace server', async () => {
+    process.env.MOON_WORKSPACE_WS_URL = ' ws://remote-workspace.local:48123 '
+    const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
+    const { ipcChannels } = await import('@ipc/channels')
+    const { workspaceWebSocketTransportInfoChannel } = await import(
+      '@ipc/workspace-transport-contract'
+    )
+    const createWorkspaceRpcServer = vi.fn()
+
+    const registeredHandlers = registerIpcHandlers({
+      chatService: chatService as never,
+      createWorkspaceRpcServer,
+      openSettingsWindow,
+      projectsService: projectsService as never,
+      settingsService: settingsService as never
+    })
+
+    await expect(
+      dispatchRpcRequest(
+        ipcChannels.rpc.request,
+        { sender: {} },
+        workspaceWebSocketTransportInfoChannel
+      )
+    ).resolves.toEqual({
+      mode: 'remote',
+      url: 'ws://remote-workspace.local:48123'
+    })
+    await expect(registeredHandlers.close()).resolves.toBeUndefined()
+    expect(createWorkspaceRpcServer).not.toHaveBeenCalled()
   })
 
   it('registers settings handlers that delegate through the settings service', async () => {

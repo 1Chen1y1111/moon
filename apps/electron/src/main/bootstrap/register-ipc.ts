@@ -6,7 +6,10 @@
 import { ipcMain, type BrowserWindow } from 'electron'
 
 import { ipcChannels } from '@ipc/channels'
-import { workspaceWebSocketTransportInfoChannel } from '@ipc/workspace-transport-contract'
+import {
+  workspaceWebSocketTransportInfoChannel,
+  type WorkspaceWebSocketTransportInfo
+} from '@ipc/workspace-transport-contract'
 import { registerSessionHandlers } from '@moon/server-core/handlers/rpc'
 import type { ChatService } from '../services/chat-service'
 import type { ProjectsService } from '../services/projects-service'
@@ -25,6 +28,18 @@ type RegisterIpcDependencies = {
   openSettingsWindow: (input?: { section?: 'providers' }) => BrowserWindow
   createWorkspaceRpcServer?: () => WorkspaceWebSocketRpcServer
 }
+
+type WorkspaceTransportRegistration =
+  | {
+      mode: 'local'
+      workspaceRpcServer: WorkspaceWebSocketRpcServer
+    }
+  | {
+      mode: 'remote'
+      transportInfo: WorkspaceWebSocketTransportInfo
+    }
+
+const WORKSPACE_WS_URL_ENV = 'MOON_WORKSPACE_WS_URL'
 
 /**
  * 主进程注册 IPC 后需要在应用退出时释放的资源。
@@ -46,10 +61,12 @@ export function registerIpcHandlers({
   ipcMain.removeHandler(ipcChannels.rpc.request)
 
   const localRpcServer = createElectronEnvelopeIpcRpcServer()
-  const workspaceRpcServer = createWorkspaceRpcServer()
+  const workspaceTransport = createWorkspaceTransportRegistration(createWorkspaceRpcServer)
 
-  registerWorkspaceTransportHandlers(localRpcServer, workspaceRpcServer)
-  registerSessionHandlers(workspaceRpcServer, { sessionHandlers: chatService })
+  registerWorkspaceTransportHandlers(localRpcServer, workspaceTransport)
+  if (workspaceTransport.mode === 'local') {
+    registerSessionHandlers(workspaceTransport.workspaceRpcServer, { sessionHandlers: chatService })
+  }
   registerAppShellHandlers(localRpcServer, {
     openSettingsWindow,
     projectsService,
@@ -57,7 +74,34 @@ export function registerIpcHandlers({
   })
 
   return {
-    close: () => workspaceRpcServer.close()
+    close: () =>
+      workspaceTransport.mode === 'local'
+        ? workspaceTransport.workspaceRpcServer.close()
+        : Promise.resolve()
+  }
+}
+
+/**
+ * 根据环境变量选择本机 workspace server 或外部 remote endpoint。
+ */
+function createWorkspaceTransportRegistration(
+  createWorkspaceRpcServer: () => WorkspaceWebSocketRpcServer
+): WorkspaceTransportRegistration {
+  const remoteUrl = process.env[WORKSPACE_WS_URL_ENV]?.trim()
+
+  if (remoteUrl) {
+    return {
+      mode: 'remote',
+      transportInfo: {
+        mode: 'remote',
+        url: remoteUrl
+      }
+    }
+  }
+
+  return {
+    mode: 'local',
+    workspaceRpcServer: createWorkspaceRpcServer()
   }
 }
 
@@ -66,9 +110,18 @@ export function registerIpcHandlers({
  */
 function registerWorkspaceTransportHandlers(
   localRpcServer: ReturnType<typeof createElectronEnvelopeIpcRpcServer>,
-  workspaceRpcServer: WorkspaceWebSocketRpcServer
+  workspaceTransport: WorkspaceTransportRegistration
 ): void {
-  localRpcServer.handle(workspaceWebSocketTransportInfoChannel, () =>
-    workspaceRpcServer.getTransportInfo()
-  )
+  localRpcServer.handle(workspaceWebSocketTransportInfoChannel, async () => {
+    if (workspaceTransport.mode === 'remote') {
+      return workspaceTransport.transportInfo
+    }
+
+    const transportInfo = await workspaceTransport.workspaceRpcServer.getTransportInfo()
+
+    return {
+      ...transportInfo,
+      mode: 'local' as const
+    }
+  })
 }

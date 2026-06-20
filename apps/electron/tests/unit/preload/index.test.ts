@@ -150,6 +150,7 @@ function mockEnvelopeIpcInvoke(): void {
           type: 'response',
           channel: envelope.channel,
           result: {
+            mode: 'local',
             url: 'ws://127.0.0.1:48123'
           }
         })

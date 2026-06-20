@@ -12,5 +12,6 @@ export const workspaceWebSocketTransportInfoChannel = 'workspace:getWebSocketTra
  * main 返回给 preload 的 workspace WebSocket 连接信息。
  */
 export type WorkspaceWebSocketTransportInfo = {
+  mode: 'local' | 'remote'
   url: string
 }

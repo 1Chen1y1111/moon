@@ -139,6 +139,7 @@ export function createWorkspaceWebSocketRpcServer({
       }
 
       return {
+        mode: 'local',
         url: `ws://${LOCALHOST}:${address.port}`
       }
     }

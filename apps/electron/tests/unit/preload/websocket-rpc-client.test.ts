@@ -80,12 +80,14 @@ async function flushPromises(): Promise<void> {
 }
 
 function createClient(options: {
+  getTransportInfo?: () => Promise<{ mode: 'local' | 'remote'; url: string }>
   onConnectionStateChange?: (state: WorkspaceWebSocketConnectionState) => void
   reconnectDelayMs?: number
 } = {}) {
   return createWorkspaceWebSocketRpcClient({
     createId: () => 'request-1',
-    getTransportInfo: async () => ({ url: 'ws://127.0.0.1:48123' }),
+    getTransportInfo:
+      options.getTransportInfo ?? (async () => ({ mode: 'local', url: 'ws://127.0.0.1:48123' })),
     onConnectionStateChange: options.onConnectionStateChange,
     reconnectDelayMs: options.reconnectDelayMs,
     WebSocketCtor: FakeWebSocket
@@ -152,6 +154,35 @@ describe('createWorkspaceWebSocketRpcClient', () => {
     })
 
     await expect(resultPromise).resolves.toEqual([{ id: 'message-1' }])
+  })
+
+  it('connects to remote workspace URLs returned by transport discovery', async () => {
+    FakeWebSocket.instances = []
+    const client = createClient({
+      getTransportInfo: async () => ({
+        mode: 'remote',
+        url: 'ws://remote-workspace.local:48123'
+      })
+    })
+    const resultPromise = client.invoke(RPC_CHANNELS.sessions.listSessions)
+
+    await flushPromises()
+    const socket = FakeWebSocket.instances[0]
+
+    socket.emit('open')
+    acknowledgeHandshake(socket)
+    await flushPromises()
+    socket.emit('message', {
+      data: serializeEnvelope({
+        id: 'request-1',
+        type: 'response',
+        channel: RPC_CHANNELS.sessions.listSessions,
+        result: []
+      })
+    })
+
+    expect(socket.url).toBe('ws://remote-workspace.local:48123')
+    await expect(resultPromise).resolves.toEqual([])
   })
 
   it('reports the initial invoke connection state sequence', async () => {

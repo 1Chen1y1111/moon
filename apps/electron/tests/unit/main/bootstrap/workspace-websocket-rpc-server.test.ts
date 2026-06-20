@@ -222,6 +222,7 @@ describe('createWorkspaceWebSocketRpcServer', () => {
     server.handle(RPC_CHANNELS.sessions.listSessions, () => [{ id: 'session-1' }])
 
     await expect(server.getTransportInfo()).resolves.toEqual({
+      mode: 'local',
       url: 'ws://127.0.0.1:48123'
     })
 
