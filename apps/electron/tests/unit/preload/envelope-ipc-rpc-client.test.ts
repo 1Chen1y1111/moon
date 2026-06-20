@@ -39,23 +39,43 @@ describe('createEnvelopeIpcRpcClient', () => {
     const client = createEnvelopeIpcRpcClient(ipcRenderer, { createId: () => 'request-1' })
     const input = { sessionId: 'session-1' }
 
-    invoke.mockResolvedValue([{ id: 'message-1' }])
+    invoke.mockResolvedValue({
+      id: 'request-1',
+      type: 'response',
+      channel: RPC_CHANNELS.sessions.getMessages,
+      result: [{ id: 'message-1' }]
+    })
 
     await expect(client.invoke(RPC_CHANNELS.sessions.getMessages, input)).resolves.toEqual([
       { id: 'message-1' }
     ])
-    expect(invoke).toHaveBeenCalledWith(ipcChannels.chat.getMessages, input)
+    expect(invoke).toHaveBeenCalledWith(ipcChannels.rpc.request, {
+      id: 'request-1',
+      type: 'request',
+      channel: RPC_CHANNELS.sessions.getMessages,
+      args: [input]
+    })
   })
 
   it('does not pass undefined for envelope invokes without args', async () => {
     const { ipcRenderer, invoke } = createIpcRendererFixture()
     const client = createEnvelopeIpcRpcClient(ipcRenderer, { createId: () => 'request-1' })
 
-    invoke.mockResolvedValue([])
+    invoke.mockResolvedValue({
+      id: 'request-1',
+      type: 'response',
+      channel: RPC_CHANNELS.sessions.listSessions,
+      result: []
+    })
 
     await expect(client.invoke(RPC_CHANNELS.sessions.listSessions)).resolves.toEqual([])
-    expect(invoke).toHaveBeenCalledWith(ipcChannels.chat.listSessions)
-    expect(invoke).not.toHaveBeenCalledWith(ipcChannels.chat.listSessions, undefined)
+    expect(invoke).toHaveBeenCalledWith(ipcChannels.rpc.request, {
+      id: 'request-1',
+      type: 'request',
+      channel: RPC_CHANNELS.sessions.listSessions,
+      args: []
+    })
+    expect(invoke).not.toHaveBeenCalledWith(ipcChannels.rpc.request, undefined)
   })
 
   it('turns legacy IPC rejections into coded client errors', async () => {
@@ -88,17 +108,23 @@ describe('createEnvelopeIpcRpcClient', () => {
     }
 
     const unsubscribe = client.on(RPC_CHANNELS.sessions.event, listener)
-    const handler = on.mock.calls.find(
-      ([channel]) => channel === ipcChannels.chat.sessionEvent
-    )?.[1]
+    const handler = on.mock.calls.find(([channel]) => channel === ipcChannels.rpc.event)?.[1]
 
     expect(handler).toBeTypeOf('function')
 
-    handler?.({}, event)
+    handler?.(
+      {},
+      {
+        id: 'event-1',
+        type: 'event',
+        channel: RPC_CHANNELS.sessions.event,
+        args: [event]
+      }
+    )
     unsubscribe()
 
     expect(listener).toHaveBeenCalledWith(event)
-    expect(off).toHaveBeenCalledWith(ipcChannels.chat.sessionEvent, handler)
+    expect(off).toHaveBeenCalledWith(ipcChannels.rpc.event, handler)
   })
 
   it('ignores legacy events from other RPC event channels after envelope filtering', () => {
@@ -108,13 +134,19 @@ describe('createEnvelopeIpcRpcClient', () => {
 
     client.on(RPC_CHANNELS.sessions.event, listener)
 
-    const settingsHandler = on.mock.calls.find(
-      ([channel]) => channel === ipcChannels.settings.onChange
-    )?.[1]
+    const settingsHandler = on.mock.calls.find(([channel]) => channel === ipcChannels.rpc.event)?.[1]
 
     expect(settingsHandler).toBeTypeOf('function')
 
-    settingsHandler?.({}, { theme: 'dark' })
+    settingsHandler?.(
+      {},
+      {
+        id: 'event-1',
+        type: 'event',
+        channel: RPC_CHANNELS.settings.onChange,
+        args: [{ theme: 'dark' }]
+      }
+    )
 
     expect(listener).not.toHaveBeenCalled()
   })

@@ -115,8 +115,7 @@ describe('emitLegacyRpcEvent', () => {
     expect(getAllWindowsMock).not.toHaveBeenCalled()
   })
 
-  it('maps session:event to the selected webContents legacy IPC event', async () => {
-    const { ipcChannels } = await import('@ipc/channels')
+  it('does not map session:event through the legacy event bridge', async () => {
     const { RPC_CHANNELS } = await import('@moon/shared/protocol')
     const { emitLegacyRpcEvent } = await import('@main/bootstrap/legacy-rpc-event-bridge')
     const sender = { send: vi.fn() }
@@ -130,9 +129,10 @@ describe('emitLegacyRpcEvent', () => {
       delta: 'hello'
     } as const
 
-    emitLegacyRpcEvent(RPC_CHANNELS.sessions.event, { to: 'webContents', sender }, event)
-
-    expect(sender.send).toHaveBeenCalledWith(ipcChannels.chat.sessionEvent, event)
+    expect(() => {
+      emitLegacyRpcEvent(RPC_CHANNELS.sessions.event, { to: 'webContents', sender }, event)
+    }).toThrow('Unsupported legacy RPC event channel: session:event')
+    expect(sender.send).not.toHaveBeenCalled()
     expect(getAllWindowsMock).not.toHaveBeenCalled()
   })
 
@@ -147,15 +147,6 @@ describe('emitLegacyRpcEvent', () => {
     const settings = createDefaultAppSettings()
     const projectEvent = { projects: [], activeProject: null }
     const windowState = { isMaximized: true }
-    const sessionEvent = {
-      type: 'message-delta',
-      operationId: 'operation-1',
-      sessionId: 'session-1',
-      topicId: 'topic-1',
-      threadId: 'thread-1',
-      messageId: 'message-1',
-      delta: 'hello'
-    } as const
 
     getAllWindowsMock.mockReturnValue([
       { webContents: firstWebContents },
@@ -189,16 +180,6 @@ describe('emitLegacyRpcEvent', () => {
         args: [windowState]
       }
     )
-    emitLegacyRpcEventEnvelope(
-      { to: 'webContents', sender: selectedSender },
-      {
-        id: 'event-4',
-        type: 'event',
-        channel: RPC_CHANNELS.sessions.event,
-        args: [sessionEvent]
-      }
-    )
-
     expect(firstWebContents.send).toHaveBeenCalledWith(ipcChannels.settings.onChange, settings)
     expect(secondWebContents.send).toHaveBeenCalledWith(ipcChannels.settings.onChange, settings)
     expect(firstWebContents.send).toHaveBeenCalledWith(ipcChannels.projects.onChange, projectEvent)
@@ -207,7 +188,6 @@ describe('emitLegacyRpcEvent', () => {
       projectEvent
     )
     expect(selectedSender.send).toHaveBeenCalledWith(ipcChannels.window.onStateChange, windowState)
-    expect(selectedSender.send).toHaveBeenCalledWith(ipcChannels.chat.sessionEvent, sessionEvent)
   })
 
   it('throws a clear error for unsupported RPC event channels', async () => {

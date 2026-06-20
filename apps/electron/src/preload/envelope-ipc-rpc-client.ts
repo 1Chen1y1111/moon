@@ -1,5 +1,5 @@
 /**
- * 负责把 preload workspace RPC client 适配到当前 Electron legacy IPC。
+ * 负责把 preload workspace RPC client 适配到 Electron 内部 envelope IPC。
  * 本文件在 preload 内部使用 MessageEnvelope 语义，但不改变 renderer 可见 API 或 IPC channel。
  */
 
@@ -10,12 +10,11 @@ import {
 } from '@moon/server-core/transport'
 import {
   isErrorCode,
-  RPC_CHANNELS,
-  type BroadcastEventChannel,
   type MessageEnvelope,
   type WireError
 } from '@moon/shared/protocol'
-import { resolveIpcChannel, type IpcRendererBridge } from './ipc-rpc-channels'
+import { ipcChannels } from '@ipc/channels'
+import type { IpcRendererBridge } from './ipc-rpc-channels'
 
 export type EnvelopeIpcRpcClientOptions = {
   /**
@@ -24,15 +23,8 @@ export type EnvelopeIpcRpcClientOptions = {
   createId?: () => string
 }
 
-const BROADCAST_EVENT_CHANNELS: readonly BroadcastEventChannel[] = [
-  RPC_CHANNELS.sessions.event,
-  RPC_CHANNELS.settings.onChange,
-  RPC_CHANNELS.projects.onChange,
-  RPC_CHANNELS.window.onStateChange
-]
-
 /**
- * 创建基于 Electron legacy IPC 的 envelope RPC client。
+ * 创建基于 Electron workspace envelope IPC 的 RPC client。
  */
 export function createEnvelopeIpcRpcClient(
   ipcRenderer: IpcRendererBridge,
@@ -40,15 +32,15 @@ export function createEnvelopeIpcRpcClient(
 ): RpcClientPort {
   return new EnvelopeRpcClient({
     createId: options.createId,
-    request: (envelope) => requestLegacyIpcEnvelope(ipcRenderer, envelope),
-    subscribe: createLegacyIpcEnvelopeSubscription(ipcRenderer, options)
+    request: (envelope) => requestWorkspaceIpcEnvelope(ipcRenderer, envelope),
+    subscribe: createWorkspaceIpcEnvelopeSubscription(ipcRenderer)
   })
 }
 
 /**
- * 将 request envelope 转为旧 IPC invoke，并把结果重新包装成 response envelope。
+ * 将 request envelope 发送到 main 侧 workspace envelope dispatcher。
  */
-async function requestLegacyIpcEnvelope(
+async function requestWorkspaceIpcEnvelope(
   ipcRenderer: IpcRendererBridge,
   envelope: MessageEnvelope
 ): Promise<MessageEnvelope> {
@@ -66,14 +58,7 @@ async function requestLegacyIpcEnvelope(
   }
 
   try {
-    const result = await invokeLegacyIpc(ipcRenderer, resolveIpcChannel(channel), envelope.args ?? [])
-
-    return {
-      id: envelope.id,
-      type: 'response',
-      channel,
-      result
-    }
+    return (await ipcRenderer.invoke(ipcChannels.rpc.request, envelope)) as MessageEnvelope
   } catch (error) {
     return {
       id: envelope.id,
@@ -85,56 +70,25 @@ async function requestLegacyIpcEnvelope(
 }
 
 /**
- * 调用旧 IPC channel，并保持无参数调用不额外传 undefined。
+ * 订阅 main 侧 workspace event envelope stream。
  */
-function invokeLegacyIpc(
-  ipcRenderer: IpcRendererBridge,
-  ipcChannel: string,
-  args: unknown[]
-): Promise<unknown> {
-  if (args.length === 0) {
-    return ipcRenderer.invoke(ipcChannel)
-  }
-
-  return ipcRenderer.invoke(ipcChannel, ...args)
-}
-
-/**
- * 订阅当前 legacy IPC event channel，并把 raw payload 包装为 event envelope。
- */
-function createLegacyIpcEnvelopeSubscription(
-  ipcRenderer: IpcRendererBridge,
-  options: EnvelopeIpcRpcClientOptions
+function createWorkspaceIpcEnvelopeSubscription(
+  ipcRenderer: IpcRendererBridge
 ): EnvelopeRpcClientSubscribe {
   return (listener) => {
-    const unsubscribeHandlers = BROADCAST_EVENT_CHANNELS.map((channel) => {
-      const ipcChannel = resolveIpcChannel(channel)
-      const handler = (_event: unknown, ...args: unknown[]): void => {
-        listener({
-          id: options.createId?.() ?? `${channel}:event`,
-          type: 'event',
-          channel,
-          args
-        })
-      }
+    const handler = (_event: unknown, envelope: MessageEnvelope): void => {
+      listener(envelope)
+    }
 
-      ipcRenderer.on(ipcChannel, handler)
-
-      return () => {
-        ipcRenderer.off(ipcChannel, handler)
-      }
-    })
-
+    ipcRenderer.on(ipcChannels.rpc.event, handler)
     return () => {
-      for (const unsubscribe of unsubscribeHandlers) {
-        unsubscribe()
-      }
+      ipcRenderer.off(ipcChannels.rpc.event, handler)
     }
   }
 }
 
 /**
- * 将旧 IPC rejection 转成 WireError，保留可识别的协议错误码。
+ * 将 workspace IPC rejection 转成 WireError，保留可识别的协议错误码。
  */
 function createWireError(error: unknown): WireError {
   const rawCode = (error as { code?: unknown } | null)?.code

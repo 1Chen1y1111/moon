@@ -34,28 +34,15 @@ function createIpcRendererFixture(): {
 }
 
 describe('createIpcRpcClient', () => {
-  it('maps session invoke channels to legacy chat IPC channels', async () => {
-    const { ipcRenderer, invoke } = createIpcRendererFixture()
-    const client = createIpcRpcClient(ipcRenderer)
-    const input = { sessionId: 'session-1' }
-
-    invoke.mockResolvedValue([{ id: 'message-1' }])
-
-    await expect(client.invoke(RPC_CHANNELS.sessions.getMessages, input)).resolves.toEqual([
-      { id: 'message-1' }
-    ])
-    expect(invoke).toHaveBeenCalledWith(ipcChannels.chat.getMessages, input)
-  })
-
-  it('does not pass undefined for invokes without args', async () => {
+  it('does not pass undefined for app-shell invokes without args', async () => {
     const { ipcRenderer, invoke } = createIpcRendererFixture()
     const client = createIpcRpcClient(ipcRenderer)
 
-    invoke.mockResolvedValue([])
+    invoke.mockResolvedValue({ theme: 'system' })
 
-    await expect(client.invoke(RPC_CHANNELS.sessions.listSessions)).resolves.toEqual([])
-    expect(invoke).toHaveBeenCalledWith(ipcChannels.chat.listSessions)
-    expect(invoke).not.toHaveBeenCalledWith(ipcChannels.chat.listSessions, undefined)
+    await expect(client.invoke(RPC_CHANNELS.settings.get)).resolves.toEqual({ theme: 'system' })
+    expect(invoke).toHaveBeenCalledWith(ipcChannels.settings.get)
+    expect(invoke).not.toHaveBeenCalledWith(ipcChannels.settings.get, undefined)
   })
 
   it('maps app-shell protocol channels to legacy IPC channels', async () => {
@@ -85,23 +72,15 @@ describe('createIpcRpcClient', () => {
     expect(invoke).toHaveBeenCalledWith('custom:echo', { ok: true })
   })
 
-  it('maps session:event subscriptions to the unified IPC event channel', () => {
+  it('maps app-shell event subscriptions to legacy IPC event channels', () => {
     const { ipcRenderer, on, off } = createIpcRendererFixture()
     const client = createIpcRpcClient(ipcRenderer)
     const listener = vi.fn()
-    const event = {
-      type: 'message-delta',
-      operationId: 'operation-1',
-      sessionId: 'session-1',
-      topicId: 'topic-1',
-      threadId: 'thread-1',
-      messageId: 'message-1',
-      delta: 'hello'
-    }
+    const event = { activeProject: null, projects: [] }
 
-    const unsubscribe = client.on(RPC_CHANNELS.sessions.event, listener)
+    const unsubscribe = client.on(RPC_CHANNELS.projects.onChange, listener)
     const handler = on.mock.calls.find(
-      ([channel]) => channel === ipcChannels.chat.sessionEvent
+      ([channel]) => channel === ipcChannels.projects.onChange
     )?.[1]
 
     expect(handler).toBeTypeOf('function')
@@ -110,6 +89,6 @@ describe('createIpcRpcClient', () => {
     unsubscribe()
 
     expect(listener).toHaveBeenCalledWith(event)
-    expect(off).toHaveBeenCalledWith(ipcChannels.chat.sessionEvent, handler)
+    expect(off).toHaveBeenCalledWith(ipcChannels.projects.onChange, handler)
   })
 })

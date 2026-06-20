@@ -5,32 +5,13 @@
 
 import type { IpcMainInvokeEvent } from 'electron'
 
-import { ipcChannels } from '@ipc/channels'
 import type { RpcServerPort, SessionRpcRequestContext } from '@moon/server-core/handlers'
 import type { SessionEventRouteHint } from '@moon/server-core/sessions'
 import { pushTyped, type RpcPushPort } from '@moon/server-core/transport'
 import type { ChatOperationEvent } from '@moon/shared/domain/chat'
-import { RPC_CHANNELS, type PushTarget, type SessionRpcChannel } from '@moon/shared/protocol'
-import { createLegacyIpcRpcServer } from './legacy-ipc-rpc-server'
+import { RPC_CHANNELS, type PushTarget } from '@moon/shared/protocol'
 import { getLegacyWebContentsClientId } from './legacy-webcontents-client-registry'
-
-type CallableSessionRpcChannel = Exclude<SessionRpcChannel, typeof RPC_CHANNELS.sessions.event>
-
-const sessionIpcChannelByRpcChannel: Record<CallableSessionRpcChannel, string> = {
-  [RPC_CHANNELS.sessions.listSessions]: ipcChannels.chat.listSessions,
-  [RPC_CHANNELS.sessions.getMessages]: ipcChannels.chat.getMessages,
-  [RPC_CHANNELS.sessions.listTopics]: ipcChannels.chat.listTopics,
-  [RPC_CHANNELS.sessions.listThreads]: ipcChannels.chat.listThreads,
-  [RPC_CHANNELS.sessions.createSession]: ipcChannels.chat.createSession,
-  [RPC_CHANNELS.sessions.deleteSession]: ipcChannels.chat.deleteSession,
-  [RPC_CHANNELS.sessions.importAttachment]: ipcChannels.chat.importAttachment,
-  [RPC_CHANNELS.sessions.createMessageTurn]: ipcChannels.chat.createMessageTurn,
-  [RPC_CHANNELS.sessions.runOperation]: ipcChannels.chat.runOperation,
-  [RPC_CHANNELS.sessions.sendMessage]: ipcChannels.chat.sendMessage,
-  [RPC_CHANNELS.sessions.cancelOperation]: ipcChannels.chat.cancelOperation,
-  [RPC_CHANNELS.sessions.approveToolCall]: ipcChannels.chat.approveToolCall,
-  [RPC_CHANNELS.sessions.rejectToolCall]: ipcChannels.chat.rejectToolCall
-}
+import { createWorkspaceEnvelopeIpcRpcServer } from './workspace-envelope-ipc-rpc-server'
 
 /**
  * 创建 Electron IPC 版 sessions RPC server port，供 server-core 注册器写入 handler。
@@ -39,8 +20,7 @@ export function createSessionIpcRpcServer(): RpcServerPort<SessionRpcRequestCont
   RpcPushPort {
   let rpcServer!: RpcServerPort<SessionRpcRequestContext> & RpcPushPort
 
-  rpcServer = createLegacyIpcRpcServer<SessionRpcRequestContext, CallableSessionRpcChannel>({
-    channelMap: sessionIpcChannelByRpcChannel,
+  rpcServer = createWorkspaceEnvelopeIpcRpcServer<SessionRpcRequestContext>({
     createContext: (event) => createSessionIpcRequestContext(event, rpcServer)
   })
 

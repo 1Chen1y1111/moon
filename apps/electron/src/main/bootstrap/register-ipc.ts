@@ -30,19 +30,7 @@ export function registerIpcHandlers({
   projectsService,
   settingsService
 }: RegisterIpcDependencies): void {
-  ipcMain.removeHandler(ipcChannels.chat.listSessions)
-  ipcMain.removeHandler(ipcChannels.chat.getMessages)
-  ipcMain.removeHandler(ipcChannels.chat.listTopics)
-  ipcMain.removeHandler(ipcChannels.chat.listThreads)
-  ipcMain.removeHandler(ipcChannels.chat.createSession)
-  ipcMain.removeHandler(ipcChannels.chat.deleteSession)
-  ipcMain.removeHandler(ipcChannels.chat.importAttachment)
-  ipcMain.removeHandler(ipcChannels.chat.createMessageTurn)
-  ipcMain.removeHandler(ipcChannels.chat.runOperation)
-  ipcMain.removeHandler(ipcChannels.chat.sendMessage)
-  ipcMain.removeHandler(ipcChannels.chat.cancelOperation)
-  ipcMain.removeHandler(ipcChannels.chat.approveToolCall)
-  ipcMain.removeHandler(ipcChannels.chat.rejectToolCall)
+  ipcMain.removeHandler(ipcChannels.rpc.request)
   ipcMain.removeHandler(ipcChannels.settings.get)
   ipcMain.removeHandler(ipcChannels.settings.createCustomProvider)
   ipcMain.removeHandler(ipcChannels.settings.createCustomAcpProvider)

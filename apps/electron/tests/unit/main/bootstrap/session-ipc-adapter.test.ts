@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 /**
- * 负责验证 Electron sessions IPC adapter 会通过内部 envelope dispatcher 保持旧 IPC 行为。
+ * 负责验证 Electron sessions IPC adapter 会通过 workspace envelope IPC 分发请求和事件。
  * 测试只覆盖 transport adapter，不触发真实 Electron、renderer 或会话运行时。
  */
 
@@ -112,13 +112,22 @@ function createMessageDeltaEvent(): MessageDeltaEvent {
   }
 }
 
+function createRequestEnvelope(channel: string, args: unknown[] = []) {
+  return {
+    id: 'request-1',
+    type: 'request',
+    channel,
+    args
+  }
+}
+
 describe('createSessionIpcRpcServer', () => {
   beforeEach(() => {
     handleMock.mockReset()
     getAllWindowsMock.mockReset()
   })
 
-  it('returns legacy IPC results through the envelope dispatcher', async () => {
+  it('returns response envelopes through the workspace IPC dispatcher', async () => {
     const { createSessionIpcRpcServer } = await import('@main/bootstrap/session-ipc-adapter')
     const { ipcChannels } = await import('@ipc/channels')
     const { RPC_CHANNELS } = await import('@moon/shared/protocol')
@@ -126,12 +135,20 @@ describe('createSessionIpcRpcServer', () => {
 
     rpcServer.handle(RPC_CHANNELS.sessions.listSessions, () => [{ id: 'session-1' }])
 
-    const registeredHandler = getRegisteredHandler(ipcChannels.chat.listSessions)
+    const registeredHandler = getRegisteredHandler(ipcChannels.rpc.request)
 
     expect(registeredHandler).toBeTypeOf('function')
-    await expect(registeredHandler?.({ sender: { id: 1, send: vi.fn() } })).resolves.toEqual([
-      { id: 'session-1' }
-    ])
+    await expect(
+      registeredHandler?.(
+        { sender: { id: 1, send: vi.fn() } },
+        createRequestEnvelope(RPC_CHANNELS.sessions.listSessions)
+      )
+    ).resolves.toEqual({
+      id: 'request-1',
+      type: 'response',
+      channel: RPC_CHANNELS.sessions.listSessions,
+      result: [{ id: 'session-1' }]
+    })
   })
 
   it('routes session events with direct projectId to workspace clients', async () => {
@@ -165,28 +182,54 @@ describe('createSessionIpcRpcServer', () => {
       return input
     })
 
-    const registeredHandler = getRegisteredHandler(ipcChannels.chat.runOperation)
+    const registeredHandler = getRegisteredHandler(ipcChannels.rpc.request)
 
     expect(registeredHandler).toBeTypeOf('function')
-    await expect(registeredHandler?.({ sender }, { operationId: 'op-1' })).resolves.toEqual({
-      operationId: 'op-1'
+    await expect(
+      registeredHandler?.(
+        { sender },
+        createRequestEnvelope(RPC_CHANNELS.sessions.runOperation, [{ operationId: 'op-1' }])
+      )
+    ).resolves.toMatchObject({
+      channel: RPC_CHANNELS.sessions.runOperation,
+      result: { operationId: 'op-1' }
     })
     expect(sender.send).not.toHaveBeenCalled()
     expect(sameWorkspaceWebContents.send).toHaveBeenCalledWith(
-      ipcChannels.chat.sessionEvent,
-      messageCreatedEvent
+      ipcChannels.rpc.event,
+      expect.objectContaining({
+        type: 'event',
+        channel: RPC_CHANNELS.sessions.event,
+        args: [messageCreatedEvent],
+        workspaceId: 'project-1'
+      })
     )
     expect(sameWorkspaceWebContents.send).toHaveBeenCalledWith(
-      ipcChannels.chat.sessionEvent,
-      operationDoneEvent
+      ipcChannels.rpc.event,
+      expect.objectContaining({
+        type: 'event',
+        channel: RPC_CHANNELS.sessions.event,
+        args: [operationDoneEvent],
+        workspaceId: 'project-1'
+      })
     )
     expect(senderWebContents.send).toHaveBeenCalledWith(
-      ipcChannels.chat.sessionEvent,
-      messageCreatedEvent
+      ipcChannels.rpc.event,
+      expect.objectContaining({
+        type: 'event',
+        channel: RPC_CHANNELS.sessions.event,
+        args: [messageCreatedEvent],
+        workspaceId: 'project-1'
+      })
     )
     expect(senderWebContents.send).toHaveBeenCalledWith(
-      ipcChannels.chat.sessionEvent,
-      operationDoneEvent
+      ipcChannels.rpc.event,
+      expect.objectContaining({
+        type: 'event',
+        channel: RPC_CHANNELS.sessions.event,
+        args: [operationDoneEvent],
+        workspaceId: 'project-1'
+      })
     )
     expect(otherWorkspaceWebContents.send).not.toHaveBeenCalled()
   })
@@ -212,17 +255,28 @@ describe('createSessionIpcRpcServer', () => {
       return input
     })
 
-    const registeredHandler = getRegisteredHandler(ipcChannels.chat.sendMessage)
+    const registeredHandler = getRegisteredHandler(ipcChannels.rpc.request)
 
     expect(registeredHandler).toBeTypeOf('function')
-    await expect(registeredHandler?.({ sender }, { content: 'hello' })).resolves.toEqual({
-      content: 'hello'
+    await expect(
+      registeredHandler?.(
+        { sender },
+        createRequestEnvelope(RPC_CHANNELS.sessions.sendMessage, [{ content: 'hello' }])
+      )
+    ).resolves.toMatchObject({
+      channel: RPC_CHANNELS.sessions.sendMessage,
+      result: { content: 'hello' }
     })
     expect(sender.send).not.toHaveBeenCalled()
     expect(otherWebContents.send).not.toHaveBeenCalled()
     expect(senderWebContents.send).toHaveBeenCalledWith(
-      ipcChannels.chat.sessionEvent,
-      operationEvent
+      ipcChannels.rpc.event,
+      expect.objectContaining({
+        type: 'event',
+        channel: RPC_CHANNELS.sessions.event,
+        args: [operationEvent],
+        clientId: '2'
+      })
     )
     expect(senderWebContents.send).toHaveBeenCalledTimes(1)
   })
@@ -258,20 +312,36 @@ describe('createSessionIpcRpcServer', () => {
       return input
     })
 
-    const registeredHandler = getRegisteredHandler(ipcChannels.chat.runOperation)
+    const registeredHandler = getRegisteredHandler(ipcChannels.rpc.request)
 
     expect(registeredHandler).toBeTypeOf('function')
-    await expect(registeredHandler?.({ sender }, { operationId: 'op-1' })).resolves.toEqual({
-      operationId: 'op-1'
+    await expect(
+      registeredHandler?.(
+        { sender },
+        createRequestEnvelope(RPC_CHANNELS.sessions.runOperation, [{ operationId: 'op-1' }])
+      )
+    ).resolves.toMatchObject({
+      channel: RPC_CHANNELS.sessions.runOperation,
+      result: { operationId: 'op-1' }
     })
     expect(sender.send).not.toHaveBeenCalled()
     expect(sameWorkspaceWebContents.send).toHaveBeenCalledWith(
-      ipcChannels.chat.sessionEvent,
-      operationEvent
+      ipcChannels.rpc.event,
+      expect.objectContaining({
+        type: 'event',
+        channel: RPC_CHANNELS.sessions.event,
+        args: [operationEvent],
+        workspaceId: 'project-1'
+      })
     )
     expect(senderWebContents.send).toHaveBeenCalledWith(
-      ipcChannels.chat.sessionEvent,
-      operationEvent
+      ipcChannels.rpc.event,
+      expect.objectContaining({
+        type: 'event',
+        channel: RPC_CHANNELS.sessions.event,
+        args: [operationEvent],
+        workspaceId: 'project-1'
+      })
     )
     expect(otherWorkspaceWebContents.send).not.toHaveBeenCalled()
   })
@@ -297,22 +367,33 @@ describe('createSessionIpcRpcServer', () => {
       return input
     })
 
-    const registeredHandler = getRegisteredHandler(ipcChannels.chat.runOperation)
+    const registeredHandler = getRegisteredHandler(ipcChannels.rpc.request)
 
     expect(registeredHandler).toBeTypeOf('function')
-    await expect(registeredHandler?.({ sender }, { operationId: 'op-1' })).resolves.toEqual({
-      operationId: 'op-1'
+    await expect(
+      registeredHandler?.(
+        { sender },
+        createRequestEnvelope(RPC_CHANNELS.sessions.runOperation, [{ operationId: 'op-1' }])
+      )
+    ).resolves.toMatchObject({
+      channel: RPC_CHANNELS.sessions.runOperation,
+      result: { operationId: 'op-1' }
     })
     expect(sender.send).not.toHaveBeenCalled()
     expect(otherWebContents.send).not.toHaveBeenCalled()
     expect(senderWebContents.send).toHaveBeenCalledWith(
-      ipcChannels.chat.sessionEvent,
-      operationEvent
+      ipcChannels.rpc.event,
+      expect.objectContaining({
+        type: 'event',
+        channel: RPC_CHANNELS.sessions.event,
+        args: [operationEvent],
+        clientId: '402'
+      })
     )
     expect(senderWebContents.send).toHaveBeenCalledTimes(1)
   })
 
-  it('rejects legacy IPC calls with HANDLER_ERROR for ordinary handler errors', async () => {
+  it('returns HANDLER_ERROR response envelopes for ordinary handler errors', async () => {
     const { createSessionIpcRpcServer } = await import('@main/bootstrap/session-ipc-adapter')
     const { ipcChannels } = await import('@ipc/channels')
     const { RPC_CHANNELS } = await import('@moon/shared/protocol')
@@ -322,21 +403,24 @@ describe('createSessionIpcRpcServer', () => {
       throw new Error('boom')
     })
 
-    const registeredHandler = getRegisteredHandler(ipcChannels.chat.getMessages)
+    const registeredHandler = getRegisteredHandler(ipcChannels.rpc.request)
 
     expect(registeredHandler).toBeTypeOf('function')
-
-    try {
-      await registeredHandler?.({ sender: { id: 1, send: vi.fn() } }, { sessionId: 'session-1' })
-      throw new Error('expected handler to reject')
-    } catch (error) {
-      expect(error).toBeInstanceOf(Error)
-      expect((error as Error).message).toBe('boom')
-      expect((error as Error & { code?: string }).code).toBe('HANDLER_ERROR')
-    }
+    await expect(
+      registeredHandler?.(
+        { sender: { id: 1, send: vi.fn() } },
+        createRequestEnvelope(RPC_CHANNELS.sessions.getMessages, [{ sessionId: 'session-1' }])
+      )
+    ).resolves.toMatchObject({
+      channel: RPC_CHANNELS.sessions.getMessages,
+      error: {
+        code: 'HANDLER_ERROR',
+        message: 'boom'
+      }
+    })
   })
 
-  it('preserves CodedError codes when legacy IPC calls reject', async () => {
+  it('preserves CodedError codes in response envelopes', async () => {
     const { createSessionIpcRpcServer } = await import('@main/bootstrap/session-ipc-adapter')
     const { ipcChannels } = await import('@ipc/channels')
     const { CodedError, RPC_CHANNELS } = await import('@moon/shared/protocol')
@@ -346,17 +430,22 @@ describe('createSessionIpcRpcServer', () => {
       throw new CodedError('REQUEST_TIMEOUT', 'too slow')
     })
 
-    const registeredHandler = getRegisteredHandler(ipcChannels.chat.cancelOperation)
+    const registeredHandler = getRegisteredHandler(ipcChannels.rpc.request)
 
     expect(registeredHandler).toBeTypeOf('function')
-
-    try {
-      await registeredHandler?.({ sender: { id: 1, send: vi.fn() } }, { operationId: 'operation-1' })
-      throw new Error('expected handler to reject')
-    } catch (error) {
-      expect(error).toBeInstanceOf(Error)
-      expect((error as Error).message).toBe('too slow')
-      expect((error as Error & { code?: string }).code).toBe('REQUEST_TIMEOUT')
-    }
+    await expect(
+      registeredHandler?.(
+        { sender: { id: 1, send: vi.fn() } },
+        createRequestEnvelope(RPC_CHANNELS.sessions.cancelOperation, [
+          { operationId: 'operation-1' }
+        ])
+      )
+    ).resolves.toMatchObject({
+      channel: RPC_CHANNELS.sessions.cancelOperation,
+      error: {
+        code: 'REQUEST_TIMEOUT',
+        message: 'too slow'
+      }
+    })
   })
 })

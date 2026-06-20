@@ -3,27 +3,13 @@
  * 这里只维护 wire contract 的字符串入口，不承载请求参数或业务逻辑。
  */
 
-import { RPC_CHANNELS } from '@moon/shared/protocol'
-
 /**
  * IPC channel 常量；新增跨进程能力时先在这里声明稳定名称。
  */
 export const ipcChannels = {
-  chat: {
-    listSessions: 'chat:listSessions',
-    getMessages: 'chat:getMessages',
-    listTopics: 'chat:listTopics',
-    listThreads: 'chat:listThreads',
-    createSession: 'chat:createSession',
-    deleteSession: 'chat:deleteSession',
-    importAttachment: 'chat:importAttachment',
-    createMessageTurn: 'chat:createMessageTurn',
-    runOperation: 'chat:runOperation',
-    sendMessage: 'chat:sendMessage',
-    cancelOperation: 'chat:cancelOperation',
-    approveToolCall: 'chat:approveToolCall',
-    rejectToolCall: 'chat:rejectToolCall',
-    sessionEvent: RPC_CHANNELS.sessions.event
+  rpc: {
+    request: 'rpc:request',
+    event: 'rpc:event'
   },
   settings: {
     get: 'settings:get',

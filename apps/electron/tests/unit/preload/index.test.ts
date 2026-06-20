@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { ipcChannels } from '@ipc/channels'
 import type { MoonApi } from '@ipc/contracts'
+import { RPC_CHANNELS } from '@moon/shared/protocol'
 
 const exposeInMainWorldMock = vi.fn()
 const ipcInvokeMock = vi.fn()
@@ -55,6 +56,19 @@ describe('preload api', () => {
       baseUrl: ''
     } as const
 
+    ipcInvokeMock.mockImplementation((channel, envelope) => {
+      if (channel === ipcChannels.rpc.request) {
+        return Promise.resolve({
+          id: envelope.id,
+          type: 'response',
+          channel: envelope.channel,
+          result: undefined
+        })
+      }
+
+      return Promise.resolve(undefined)
+    })
+
     await import('@preload/index')
 
     const api = getExposedApi()
@@ -88,42 +102,117 @@ describe('preload api', () => {
     await api.windowControls.openSettings({ section: 'providers' })
 
     expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.settings.get)
-    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.listSessions)
-    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.getMessages, {
-      sessionId: 'session-1'
-    })
-    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.listTopics, {
-      sessionId: 'session-1'
-    })
-    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.listThreads, {
-      topicId: 'topic-1'
-    })
-    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.createSession)
-    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.deleteSession, {
-      sessionId: 'session-1'
-    })
-    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.importAttachment, {
-      name: 'note.txt',
-      mimeType: 'text/plain',
-      size: 5,
-      data: expect.any(ArrayBuffer)
-    })
-    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.createMessageTurn, {
-      content: 'hello'
-    })
-    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.runOperation, {
-      operationId: 'operation-1'
-    })
-    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.sendMessage, { content: 'hello' })
-    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.cancelOperation, {
-      operationId: 'operation-1'
-    })
-    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.approveToolCall, {
-      toolInvocationId: 'tool-1'
-    })
-    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.chat.rejectToolCall, {
-      toolInvocationId: 'tool-1'
-    })
+    expect(ipcInvokeMock).toHaveBeenCalledWith(
+      ipcChannels.rpc.request,
+      expect.objectContaining({
+        type: 'request',
+        channel: RPC_CHANNELS.sessions.listSessions,
+        args: []
+      })
+    )
+    expect(ipcInvokeMock).toHaveBeenCalledWith(
+      ipcChannels.rpc.request,
+      expect.objectContaining({
+        type: 'request',
+        channel: RPC_CHANNELS.sessions.getMessages,
+        args: [{ sessionId: 'session-1' }]
+      })
+    )
+    expect(ipcInvokeMock).toHaveBeenCalledWith(
+      ipcChannels.rpc.request,
+      expect.objectContaining({
+        type: 'request',
+        channel: RPC_CHANNELS.sessions.listTopics,
+        args: [{ sessionId: 'session-1' }]
+      })
+    )
+    expect(ipcInvokeMock).toHaveBeenCalledWith(
+      ipcChannels.rpc.request,
+      expect.objectContaining({
+        type: 'request',
+        channel: RPC_CHANNELS.sessions.listThreads,
+        args: [{ topicId: 'topic-1' }]
+      })
+    )
+    expect(ipcInvokeMock).toHaveBeenCalledWith(
+      ipcChannels.rpc.request,
+      expect.objectContaining({
+        type: 'request',
+        channel: RPC_CHANNELS.sessions.createSession,
+        args: []
+      })
+    )
+    expect(ipcInvokeMock).toHaveBeenCalledWith(
+      ipcChannels.rpc.request,
+      expect.objectContaining({
+        type: 'request',
+        channel: RPC_CHANNELS.sessions.deleteSession,
+        args: [{ sessionId: 'session-1' }]
+      })
+    )
+    expect(ipcInvokeMock).toHaveBeenCalledWith(
+      ipcChannels.rpc.request,
+      expect.objectContaining({
+        type: 'request',
+        channel: RPC_CHANNELS.sessions.importAttachment,
+        args: [
+          {
+            name: 'note.txt',
+            mimeType: 'text/plain',
+            size: 5,
+            data: expect.any(ArrayBuffer)
+          }
+        ]
+      })
+    )
+    expect(ipcInvokeMock).toHaveBeenCalledWith(
+      ipcChannels.rpc.request,
+      expect.objectContaining({
+        type: 'request',
+        channel: RPC_CHANNELS.sessions.createMessageTurn,
+        args: [{ content: 'hello' }]
+      })
+    )
+    expect(ipcInvokeMock).toHaveBeenCalledWith(
+      ipcChannels.rpc.request,
+      expect.objectContaining({
+        type: 'request',
+        channel: RPC_CHANNELS.sessions.runOperation,
+        args: [{ operationId: 'operation-1' }]
+      })
+    )
+    expect(ipcInvokeMock).toHaveBeenCalledWith(
+      ipcChannels.rpc.request,
+      expect.objectContaining({
+        type: 'request',
+        channel: RPC_CHANNELS.sessions.sendMessage,
+        args: [{ content: 'hello' }]
+      })
+    )
+    expect(ipcInvokeMock).toHaveBeenCalledWith(
+      ipcChannels.rpc.request,
+      expect.objectContaining({
+        type: 'request',
+        channel: RPC_CHANNELS.sessions.cancelOperation,
+        args: [{ operationId: 'operation-1' }]
+      })
+    )
+    expect(ipcInvokeMock).toHaveBeenCalledWith(
+      ipcChannels.rpc.request,
+      expect.objectContaining({
+        type: 'request',
+        channel: RPC_CHANNELS.sessions.approveToolCall,
+        args: [{ toolInvocationId: 'tool-1' }]
+      })
+    )
+    expect(ipcInvokeMock).toHaveBeenCalledWith(
+      ipcChannels.rpc.request,
+      expect.objectContaining({
+        type: 'request',
+        channel: RPC_CHANNELS.sessions.rejectToolCall,
+        args: [{ toolInvocationId: 'tool-1' }]
+      })
+    )
     expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.settings.saveAppearance, {
       theme: 'dark'
     })
@@ -200,17 +289,23 @@ describe('preload api', () => {
     } as const
 
     const unsubscribe = api.chat.onSessionEvent(listener)
-    const handler = ipcOnMock.mock.calls.find(
-      ([channel]) => channel === ipcChannels.chat.sessionEvent
-    )?.[1]
+    const handler = ipcOnMock.mock.calls.find(([channel]) => channel === ipcChannels.rpc.event)?.[1]
 
     expect(handler).toBeTypeOf('function')
 
-    handler?.({}, event)
+    handler?.(
+      {},
+      {
+        id: 'event-1',
+        type: 'event',
+        channel: RPC_CHANNELS.sessions.event,
+        args: [event]
+      }
+    )
     unsubscribe()
 
     expect(listener).toHaveBeenCalledWith(event)
-    expect(ipcOffMock).toHaveBeenCalledWith(ipcChannels.chat.sessionEvent, handler)
+    expect(ipcOffMock).toHaveBeenCalledWith(ipcChannels.rpc.event, handler)
   })
 
   it('cleans up the projects change event subscription', async () => {

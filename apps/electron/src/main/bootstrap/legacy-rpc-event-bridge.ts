@@ -1,6 +1,6 @@
 /**
- * 负责把 Electron main 内部 shared RPC event channel 映射回当前 legacy IPC event。
- * 本文件只处理本地窗口事件分发、临时 client 定向和本地 workspace 定向，不引入 WebSocket。
+ * 负责把 Electron main 内部 app-shell RPC event channel 映射回当前 legacy IPC event。
+ * 本文件只处理本地 app-shell 事件分发，不承载 session workspace envelope push。
  */
 
 import type { WebContents } from 'electron'
@@ -26,8 +26,7 @@ export type LegacyRpcEventTarget =
   | PushTarget
   | { to: 'webContents'; sender: Pick<WebContents, 'send'> }
 
-const legacyIpcEventChannelByRpcChannel: Record<BroadcastEventChannel, string> = {
-  [RPC_CHANNELS.sessions.event]: ipcChannels.chat.sessionEvent,
+const legacyIpcEventChannelByRpcChannel: Partial<Record<BroadcastEventChannel, string>> = {
   [RPC_CHANNELS.settings.onChange]: ipcChannels.settings.onChange,
   [RPC_CHANNELS.projects.onChange]: ipcChannels.projects.onChange,
   [RPC_CHANNELS.window.onStateChange]: ipcChannels.window.onStateChange

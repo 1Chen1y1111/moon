@@ -22,6 +22,32 @@ function getRegisteredHandler(channel: string): ((...args: unknown[]) => unknown
   return handleMock.mock.calls.find(([registeredChannel]) => registeredChannel === channel)?.[1]
 }
 
+async function dispatchRpcRequest(
+  rpcRequestChannel: string,
+  event: unknown,
+  channel: string,
+  args: unknown[] = []
+): Promise<unknown> {
+  const handler = getRegisteredHandler(rpcRequestChannel)
+
+  expect(handler).toBeTypeOf('function')
+
+  const response = await handler?.(event, {
+    id: 'request-1',
+    type: 'request',
+    channel,
+    args
+  })
+
+  expect(response).toMatchObject({
+    id: 'request-1',
+    type: 'response',
+    channel
+  })
+
+  return (response as { result?: unknown }).result
+}
+
 describe('registerIpcHandlers', () => {
   const chatService = {
     approveToolCall: vi.fn(),
@@ -124,6 +150,7 @@ describe('registerIpcHandlers', () => {
   it('registers chat handlers that delegate through the chat service', async () => {
     const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
     const { ipcChannels } = await import('@ipc/channels')
+    const { RPC_CHANNELS } = await import('@moon/shared/protocol')
     const session = {
       id: 'session-1',
       projectId: null,
@@ -232,40 +259,54 @@ describe('registerIpcHandlers', () => {
       settingsService: settingsService as never
     })
 
-    expect(await getRegisteredHandler(ipcChannels.chat.listSessions)?.({ sender: {} })).toEqual([
-      session
-    ])
     expect(
-      await getRegisteredHandler(ipcChannels.chat.getMessages)?.(
+      await dispatchRpcRequest(ipcChannels.rpc.request, { sender: {} }, RPC_CHANNELS.sessions.listSessions)
+    ).toEqual([session])
+    expect(
+      await dispatchRpcRequest(
+        ipcChannels.rpc.request,
         { sender: {} },
-        { sessionId: 'session-1' }
+        RPC_CHANNELS.sessions.getMessages,
+        [{ sessionId: 'session-1' }]
       )
     ).toEqual([message])
     expect(
-      await getRegisteredHandler(ipcChannels.chat.listTopics)?.(
+      await dispatchRpcRequest(
+        ipcChannels.rpc.request,
         { sender: {} },
-        { sessionId: 'session-1' }
+        RPC_CHANNELS.sessions.listTopics,
+        [{ sessionId: 'session-1' }]
       )
     ).toEqual([topic])
     expect(
-      await getRegisteredHandler(ipcChannels.chat.listThreads)?.(
+      await dispatchRpcRequest(
+        ipcChannels.rpc.request,
         { sender: {} },
-        { topicId: 'topic-1' }
+        RPC_CHANNELS.sessions.listThreads,
+        [{ topicId: 'topic-1' }]
       )
     ).toEqual([thread])
-    expect(await getRegisteredHandler(ipcChannels.chat.createSession)?.({ sender: {} })).toBe(
-      session
-    )
-    await expect(
-      getRegisteredHandler(ipcChannels.chat.deleteSession)?.(
+    expect(
+      await dispatchRpcRequest(
+        ipcChannels.rpc.request,
         { sender: {} },
-        { sessionId: 'session-1' }
+        RPC_CHANNELS.sessions.createSession
+      )
+    ).toBe(session)
+    await expect(
+      dispatchRpcRequest(
+        ipcChannels.rpc.request,
+        { sender: {} },
+        RPC_CHANNELS.sessions.deleteSession,
+        [{ sessionId: 'session-1' }]
       )
     ).resolves.toBeUndefined()
     expect(
-      await getRegisteredHandler(ipcChannels.chat.importAttachment)?.(
+      await dispatchRpcRequest(
+        ipcChannels.rpc.request,
         { sender: {} },
-        attachmentInput
+        RPC_CHANNELS.sessions.importAttachment,
+        [attachmentInput]
       )
     ).toBe(attachment)
     const sender = { id: 2, send: vi.fn() }
@@ -278,9 +319,11 @@ describe('registerIpcHandlers', () => {
     ])
 
     expect(
-      await getRegisteredHandler(ipcChannels.chat.createMessageTurn)?.(
+      await dispatchRpcRequest(
+        ipcChannels.rpc.request,
         { sender: {} },
-        { content: 'hello' }
+        RPC_CHANNELS.sessions.createMessageTurn,
+        [{ content: 'hello' }]
       )
     ).toEqual({
       session,
@@ -291,16 +334,23 @@ describe('registerIpcHandlers', () => {
       assistantMessage: { ...message, id: 'message-2', role: 'assistant', content: '' }
     })
     expect(
-      await getRegisteredHandler(ipcChannels.chat.runOperation)?.(
+      await dispatchRpcRequest(
+        ipcChannels.rpc.request,
         { sender },
-        { operationId: 'operation-1' }
+        RPC_CHANNELS.sessions.runOperation,
+        [{ operationId: 'operation-1' }]
       )
     ).toEqual({
       operation,
       messages: [message]
     })
     expect(
-      await getRegisteredHandler(ipcChannels.chat.sendMessage)?.({ sender }, { content: 'hello' })
+      await dispatchRpcRequest(
+        ipcChannels.rpc.request,
+        { sender },
+        RPC_CHANNELS.sessions.sendMessage,
+        [{ content: 'hello' }]
+      )
     ).toEqual({
       session,
       topic,
@@ -309,21 +359,27 @@ describe('registerIpcHandlers', () => {
       messages: [message]
     })
     expect(
-      await getRegisteredHandler(ipcChannels.chat.cancelOperation)?.(
+      await dispatchRpcRequest(
+        ipcChannels.rpc.request,
         { sender: {} },
-        { operationId: 'operation-1' }
+        RPC_CHANNELS.sessions.cancelOperation,
+        [{ operationId: 'operation-1' }]
       )
     ).toBe(operation)
     expect(
-      await getRegisteredHandler(ipcChannels.chat.approveToolCall)?.(
+      await dispatchRpcRequest(
+        ipcChannels.rpc.request,
         { sender: {} },
-        { toolInvocationId: 'tool-1' }
+        RPC_CHANNELS.sessions.approveToolCall,
+        [{ toolInvocationId: 'tool-1' }]
       )
     ).toBe(toolInvocation)
     expect(
-      await getRegisteredHandler(ipcChannels.chat.rejectToolCall)?.(
+      await dispatchRpcRequest(
+        ipcChannels.rpc.request,
         { sender: {} },
-        { toolInvocationId: 'tool-1' }
+        RPC_CHANNELS.sessions.rejectToolCall,
+        [{ toolInvocationId: 'tool-1' }]
       )
     ).toEqual({ ...toolInvocation, status: 'rejected' })
     expect(chatService.getMessages).toHaveBeenCalledWith({ sessionId: 'session-1' })
@@ -350,14 +406,24 @@ describe('registerIpcHandlers', () => {
 
     expect(sender.send).not.toHaveBeenCalled()
     expect(otherWebContents.send).not.toHaveBeenCalled()
-    expect(senderWebContents.send).toHaveBeenCalledWith(ipcChannels.chat.sessionEvent, {
-      type: 'message-created',
-      operationId: 'operation-1',
-      session,
-      topic,
-      thread,
-      message
-    })
+    expect(senderWebContents.send).toHaveBeenCalledWith(
+      ipcChannels.rpc.event,
+      expect.objectContaining({
+        type: 'event',
+        channel: RPC_CHANNELS.sessions.event,
+        args: [
+          {
+            type: 'message-created',
+            operationId: 'operation-1',
+            session,
+            topic,
+            thread,
+            message
+          }
+        ],
+        clientId: '2'
+      })
+    )
 
     const eventListener = chatService.sendMessage.mock.calls[0][1]
     eventListener({
@@ -371,14 +437,24 @@ describe('registerIpcHandlers', () => {
 
     expect(sender.send).not.toHaveBeenCalled()
     expect(otherWebContents.send).not.toHaveBeenCalled()
-    expect(senderWebContents.send).toHaveBeenCalledWith(ipcChannels.chat.sessionEvent, {
-      type: 'message-created',
-      operationId: 'operation-1',
-      session,
-      topic,
-      thread,
-      message
-    })
+    expect(senderWebContents.send).toHaveBeenCalledWith(
+      ipcChannels.rpc.event,
+      expect.objectContaining({
+        type: 'event',
+        channel: RPC_CHANNELS.sessions.event,
+        args: [
+          {
+            type: 'message-created',
+            operationId: 'operation-1',
+            session,
+            topic,
+            thread,
+            message
+          }
+        ],
+        clientId: '2'
+      })
+    )
   })
 
   it('broadcasts saved settings to open renderer windows', async () => {

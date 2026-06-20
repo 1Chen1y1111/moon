@@ -3,24 +3,11 @@
 import { describe, expect, it } from 'vitest'
 
 import { ipcChannels } from '@ipc/channels'
-import { RPC_CHANNELS } from '@moon/shared/protocol'
 
 describe('ipcChannels', () => {
-  it('defines chat IPC channels', () => {
-    expect(ipcChannels.chat.listSessions).toBe('chat:listSessions')
-    expect(ipcChannels.chat.getMessages).toBe('chat:getMessages')
-    expect(ipcChannels.chat.listTopics).toBe('chat:listTopics')
-    expect(ipcChannels.chat.listThreads).toBe('chat:listThreads')
-    expect(ipcChannels.chat.createSession).toBe('chat:createSession')
-    expect(ipcChannels.chat.deleteSession).toBe('chat:deleteSession')
-    expect(ipcChannels.chat.importAttachment).toBe('chat:importAttachment')
-    expect(ipcChannels.chat.createMessageTurn).toBe('chat:createMessageTurn')
-    expect(ipcChannels.chat.runOperation).toBe('chat:runOperation')
-    expect(ipcChannels.chat.sendMessage).toBe('chat:sendMessage')
-    expect(ipcChannels.chat.cancelOperation).toBe('chat:cancelOperation')
-    expect(ipcChannels.chat.approveToolCall).toBe('chat:approveToolCall')
-    expect(ipcChannels.chat.rejectToolCall).toBe('chat:rejectToolCall')
-    expect(ipcChannels.chat.sessionEvent).toBe(RPC_CHANNELS.sessions.event)
+  it('defines workspace envelope RPC IPC channels', () => {
+    expect(ipcChannels.rpc.request).toBe('rpc:request')
+    expect(ipcChannels.rpc.event).toBe('rpc:event')
   })
 
   it('defines a dedicated channel for opening the settings window', () => {

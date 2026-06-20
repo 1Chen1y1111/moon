@@ -1,5 +1,5 @@
 /**
- * 维护 preload 内部 RPC channel 到现有 Electron IPC channel 的映射。
+ * 维护 preload LOCAL_ONLY RPC channel 到现有 Electron IPC channel 的映射。
  * 本文件只处理 channel 名称解析，不负责 invoke、订阅或 envelope 编码。
  */
 
@@ -14,24 +14,9 @@ import { RPC_CHANNELS, type RpcChannel } from '@moon/shared/protocol'
 export type IpcRendererBridge = Pick<IpcRenderer, 'invoke' | 'on' | 'off'>
 
 /**
- * 内部 RPC channel 到现有 Electron IPC channel 的映射表。
+ * 本地 app-shell RPC channel 到现有 Electron IPC channel 的映射表。
  */
 const ipcChannelByRpcChannel: Partial<Record<RpcChannel, string>> = {
-  [RPC_CHANNELS.sessions.listSessions]: ipcChannels.chat.listSessions,
-  [RPC_CHANNELS.sessions.getMessages]: ipcChannels.chat.getMessages,
-  [RPC_CHANNELS.sessions.listTopics]: ipcChannels.chat.listTopics,
-  [RPC_CHANNELS.sessions.listThreads]: ipcChannels.chat.listThreads,
-  [RPC_CHANNELS.sessions.createSession]: ipcChannels.chat.createSession,
-  [RPC_CHANNELS.sessions.deleteSession]: ipcChannels.chat.deleteSession,
-  [RPC_CHANNELS.sessions.importAttachment]: ipcChannels.chat.importAttachment,
-  [RPC_CHANNELS.sessions.createMessageTurn]: ipcChannels.chat.createMessageTurn,
-  [RPC_CHANNELS.sessions.runOperation]: ipcChannels.chat.runOperation,
-  [RPC_CHANNELS.sessions.sendMessage]: ipcChannels.chat.sendMessage,
-  [RPC_CHANNELS.sessions.cancelOperation]: ipcChannels.chat.cancelOperation,
-  [RPC_CHANNELS.sessions.approveToolCall]: ipcChannels.chat.approveToolCall,
-  [RPC_CHANNELS.sessions.rejectToolCall]: ipcChannels.chat.rejectToolCall,
-  [RPC_CHANNELS.sessions.event]: ipcChannels.chat.sessionEvent,
-
   [RPC_CHANNELS.settings.get]: ipcChannels.settings.get,
   [RPC_CHANNELS.settings.createCustomProvider]: ipcChannels.settings.createCustomProvider,
   [RPC_CHANNELS.settings.createCustomAcpProvider]: ipcChannels.settings.createCustomAcpProvider,

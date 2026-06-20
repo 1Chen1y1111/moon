@@ -43,6 +43,7 @@ import type {
   SaveAppearanceInput,
   SaveProviderInput
 } from '@moon/shared/domain/settings-validation'
+import type { MessageEnvelope } from '@moon/shared/protocol'
 import { ipcChannels } from './channels'
 import type { OpenSettingsInput, WindowState } from './window-contracts'
 
@@ -50,57 +51,9 @@ import type { OpenSettingsInput, WindowState } from './window-contracts'
  * 每个 IPC channel 的请求与响应类型映射，供 main/preload 双侧复用。
  */
 export type AppIpcContractMap = {
-  [ipcChannels.chat.listSessions]: {
-    request: undefined
-    response: SessionRecord[]
-  }
-  [ipcChannels.chat.getMessages]: {
-    request: GetChatMessagesInput
-    response: MessageRecord[]
-  }
-  [ipcChannels.chat.listTopics]: {
-    request: ListChatTopicsInput
-    response: TopicRecord[]
-  }
-  [ipcChannels.chat.listThreads]: {
-    request: ListChatThreadsInput
-    response: ThreadRecord[]
-  }
-  [ipcChannels.chat.createSession]: {
-    request: undefined
-    response: SessionRecord
-  }
-  [ipcChannels.chat.deleteSession]: {
-    request: DeleteChatSessionInput
-    response: void
-  }
-  [ipcChannels.chat.importAttachment]: {
-    request: ImportChatAttachmentInput
-    response: ChatAttachmentRecord
-  }
-  [ipcChannels.chat.createMessageTurn]: {
-    request: CreateMessageTurnInput
-    response: CreateMessageTurnResult
-  }
-  [ipcChannels.chat.runOperation]: {
-    request: RunChatOperationInput
-    response: RunChatOperationResult
-  }
-  [ipcChannels.chat.sendMessage]: {
-    request: SendChatMessageInput
-    response: SendMessageResult
-  }
-  [ipcChannels.chat.cancelOperation]: {
-    request: CancelAgentOperationInput
-    response: AgentOperationRecord
-  }
-  [ipcChannels.chat.approveToolCall]: {
-    request: ApproveToolCallInput
-    response: ToolInvocationRecord
-  }
-  [ipcChannels.chat.rejectToolCall]: {
-    request: RejectToolCallInput
-    response: ToolInvocationRecord
+  [ipcChannels.rpc.request]: {
+    request: MessageEnvelope
+    response: MessageEnvelope
   }
   [ipcChannels.settings.get]: {
     request: undefined
