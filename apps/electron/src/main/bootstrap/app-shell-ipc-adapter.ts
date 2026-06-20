@@ -7,6 +7,7 @@ import type { IpcMainInvokeEvent } from 'electron'
 
 import { ipcChannels } from '@ipc/channels'
 import type { RpcServerPort } from '@moon/server-core/handlers'
+import type { RpcPushPort } from '@moon/server-core/transport'
 import {
   RPC_CHANNELS,
   type ProjectsRpcChannel,
@@ -65,7 +66,8 @@ const appShellIpcChannelByRpcChannel: Record<CallableAppShellRpcChannel, string>
 /**
  * 创建 Electron IPC 版 app-shell RPC server port，供 app-shell handler 注册器写入 handler。
  */
-export function createAppShellIpcRpcServer(): RpcServerPort<AppShellRpcRequestContext> {
+export function createAppShellIpcRpcServer(): RpcServerPort<AppShellRpcRequestContext> &
+  RpcPushPort {
   return createLegacyIpcRpcServer<AppShellRpcRequestContext, CallableAppShellRpcChannel>({
     channelMap: appShellIpcChannelByRpcChannel,
     createContext: createAppShellRpcRequestContext

@@ -8,6 +8,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { RpcRequestHandler, RpcServerPort } from '@moon/server-core/handlers'
+import type { RpcPushPort } from '@moon/server-core/transport'
 import type { AppShellRpcRequestContext } from '@main/bootstrap/app-shell-ipc-adapter'
 
 const fromWebContentsMock = vi.fn()
@@ -21,18 +22,22 @@ vi.mock('electron', () => ({
 }))
 
 function createRpcServerFixture(): {
-  server: RpcServerPort<AppShellRpcRequestContext>
+  server: RpcServerPort<AppShellRpcRequestContext> & RpcPushPort
   getHandler: (channel: string) => RpcRequestHandler<AppShellRpcRequestContext> | undefined
+  push: ReturnType<typeof vi.fn>
 } {
   const handlers = new Map<string, RpcRequestHandler<AppShellRpcRequestContext>>()
+  const push = vi.fn()
 
   return {
     server: {
       handle: (channel, handler) => {
         handlers.set(channel, handler as RpcRequestHandler<AppShellRpcRequestContext>)
-      }
+      },
+      push
     },
-    getHandler: (channel) => handlers.get(channel)
+    getHandler: (channel) => handlers.get(channel),
+    push
   }
 }
 
@@ -69,12 +74,9 @@ describe('registerAppShellHandlers', () => {
   it('delegates settings handlers and broadcasts settings changes', async () => {
     const { createDefaultAppSettings } = await import('@moon/shared/domain/settings')
     const { RPC_CHANNELS } = await import('@moon/shared/protocol')
-    const { ipcChannels } = await import('@ipc/channels')
     const { registerAppShellHandlers } = await import('@main/bootstrap/app-shell-rpc-handlers')
     const settings = createDefaultAppSettings()
-    const firstWebContents = { send: vi.fn() }
-    const secondWebContents = { send: vi.fn() }
-    const { server, getHandler } = createRpcServerFixture()
+    const { server, getHandler, push } = createRpcServerFixture()
 
     settingsService.getSettings.mockResolvedValue(settings)
     settingsService.createCustomProvider.mockResolvedValue(settings)
@@ -84,10 +86,6 @@ describe('registerAppShellHandlers', () => {
     settingsService.fetchProviderModels.mockResolvedValue(settings)
     settingsService.testProvider.mockResolvedValue({ ok: true })
     settingsService.saveAppearance.mockResolvedValue(settings)
-    getAllWindowsMock.mockReturnValue([
-      { webContents: firstWebContents },
-      { webContents: secondWebContents }
-    ])
 
     registerAppShellHandlers(server, {
       openSettingsWindow,
@@ -155,13 +153,12 @@ describe('registerAppShellHandlers', () => {
     expect(settingsService.fetchProviderModels).toHaveBeenCalledWith(providerInput)
     expect(settingsService.testProvider).toHaveBeenCalledWith(providerInput)
     expect(settingsService.saveAppearance).toHaveBeenCalledWith({ theme: 'dark' })
-    expect(firstWebContents.send).toHaveBeenCalledWith(ipcChannels.settings.onChange, settings)
-    expect(secondWebContents.send).toHaveBeenCalledWith(ipcChannels.settings.onChange, settings)
+    expect(push).toHaveBeenCalledTimes(6)
+    expect(push).toHaveBeenCalledWith(RPC_CHANNELS.settings.onChange, { to: 'all' }, settings)
   })
 
   it('delegates project handlers and broadcasts project changes', async () => {
     const { RPC_CHANNELS } = await import('@moon/shared/protocol')
-    const { ipcChannels } = await import('@ipc/channels')
     const { registerAppShellHandlers } = await import('@main/bootstrap/app-shell-rpc-handlers')
     const project = {
       id: 'project-1',
@@ -174,9 +171,7 @@ describe('registerAppShellHandlers', () => {
       activeProject: project,
       projects: [project]
     }
-    const firstWebContents = { send: vi.fn() }
-    const secondWebContents = { send: vi.fn() }
-    const { server, getHandler } = createRpcServerFixture()
+    const { server, getHandler, push } = createRpcServerFixture()
 
     projectsService.listProjects.mockResolvedValue([project])
     projectsService.getActiveProject.mockResolvedValue(project)
@@ -184,10 +179,6 @@ describe('registerAppShellHandlers', () => {
     projectsService.setActiveProject.mockResolvedValue(project)
     projectsService.deleteProject.mockResolvedValue(undefined)
     projectsService.createChangeEvent.mockResolvedValue(event)
-    getAllWindowsMock.mockReturnValue([
-      { webContents: firstWebContents },
-      { webContents: secondWebContents }
-    ])
 
     registerAppShellHandlers(server, {
       openSettingsWindow,
@@ -219,8 +210,8 @@ describe('registerAppShellHandlers', () => {
 
     expect(projectsService.setActiveProject).toHaveBeenCalledWith({ projectId: 'project-1' })
     expect(projectsService.deleteProject).toHaveBeenCalledWith({ projectId: 'project-1' })
-    expect(firstWebContents.send).toHaveBeenCalledWith(ipcChannels.projects.onChange, event)
-    expect(secondWebContents.send).toHaveBeenCalledWith(ipcChannels.projects.onChange, event)
+    expect(push).toHaveBeenCalledTimes(3)
+    expect(push).toHaveBeenCalledWith(RPC_CHANNELS.projects.onChange, { to: 'all' }, event)
   })
 
   it('keeps window control behavior on the sender window', async () => {

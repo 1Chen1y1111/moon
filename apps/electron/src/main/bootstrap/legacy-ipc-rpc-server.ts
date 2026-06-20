@@ -1,14 +1,15 @@
 /**
- * 负责把当前 Electron legacy IPC channel 适配为通用 RPC server port。
- * 本文件只处理 IPC transport 与 MessageEnvelope 调度，不承载具体业务 handler。
+ * 负责把当前 Electron legacy IPC channel 适配为通用 RPC server/push port。
+ * 本文件只处理 IPC transport、MessageEnvelope 调度和本地事件推送，不承载具体业务 handler。
  */
 
 import { randomUUID } from 'node:crypto'
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 
 import type { RpcRequestHandler, RpcServerPort } from '@moon/server-core/handlers'
-import { EnvelopeRpcServer } from '@moon/server-core/transport'
-import type { MessageEnvelope, WireError } from '@moon/shared/protocol'
+import { EnvelopeRpcServer, type RpcPushPort } from '@moon/server-core/transport'
+import type { BroadcastEventChannel, MessageEnvelope, WireError } from '@moon/shared/protocol'
+import { emitLegacyRpcEvent } from './legacy-rpc-event-bridge'
 
 /**
  * 创建 legacy IPC RPC server 时需要的 transport 映射和上下文工厂。
@@ -19,12 +20,12 @@ export type LegacyIpcRpcServerOptions<TContext, TChannel extends string = string
 }
 
 /**
- * 创建 Electron legacy IPC 版 RPC server port，把每次 IPC invoke 包进内部 envelope dispatch。
+ * 创建 Electron legacy IPC 版 RPC server/push port，把 invoke 包进 envelope，并把 push 转给事件桥。
  */
 export function createLegacyIpcRpcServer<TContext, TChannel extends string = string>({
   channelMap,
   createContext
-}: LegacyIpcRpcServerOptions<TContext, TChannel>): RpcServerPort<TContext> {
+}: LegacyIpcRpcServerOptions<TContext, TChannel>): RpcServerPort<TContext> & RpcPushPort {
   const envelopeServer = new EnvelopeRpcServer<TContext>()
 
   return {
@@ -47,6 +48,9 @@ export function createLegacyIpcRpcServer<TContext, TChannel extends string = str
 
         return response.result
       })
+    },
+    push: (channel, target, ...args) => {
+      emitLegacyRpcEvent(channel as BroadcastEventChannel, target, ...(args as never))
     }
   }
 }

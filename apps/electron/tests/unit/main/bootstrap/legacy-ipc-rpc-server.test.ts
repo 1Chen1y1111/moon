@@ -8,8 +8,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const handleMock = vi.fn()
+const getAllWindowsMock = vi.fn()
 
 vi.mock('electron', () => ({
+  BrowserWindow: {
+    getAllWindows: getAllWindowsMock
+  },
   ipcMain: {
     handle: handleMock
   }
@@ -22,6 +26,7 @@ function getRegisteredHandler(channel: string): ((...args: unknown[]) => unknown
 describe('createLegacyIpcRpcServer', () => {
   beforeEach(() => {
     handleMock.mockReset()
+    getAllWindowsMock.mockReset()
   })
 
   it('returns legacy IPC results through the envelope dispatcher', async () => {
@@ -144,5 +149,89 @@ describe('createLegacyIpcRpcServer', () => {
     await expect(registeredHandler?.(secondEvent)).resolves.toEqual({ requestId: 'second' })
     expect(createContext).toHaveBeenCalledWith(firstEvent)
     expect(createContext).toHaveBeenCalledWith(secondEvent)
+  })
+
+  it('pushes RPC events to all legacy windows', async () => {
+    const { ipcChannels } = await import('@ipc/channels')
+    const { createLegacyIpcRpcServer } = await import('@main/bootstrap/legacy-ipc-rpc-server')
+    const { createDefaultAppSettings } = await import('@moon/shared/domain/settings')
+    const { RPC_CHANNELS } = await import('@moon/shared/protocol')
+    const firstWebContents = { id: 1, send: vi.fn() }
+    const secondWebContents = { id: 2, send: vi.fn() }
+    const settings = createDefaultAppSettings()
+    const rpcServer = createLegacyIpcRpcServer({
+      channelMap: { 'demo:known': 'legacy:known' },
+      createContext: () => ({ requestId: 'request-1' })
+    })
+
+    getAllWindowsMock.mockReturnValue([
+      { webContents: firstWebContents },
+      { webContents: secondWebContents }
+    ])
+
+    rpcServer.push(RPC_CHANNELS.settings.onChange, { to: 'all' }, settings)
+
+    expect(firstWebContents.send).toHaveBeenCalledWith(ipcChannels.settings.onChange, settings)
+    expect(secondWebContents.send).toHaveBeenCalledWith(ipcChannels.settings.onChange, settings)
+  })
+
+  it('honors all-window push exclusions by WebContents id', async () => {
+    const { ipcChannels } = await import('@ipc/channels')
+    const { createLegacyIpcRpcServer } = await import('@main/bootstrap/legacy-ipc-rpc-server')
+    const { createDefaultAppSettings } = await import('@moon/shared/domain/settings')
+    const { RPC_CHANNELS } = await import('@moon/shared/protocol')
+    const firstWebContents = { id: 1, send: vi.fn() }
+    const secondWebContents = { id: 2, send: vi.fn() }
+    const settings = createDefaultAppSettings()
+    const rpcServer = createLegacyIpcRpcServer({
+      channelMap: { 'demo:known': 'legacy:known' },
+      createContext: () => ({ requestId: 'request-1' })
+    })
+
+    getAllWindowsMock.mockReturnValue([
+      { webContents: firstWebContents },
+      { webContents: secondWebContents }
+    ])
+
+    rpcServer.push(RPC_CHANNELS.settings.onChange, { to: 'all', exclude: '2' }, settings)
+
+    expect(firstWebContents.send).toHaveBeenCalledWith(ipcChannels.settings.onChange, settings)
+    expect(secondWebContents.send).not.toHaveBeenCalled()
+  })
+
+  it('pushes RPC events to a single legacy client window', async () => {
+    const { ipcChannels } = await import('@ipc/channels')
+    const { createLegacyIpcRpcServer } = await import('@main/bootstrap/legacy-ipc-rpc-server')
+    const { RPC_CHANNELS } = await import('@moon/shared/protocol')
+    const firstWebContents = { id: 1, send: vi.fn() }
+    const secondWebContents = { id: 2, send: vi.fn() }
+    const state = { isMaximized: true }
+    const rpcServer = createLegacyIpcRpcServer({
+      channelMap: { 'demo:known': 'legacy:known' },
+      createContext: () => ({ requestId: 'request-1' })
+    })
+
+    getAllWindowsMock.mockReturnValue([
+      { webContents: firstWebContents },
+      { webContents: secondWebContents }
+    ])
+
+    rpcServer.push(RPC_CHANNELS.window.onStateChange, { to: 'client', clientId: '2' }, state)
+
+    expect(firstWebContents.send).not.toHaveBeenCalled()
+    expect(secondWebContents.send).toHaveBeenCalledWith(ipcChannels.window.onStateChange, state)
+  })
+
+  it('rejects workspace push targets until workspace routing exists', async () => {
+    const { createLegacyIpcRpcServer } = await import('@main/bootstrap/legacy-ipc-rpc-server')
+    const { RPC_CHANNELS } = await import('@moon/shared/protocol')
+    const rpcServer = createLegacyIpcRpcServer({
+      channelMap: { 'demo:known': 'legacy:known' },
+      createContext: () => ({ requestId: 'request-1' })
+    })
+
+    expect(() =>
+      rpcServer.push(RPC_CHANNELS.settings.onChange, { to: 'workspace', workspaceId: 'workspace-1' })
+    ).toThrow('Workspace push targets are not supported by legacy IPC event bridge: workspace-1')
   })
 })

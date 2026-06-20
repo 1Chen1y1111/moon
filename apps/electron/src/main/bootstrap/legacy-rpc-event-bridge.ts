@@ -1,6 +1,6 @@
 /**
  * 负责把 Electron main 内部 shared RPC event channel 映射回当前 legacy IPC event。
- * 本文件只处理本地窗口事件分发，不引入 WebSocket、workspace routing 或 server push。
+ * 本文件只处理本地窗口事件分发和临时 client 定向，不引入 WebSocket 或 workspace routing。
  */
 
 import { BrowserWindow, type WebContents } from 'electron'
@@ -9,14 +9,15 @@ import { ipcChannels } from '@ipc/channels'
 import {
   RPC_CHANNELS,
   type BroadcastEventArgs,
-  type BroadcastEventChannel
+  type BroadcastEventChannel,
+  type PushTarget
 } from '@moon/shared/protocol'
 
 /**
  * Electron legacy IPC event bridge 当前支持的本地发送目标。
  */
 export type LegacyRpcEventTarget =
-  | { to: 'all' }
+  | PushTarget
   | { to: 'webContents'; sender: Pick<WebContents, 'send'> }
 
 const legacyIpcEventChannelByRpcChannel: Record<BroadcastEventChannel, string> = {
@@ -37,13 +38,52 @@ export function emitLegacyRpcEvent<TChannel extends BroadcastEventChannel>(
   const legacyChannel = resolveLegacyIpcEventChannel(channel)
 
   if (target.to === 'all') {
-    BrowserWindow.getAllWindows().forEach((window) => {
-      window.webContents.send(legacyChannel, ...args)
-    })
+    sendToAllWindows(legacyChannel, target.exclude, args)
     return
   }
 
+  if (target.to === 'client') {
+    sendToClientWindow(legacyChannel, target.clientId, args)
+    return
+  }
+
+  if (target.to === 'workspace') {
+    throw new Error(
+      `Workspace push targets are not supported by legacy IPC event bridge: ${target.workspaceId}`
+    )
+  }
+
   target.sender.send(legacyChannel, ...args)
+}
+
+/**
+ * 向所有窗口发送 legacy IPC 事件，可按 WebContents id 字符串排除某个 client。
+ */
+function sendToAllWindows(legacyChannel: string, exclude: string | undefined, args: unknown[]): void {
+  BrowserWindow.getAllWindows().forEach((window) => {
+    const webContents = window.webContents
+
+    if (exclude !== undefined && String(webContents.id) === exclude) {
+      return
+    }
+
+    webContents.send(legacyChannel, ...args)
+  })
+}
+
+/**
+ * 按临时 clientId 语义把事件发送给匹配 WebContents id 的窗口。
+ */
+function sendToClientWindow(legacyChannel: string, clientId: string, args: unknown[]): void {
+  BrowserWindow.getAllWindows().forEach((window) => {
+    const webContents = window.webContents
+
+    if (String(webContents.id) !== clientId) {
+      return
+    }
+
+    webContents.send(legacyChannel, ...args)
+  })
 }
 
 /**
