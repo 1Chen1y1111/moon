@@ -11,7 +11,7 @@ import {
   serializeEnvelope,
   type EnvelopeRpcClientSubscribe
 } from '@moon/server-core/transport'
-import type { MessageEnvelope } from '@moon/shared/protocol'
+import { PROTOCOL_VERSION, type MessageEnvelope, type WireError } from '@moon/shared/protocol'
 
 type WorkspaceWebSocketEvent = {
   data?: unknown
@@ -40,6 +40,7 @@ export type WorkspaceWebSocketRpcClientOptions = {
 }
 
 const WEBSOCKET_OPEN = 1
+const WORKSPACE_HANDSHAKE_ID = 'workspace-handshake'
 
 /**
  * 创建基于本机 WebSocket 的 workspace RPC client。
@@ -72,6 +73,9 @@ function createWorkspaceWebSocketTransport({
   subscribe: EnvelopeRpcClientSubscribe
 } {
   const envelopeListeners = new Set<(envelope: MessageEnvelope) => void>()
+  const handshakeState = {
+    clientId: null as string | null
+  }
   const pendingRequests = new Map<
     string,
     {
@@ -122,10 +126,14 @@ function createWorkspaceWebSocketTransport({
             const nextSocket = new SocketCtor(transportInfo.url)
 
             socket = nextSocket
+            const handleHandshake = (event: WorkspaceWebSocketEvent): void => {
+              handleHandshakeMessage(nextSocket, event, handleHandshake, resolve, reject)
+            }
+
             nextSocket.addEventListener('open', () => {
-              resolve(nextSocket)
+              sendHandshake(nextSocket)
             })
-            nextSocket.addEventListener('message', handleSocketMessage)
+            nextSocket.addEventListener('message', handleHandshake)
             nextSocket.addEventListener('close', () => {
               markSocketClosed(new Error('Workspace WebSocket closed'))
             })
@@ -140,6 +148,67 @@ function createWorkspaceWebSocketTransport({
     }
 
     return socketPromise
+  }
+
+  /**
+   * WebSocket 打开后先发送协议握手 envelope。
+   */
+  function sendHandshake(activeSocket: WorkspaceWebSocketLike): void {
+    activeSocket.send(
+      serializeEnvelope({
+        id: WORKSPACE_HANDSHAKE_ID,
+        type: 'handshake',
+        protocolVersion: PROTOCOL_VERSION
+      })
+    )
+  }
+
+  /**
+   * 处理握手阶段的 server ack；成功后才切换到普通 envelope 分发。
+   */
+  function handleHandshakeMessage(
+    activeSocket: WorkspaceWebSocketLike,
+    event: WorkspaceWebSocketEvent,
+    handleHandshake: (event: WorkspaceWebSocketEvent) => void,
+    resolve: (socket: WorkspaceWebSocketLike) => void,
+    reject: (error: Error) => void
+  ): void {
+    let envelope: MessageEnvelope
+
+    try {
+      envelope = deserializeEnvelope(String(event.data))
+    } catch (error) {
+      const connectionError = toError(error)
+
+      reject(connectionError)
+      markSocketClosed(connectionError)
+      return
+    }
+
+    if (envelope.type === 'error' && envelope.error) {
+      const connectionError = createWireError(envelope.error)
+
+      reject(connectionError)
+      markSocketClosed(connectionError)
+      return
+    }
+
+    if (
+      envelope.type !== 'handshake_ack' ||
+      envelope.protocolVersion !== PROTOCOL_VERSION ||
+      typeof envelope.clientId !== 'string'
+    ) {
+      const connectionError = new Error('Workspace WebSocket handshake failed')
+
+      reject(connectionError)
+      markSocketClosed(connectionError)
+      return
+    }
+
+    handshakeState.clientId = envelope.clientId
+    activeSocket.removeEventListener('message', handleHandshake)
+    activeSocket.addEventListener('message', handleSocketMessage)
+    resolve(activeSocket)
   }
 
   /**
@@ -179,11 +248,28 @@ function createWorkspaceWebSocketTransport({
    * 标记 v1 WebSocket transport 已关闭；后续请求不会尝试自动重连。
    */
   function markSocketClosed(error: Error): void {
+    handshakeState.clientId = null
     closedError = error
     socket = null
     socketPromise = null
     rejectPendingRequests(error)
   }
+}
+
+/**
+ * 把 unknown 错误规整成 Error 实例。
+ */
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error))
+}
+
+/**
+ * 将 server handshake error envelope 还原成带 code 的 Error。
+ */
+function createWireError(error: WireError): Error & { code: WireError['code'] } {
+  const responseError = new Error(error.message) as Error & { code: WireError['code'] }
+  responseError.code = error.code
+  return responseError
 }
 
 /**

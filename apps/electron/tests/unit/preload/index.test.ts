@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ipcChannels } from '@ipc/channels'
 import type { MoonApi } from '@ipc/contracts'
 import { workspaceWebSocketTransportInfoChannel } from '@ipc/workspace-transport-contract'
-import { RPC_CHANNELS } from '@moon/shared/protocol'
+import { PROTOCOL_VERSION, RPC_CHANNELS } from '@moon/shared/protocol'
 
 const exposeInMainWorldMock = vi.fn()
 const ipcInvokeMock = vi.fn()
@@ -77,6 +77,20 @@ class FakeWebSocket {
   send(data: string): void {
     this.sent.push(data)
     const request = JSON.parse(data)
+
+    if (request.type === 'handshake') {
+      queueMicrotask(() => {
+        this.emit('message', {
+          data: JSON.stringify({
+            id: request.id,
+            type: 'handshake_ack',
+            clientId: 'client-1',
+            protocolVersion: PROTOCOL_VERSION
+          })
+        })
+      })
+      return
+    }
 
     queueMicrotask(() => {
       this.emit('message', {
@@ -262,9 +276,10 @@ describe('preload api', () => {
       })
     )
 
-    const workspaceRequestChannels = FakeWebSocket.instances[0].sent.map((raw) => {
-      return JSON.parse(raw).channel
-    })
+    const workspaceRequestChannels = FakeWebSocket.instances[0].sent
+      .map((raw) => JSON.parse(raw))
+      .filter((envelope) => envelope.type === 'request')
+      .map((envelope) => envelope.channel)
 
     expect(workspaceRequestChannels).toEqual([
       RPC_CHANNELS.sessions.listSessions,

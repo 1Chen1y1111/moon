@@ -22,10 +22,12 @@ import {
 } from '@moon/server-core/transport'
 import type { ChatOperationEvent } from '@moon/shared/domain/chat'
 import {
+  PROTOCOL_VERSION,
   isRemoteEligible,
   RPC_CHANNELS,
   type MessageEnvelope,
-  type PushTarget
+  type PushTarget,
+  type WireError
 } from '@moon/shared/protocol'
 
 type WorkspaceSocket = {
@@ -52,6 +54,7 @@ type CreateWorkspaceSocketServer = (
 
 type WorkspaceSocketClient = {
   clientId: string
+  handshakeComplete: boolean
   socket: WorkspaceSocket
   workspaceId: string | null
 }
@@ -199,6 +202,7 @@ function acceptSocketClient(
 ): void {
   const client: WorkspaceSocketClient = {
     clientId,
+    handshakeComplete: false,
     socket,
     workspaceId: null
   }
@@ -229,20 +233,51 @@ async function dispatchSocketMessage(
   try {
     envelope = deserializeEnvelope(toMessageText(rawMessage))
   } catch (error) {
-    sendEnvelope(client.socket, {
-      id: 'invalid-envelope',
-      type: 'error',
-      error: {
-        code: 'HANDLER_ERROR',
-        message: getErrorMessage(error)
-      }
+    sendErrorEnvelope(client.socket, 'invalid-envelope', {
+      code: 'HANDLER_ERROR',
+      message: getErrorMessage(error)
     })
+    return
+  }
+
+  if (!client.handshakeComplete) {
+    handleHandshakeEnvelope(client, envelope)
     return
   }
 
   const response = await envelopeServer.dispatch(createRequestContext(rpcServer, client), envelope)
 
   sendEnvelope(client.socket, response)
+}
+
+/**
+ * 校验 workspace WebSocket 握手；只有成功握手后的连接才能承载 session RPC。
+ */
+function handleHandshakeEnvelope(client: WorkspaceSocketClient, envelope: MessageEnvelope): void {
+  if (envelope.type !== 'handshake') {
+    sendErrorEnvelope(client.socket, envelope.id, {
+      code: 'HANDLER_ERROR',
+      message: 'Workspace WebSocket handshake required'
+    })
+    return
+  }
+
+  if (envelope.protocolVersion !== PROTOCOL_VERSION) {
+    sendErrorEnvelope(client.socket, envelope.id, {
+      code: 'PROTOCOL_VERSION_UNSUPPORTED',
+      message: `Unsupported protocol version: ${envelope.protocolVersion ?? 'missing'}`
+    })
+    client.socket.close?.()
+    return
+  }
+
+  client.handshakeComplete = true
+  sendEnvelope(client.socket, {
+    id: envelope.id,
+    type: 'handshake_ack',
+    clientId: client.clientId,
+    protocolVersion: PROTOCOL_VERSION
+  })
 }
 
 /**
@@ -320,6 +355,10 @@ function sendEventEnvelope(
  * 判断某个 client 是否匹配当前 push target。
  */
 function shouldSendToClient(client: WorkspaceSocketClient, target: PushTarget): boolean {
+  if (!client.handshakeComplete) {
+    return false
+  }
+
   if (target.to === 'all') {
     return target.exclude === undefined || target.exclude !== client.clientId
   }
@@ -332,6 +371,17 @@ function shouldSendToClient(client: WorkspaceSocketClient, target: PushTarget): 
     client.workspaceId === target.workspaceId &&
     (target.exclude === undefined || target.exclude !== client.clientId)
   )
+}
+
+/**
+ * 发送 WebSocket transport 级错误 envelope。
+ */
+function sendErrorEnvelope(socket: WorkspaceSocket, id: string, error: WireError): void {
+  sendEnvelope(socket, {
+    id,
+    type: 'error',
+    error
+  })
 }
 
 /**

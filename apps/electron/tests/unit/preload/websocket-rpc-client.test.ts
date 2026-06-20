@@ -8,7 +8,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { serializeEnvelope } from '@moon/server-core/transport'
-import { RPC_CHANNELS } from '@moon/shared/protocol'
+import { PROTOCOL_VERSION, RPC_CHANNELS } from '@moon/shared/protocol'
 import { createWorkspaceWebSocketRpcClient } from '@preload/websocket-rpc-client'
 
 type FakeEventName = 'open' | 'message' | 'close' | 'error'
@@ -87,8 +87,23 @@ function createClient() {
   })
 }
 
+function parseSentEnvelope(socket: FakeWebSocket, index: number): unknown {
+  return JSON.parse(socket.sent[index])
+}
+
+function acknowledgeHandshake(socket: FakeWebSocket, clientId = 'client-1'): void {
+  socket.emit('message', {
+    data: serializeEnvelope({
+      id: 'workspace-handshake',
+      type: 'handshake_ack',
+      clientId,
+      protocolVersion: PROTOCOL_VERSION
+    })
+  })
+}
+
 describe('createWorkspaceWebSocketRpcClient', () => {
-  it('sends request envelopes through WebSocket and returns response results', async () => {
+  it('handshakes before sending request envelopes and returns response results', async () => {
     FakeWebSocket.instances = []
     const client = createClient()
     const resultPromise = client.invoke(RPC_CHANNELS.sessions.getMessages, {
@@ -102,7 +117,16 @@ describe('createWorkspaceWebSocketRpcClient', () => {
     await flushPromises()
 
     expect(socket.url).toBe('ws://127.0.0.1:48123')
-    expect(JSON.parse(socket.sent[0])).toEqual({
+    expect(parseSentEnvelope(socket, 0)).toEqual({
+      id: 'workspace-handshake',
+      type: 'handshake',
+      protocolVersion: PROTOCOL_VERSION
+    })
+
+    acknowledgeHandshake(socket)
+    await flushPromises()
+
+    expect(parseSentEnvelope(socket, 1)).toEqual({
       id: 'request-1',
       type: 'request',
       channel: RPC_CHANNELS.sessions.getMessages,
@@ -121,6 +145,32 @@ describe('createWorkspaceWebSocketRpcClient', () => {
     await expect(resultPromise).resolves.toEqual([{ id: 'message-1' }])
   })
 
+  it('turns handshake error envelopes into coded Errors', async () => {
+    FakeWebSocket.instances = []
+    const client = createClient()
+    const resultPromise = client.invoke(RPC_CHANNELS.sessions.listSessions)
+
+    await flushPromises()
+    const socket = FakeWebSocket.instances[0]
+
+    socket.emit('open')
+    socket.emit('message', {
+      data: serializeEnvelope({
+        id: 'workspace-handshake',
+        type: 'error',
+        error: {
+          code: 'PROTOCOL_VERSION_UNSUPPORTED',
+          message: 'unsupported'
+        }
+      })
+    })
+
+    await expect(resultPromise).rejects.toMatchObject({
+      code: 'PROTOCOL_VERSION_UNSUPPORTED',
+      message: 'unsupported'
+    })
+  })
+
   it('turns response error envelopes into coded Errors', async () => {
     FakeWebSocket.instances = []
     const client = createClient()
@@ -132,6 +182,8 @@ describe('createWorkspaceWebSocketRpcClient', () => {
     const socket = FakeWebSocket.instances[0]
 
     socket.emit('open')
+    await flushPromises()
+    acknowledgeHandshake(socket)
     await flushPromises()
     socket.emit('message', {
       data: serializeEnvelope({
@@ -170,6 +222,7 @@ describe('createWorkspaceWebSocketRpcClient', () => {
     const socket = FakeWebSocket.instances[0]
 
     socket.emit('open')
+    acknowledgeHandshake(socket)
     socket.emit('message', {
       data: serializeEnvelope({
         id: 'event-1',
@@ -191,6 +244,8 @@ describe('createWorkspaceWebSocketRpcClient', () => {
     await flushPromises()
     const socket = FakeWebSocket.instances[0]
 
+    socket.emit('open')
+    acknowledgeHandshake(socket)
     unsubscribe()
     socket.close()
     socket.emit('message', {
@@ -203,5 +258,21 @@ describe('createWorkspaceWebSocketRpcClient', () => {
     })
 
     expect(listener).not.toHaveBeenCalled()
+  })
+
+  it('rejects pending requests when the WebSocket closes', async () => {
+    FakeWebSocket.instances = []
+    const client = createClient()
+    const resultPromise = client.invoke(RPC_CHANNELS.sessions.listSessions)
+
+    await flushPromises()
+    const socket = FakeWebSocket.instances[0]
+
+    socket.emit('open')
+    acknowledgeHandshake(socket)
+    await flushPromises()
+    socket.close()
+
+    await expect(resultPromise).rejects.toThrow('Workspace WebSocket closed')
   })
 })

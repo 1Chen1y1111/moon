@@ -8,7 +8,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { serializeEnvelope } from '@moon/server-core/transport'
-import { RPC_CHANNELS } from '@moon/shared/protocol'
+import { PROTOCOL_VERSION, RPC_CHANNELS } from '@moon/shared/protocol'
 import { createWorkspaceWebSocketRpcServer } from '@main/bootstrap/workspace-websocket-rpc-server'
 
 type FakeSocketEvent = 'message' | 'close' | 'error'
@@ -97,7 +97,105 @@ async function flushPromises(): Promise<void> {
   })
 }
 
+function parseSentEnvelope(socket: FakeSocket, index: number): unknown {
+  return JSON.parse(socket.sent[index])
+}
+
+async function performHandshake(socket: FakeSocket, id = 'handshake-1'): Promise<void> {
+  socket.emitMessage(
+    serializeEnvelope({
+      id,
+      type: 'handshake',
+      protocolVersion: PROTOCOL_VERSION
+    })
+  )
+  await flushPromises()
+}
+
 describe('createWorkspaceWebSocketRpcServer', () => {
+  it('requires a protocol handshake before dispatching workspace requests', async () => {
+    const fakeServer = new FakeSocketServer()
+    const handler = vi.fn()
+    const server = createWorkspaceWebSocketRpcServer({
+      createClientId: () => 'client-1',
+      createWebSocketServer: () => fakeServer
+    })
+
+    server.handle(RPC_CHANNELS.sessions.listSessions, handler)
+
+    await server.getTransportInfo()
+    const socket = fakeServer.connect()
+
+    socket.emitMessage(
+      serializeEnvelope({
+        id: 'request-before-handshake',
+        type: 'request',
+        channel: RPC_CHANNELS.sessions.listSessions,
+        args: []
+      })
+    )
+    await flushPromises()
+
+    expect(handler).not.toHaveBeenCalled()
+    expect(parseSentEnvelope(socket, 0)).toMatchObject({
+      id: 'request-before-handshake',
+      type: 'error',
+      error: {
+        code: 'HANDLER_ERROR',
+        message: 'Workspace WebSocket handshake required'
+      }
+    })
+  })
+
+  it('acknowledges supported protocol handshakes with the assigned client id', async () => {
+    const fakeServer = new FakeSocketServer()
+    const server = createWorkspaceWebSocketRpcServer({
+      createClientId: () => 'client-1',
+      createWebSocketServer: () => fakeServer
+    })
+
+    await server.getTransportInfo()
+    const socket = fakeServer.connect()
+
+    await performHandshake(socket)
+
+    expect(parseSentEnvelope(socket, 0)).toEqual({
+      id: 'handshake-1',
+      type: 'handshake_ack',
+      clientId: 'client-1',
+      protocolVersion: PROTOCOL_VERSION
+    })
+  })
+
+  it('rejects unsupported protocol versions and closes the socket', async () => {
+    const fakeServer = new FakeSocketServer()
+    const server = createWorkspaceWebSocketRpcServer({
+      createClientId: () => 'client-1',
+      createWebSocketServer: () => fakeServer
+    })
+
+    await server.getTransportInfo()
+    const socket = fakeServer.connect()
+
+    socket.emitMessage(
+      serializeEnvelope({
+        id: 'handshake-1',
+        type: 'handshake',
+        protocolVersion: '0.1'
+      })
+    )
+    await flushPromises()
+
+    expect(parseSentEnvelope(socket, 0)).toMatchObject({
+      id: 'handshake-1',
+      type: 'error',
+      error: {
+        code: 'PROTOCOL_VERSION_UNSUPPORTED'
+      }
+    })
+    expect(socket.readyState).toBe(3)
+  })
+
   it('dispatches request envelopes to session handlers and returns response envelopes', async () => {
     const fakeServer = new FakeSocketServer()
     const server = createWorkspaceWebSocketRpcServer({
@@ -113,6 +211,7 @@ describe('createWorkspaceWebSocketRpcServer', () => {
 
     const socket = fakeServer.connect()
 
+    await performHandshake(socket)
     socket.emitMessage(
       serializeEnvelope({
         id: 'request-1',
@@ -123,7 +222,7 @@ describe('createWorkspaceWebSocketRpcServer', () => {
     )
     await flushPromises()
 
-    expect(JSON.parse(socket.sent[0])).toEqual({
+    expect(parseSentEnvelope(socket, 1)).toEqual({
       id: 'request-1',
       type: 'response',
       channel: RPC_CHANNELS.sessions.listSessions,
@@ -158,6 +257,7 @@ describe('createWorkspaceWebSocketRpcServer', () => {
     await server.getTransportInfo()
     const socket = fakeServer.connect()
 
+    await performHandshake(socket)
     socket.emitMessage(
       serializeEnvelope({
         id: 'request-1',
@@ -191,6 +291,7 @@ describe('createWorkspaceWebSocketRpcServer', () => {
     await server.getTransportInfo()
     const socket = fakeServer.connect()
 
+    await performHandshake(socket)
     socket.emitMessage(
       serializeEnvelope({
         id: 'missing-request',
@@ -209,14 +310,14 @@ describe('createWorkspaceWebSocketRpcServer', () => {
     )
     await flushPromises()
 
-    expect(JSON.parse(socket.sent[0])).toMatchObject({
+    expect(parseSentEnvelope(socket, 1)).toMatchObject({
       id: 'missing-request',
       type: 'response',
       error: {
         code: 'CHANNEL_NOT_FOUND'
       }
     })
-    expect(JSON.parse(socket.sent[1])).toMatchObject({
+    expect(parseSentEnvelope(socket, 2)).toMatchObject({
       id: 'error-request',
       type: 'response',
       error: {
@@ -239,5 +340,38 @@ describe('createWorkspaceWebSocketRpcServer', () => {
 
     expect(socket.readyState).toBe(3)
     expect(fakeServer.close).toHaveBeenCalledOnce()
+  })
+
+  it('pushes event envelopes only to clients that completed handshake', async () => {
+    const fakeServer = new FakeSocketServer()
+    const server = createWorkspaceWebSocketRpcServer({
+      createClientId: () => 'client-1',
+      createWebSocketServer: () => fakeServer
+    })
+    const event = {
+      type: 'message-delta',
+      operationId: 'operation-1',
+      sessionId: 'session-1',
+      topicId: 'topic-1',
+      threadId: 'thread-1',
+      messageId: 'message-1',
+      delta: 'hello'
+    } as const
+
+    await server.getTransportInfo()
+    const readySocket = fakeServer.connect()
+    const pendingSocket = fakeServer.connect()
+
+    await performHandshake(readySocket)
+    server.push(RPC_CHANNELS.sessions.event, { to: 'all' }, event)
+
+    expect(readySocket.sent.map((raw) => JSON.parse(raw))).toContainEqual(
+      expect.objectContaining({
+        type: 'event',
+        channel: RPC_CHANNELS.sessions.event,
+        args: [event]
+      })
+    )
+    expect(pendingSocket.sent).toEqual([])
   })
 })
