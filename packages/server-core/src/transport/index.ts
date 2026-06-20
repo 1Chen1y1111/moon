@@ -1,9 +1,10 @@
 /**
  * 汇总 server-core transport-neutral RPC helpers。
- * 当前只提供 envelope codec 和内存 dispatcher，不创建 WebSocket 或 Electron IPC transport。
+ * 当前提供 envelope codec、内存 dispatcher 和 event push 编码，不创建具体 transport。
  */
 
 export * from './codec'
+export * from './envelope-push-port'
 export * from './envelope-rpc-server'
 export * from './push'
 export * from './types'
