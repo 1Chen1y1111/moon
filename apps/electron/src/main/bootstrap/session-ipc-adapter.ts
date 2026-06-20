@@ -7,6 +7,7 @@ import type { IpcMainInvokeEvent } from 'electron'
 
 import { ipcChannels } from '@ipc/channels'
 import type { RpcServerPort, SessionRpcRequestContext } from '@moon/server-core/handlers'
+import type { SessionEventRouteHint } from '@moon/server-core/sessions'
 import { pushTyped, type RpcPushPort } from '@moon/server-core/transport'
 import type { ChatOperationEvent } from '@moon/shared/domain/chat'
 import { RPC_CHANNELS, type PushTarget, type SessionRpcChannel } from '@moon/shared/protocol'
@@ -56,8 +57,8 @@ function createSessionIpcRequestContext(
   const clientId = getLegacyWebContentsClientId(event.sender)
 
   return {
-    emitSessionEvent: (eventChannel, operationEvent) => {
-      emitSessionEvent(rpcServer, eventChannel, operationEvent, clientId)
+    emitSessionEvent: (eventChannel, operationEvent, routeHint) => {
+      emitSessionEvent(rpcServer, eventChannel, operationEvent, clientId, routeHint)
     }
   }
 }
@@ -69,7 +70,8 @@ function emitSessionEvent(
   rpcServer: RpcPushPort,
   eventChannel: typeof RPC_CHANNELS.sessions.event,
   operationEvent: ChatOperationEvent,
-  clientId: string
+  clientId: string,
+  routeHint?: SessionEventRouteHint
 ): void {
   if (eventChannel !== RPC_CHANNELS.sessions.event) {
     return
@@ -78,19 +80,24 @@ function emitSessionEvent(
   pushTyped(
     rpcServer,
     eventChannel,
-    resolveSessionEventPushTarget(operationEvent, clientId),
+    resolveSessionEventPushTarget(operationEvent, clientId, routeHint),
     operationEvent
   )
 }
 
 /**
- * 优先使用事件 payload 中明确携带的 projectId 做 workspace 定向。
- * 缺失时保持当前 client 范围。
+ * 优先使用 server-core 内部 route hint 做 workspace 定向，再回落到事件 payload。
+ * 两者都缺失时保持当前 client 范围。
  */
 function resolveSessionEventPushTarget(
   operationEvent: ChatOperationEvent,
-  fallbackClientId: string
+  fallbackClientId: string,
+  routeHint?: SessionEventRouteHint
 ): PushTarget {
+  if (routeHint?.workspaceId) {
+    return { to: 'workspace', workspaceId: routeHint.workspaceId }
+  }
+
   if ('session' in operationEvent && operationEvent.session.projectId !== null) {
     return { to: 'workspace', workspaceId: operationEvent.session.projectId }
   }

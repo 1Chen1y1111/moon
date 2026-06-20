@@ -20,7 +20,7 @@ import type {
 import type { ChatOperationEvent } from '@moon/shared/domain/chat'
 
 import type { RpcServerPort } from '../types'
-import type { SessionEventSink, SessionHandlers } from '../../sessions'
+import type { SessionEventRouteHint, SessionEventSink, SessionHandlers } from '../../sessions'
 
 /**
  * sessions 注册器当前负责处理的请求 channel，不包含只用于推送的 `session:event`。
@@ -46,7 +46,8 @@ export const HANDLED_SESSION_CHANNELS = [
  */
 export type SessionRpcEventEmitter = (
   channel: typeof RPC_CHANNELS.sessions.event,
-  event: ChatOperationEvent
+  event: ChatOperationEvent,
+  routeHint?: SessionEventRouteHint
 ) => void
 
 /**
@@ -118,7 +119,7 @@ function createSessionEventSink(context: SessionRpcRequestContext): SessionEvent
     return undefined
   }
 
-  return (event) => {
-    context.emitSessionEvent?.(RPC_CHANNELS.sessions.event, event)
+  return (event, routeHint) => {
+    context.emitSessionEvent?.(RPC_CHANNELS.sessions.event, event, routeHint)
   }
 }

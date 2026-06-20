@@ -73,6 +73,7 @@ import {
 } from '@moon/shared/domain/chat-provider'
 import type { AppSettings, ProviderSettings } from '@moon/shared/domain/settings'
 import type { ProviderId } from '@moon/shared/domain/provider'
+import type { SessionEventRouteHint } from './handlers'
 
 const newChatTitle = '新聊天'
 const defaultTopicTitle = '默认话题'
@@ -142,7 +143,10 @@ export type SessionManagerDependencies = {
   topicsRepository: TopicsRepositoryPort
 }
 
-export type SessionOperationEventListener = (event: ChatOperationEvent) => void
+export type SessionOperationEventListener = (
+  event: ChatOperationEvent,
+  routeHint?: SessionEventRouteHint
+) => void
 
 type AgentInfoPayload = Extract<AgentEvent, { type: 'info' }>
 type AgentPermissionPayload = Extract<AgentEvent, { type: 'permission_request' }>
@@ -156,6 +160,11 @@ type AgentEventApplicationResult = {
 
 type PendingToolPermission = {
   operationId: string
+}
+
+type OperationEventListenerRegistration = {
+  listener: SessionOperationEventListener
+  routeHint?: SessionEventRouteHint
 }
 
 type ResolvedAgentTarget = {
@@ -179,6 +188,14 @@ export type AgentBackendFactory = (config: AgentBackendConfig) => AgentBackend
  */
 function createTimestamp(): string {
   return new Date().toISOString()
+}
+
+/**
+ * 根据会话记录生成内部事件路由提示。
+ * 这里不改变对 renderer 广播的事件 payload。
+ */
+function createSessionEventRouteHint(session: SessionRecord): SessionEventRouteHint {
+  return { workspaceId: session.projectId }
 }
 
 /**
@@ -446,7 +463,7 @@ export class SessionManager {
   private readonly attachmentsDirectory: string
   private readonly createAgentBackend: AgentBackendFactory
   private readonly messagesRepository: MessagesRepositoryPort
-  private readonly operationEventListeners = new Map<string, SessionOperationEventListener>()
+  private readonly operationEventListeners = new Map<string, OperationEventListenerRegistration>()
   private readonly pendingToolPermissions = new Map<string, PendingToolPermission>()
   private readonly projectsRepository?: ProjectsRepositoryPort
   private readonly sessionsRepository: SessionsRepositoryPort
@@ -669,6 +686,7 @@ export class SessionManager {
     const operationMessages = await this.messagesRepository.listByOperation(operation.id)
     const userMessage = operationMessages.find((message) => message.role === 'user')
     const assistantMessage = operationMessages.find((message) => message.role === 'assistant')
+    const eventRouteHint = createSessionEventRouteHint(scope.session)
 
     if (userMessage === undefined || assistantMessage === undefined) {
       throw new Error('Agent operation messages not found.')
@@ -691,11 +709,14 @@ export class SessionManager {
     })
     const abortController = new AbortController()
 
-    onEvent?.({
-      type: 'operation-started',
-      operationId: runningOperation.id,
-      operation: runningOperation
-    })
+    onEvent?.(
+      {
+        type: 'operation-started',
+        operationId: runningOperation.id,
+        operation: runningOperation
+      },
+      eventRouteHint
+    )
 
     this.activeOperations.set(runningOperation.id, abortController)
 
@@ -727,23 +748,30 @@ export class SessionManager {
   ): Promise<SendMessageResult> {
     const parsedInput = sendChatMessageInputSchema.parse(input)
     const turn = await this.createMessageTurn(parsedInput)
+    const eventRouteHint = createSessionEventRouteHint(turn.session)
 
-    onEvent?.({
-      type: 'message-created',
-      operationId: turn.operation.id,
-      session: turn.session,
-      topic: turn.topic,
-      thread: turn.thread,
-      message: turn.userMessage
-    })
-    onEvent?.({
-      type: 'message-created',
-      operationId: turn.operation.id,
-      session: turn.session,
-      topic: turn.topic,
-      thread: turn.thread,
-      message: turn.assistantMessage
-    })
+    onEvent?.(
+      {
+        type: 'message-created',
+        operationId: turn.operation.id,
+        session: turn.session,
+        topic: turn.topic,
+        thread: turn.thread,
+        message: turn.userMessage
+      },
+      eventRouteHint
+    )
+    onEvent?.(
+      {
+        type: 'message-created',
+        operationId: turn.operation.id,
+        session: turn.session,
+        topic: turn.topic,
+        thread: turn.thread,
+        message: turn.assistantMessage
+      },
+      eventRouteHint
+    )
 
     const runResult = await this.runOperation({ operationId: turn.operation.id }, onEvent)
 
@@ -841,12 +869,12 @@ export class SessionManager {
     operation: AgentOperationRecord,
     toolInvocation: ToolInvocationRecord
   ): void {
-    const listener = this.operationEventListeners.get(operation.id)
+    const listenerRegistration = this.operationEventListeners.get(operation.id)
     const sessionId =
       typeof operation.appContext?.sessionId === 'string' ? operation.appContext.sessionId : null
 
     if (
-      listener === undefined ||
+      listenerRegistration === undefined ||
       sessionId === null ||
       operation.topicId == null ||
       operation.threadId == null
@@ -854,15 +882,18 @@ export class SessionManager {
       return
     }
 
-    listener({
-      type: 'tool-finish',
-      operationId: operation.id,
-      sessionId,
-      topicId: operation.topicId,
-      threadId: operation.threadId,
-      messageId: toolInvocation.messageId,
-      toolInvocation
-    })
+    listenerRegistration.listener(
+      {
+        type: 'tool-finish',
+        operationId: operation.id,
+        sessionId,
+        topicId: operation.topicId,
+        threadId: operation.threadId,
+        messageId: toolInvocation.messageId,
+        toolInvocation
+      },
+      listenerRegistration.routeHint
+    )
   }
 
   /**
@@ -968,6 +999,7 @@ export class SessionManager {
       topic: scope.topic,
       thread: scope.thread
     }
+    const eventRouteHint = createSessionEventRouteHint(eventScope.session)
     let assistantMessage = initialAssistantMessage
     let currentOperation = operation
     const previousMessages = await this.messagesRepository.listByThread(scope.thread.id)
@@ -1000,7 +1032,10 @@ export class SessionManager {
     this.activeAgentBackends.set(operation.id, agentBackend)
 
     if (onEvent !== undefined) {
-      this.operationEventListeners.set(operation.id, onEvent)
+      this.operationEventListeners.set(operation.id, {
+        listener: onEvent,
+        routeHint: eventRouteHint
+      })
     }
 
     try {
@@ -1050,15 +1085,18 @@ export class SessionManager {
       })
       const messages = await this.messagesRepository.listByThread(eventScope.thread.id)
 
-      onEvent?.({
-        type: 'operation-done',
-        operationId: currentOperation.id,
-        session: sessionAfterAssistant,
-        topic: eventScope.topic,
-        thread: eventScope.thread,
-        operation: completedOperation,
-        messages
-      })
+      onEvent?.(
+        {
+          type: 'operation-done',
+          operationId: currentOperation.id,
+          session: sessionAfterAssistant,
+          topic: eventScope.topic,
+          thread: eventScope.thread,
+          operation: completedOperation,
+          messages
+        },
+        eventRouteHint
+      )
 
       return {
         session: sessionAfterAssistant,
@@ -1087,16 +1125,19 @@ export class SessionManager {
         updatedAt: failedTimestamp
       })
 
-      onEvent?.({
-        type: 'operation-error',
-        operationId: currentOperation.id,
-        sessionId: eventScope.session.id,
-        topicId: eventScope.topic.id,
-        threadId: eventScope.thread.id,
-        messageId: assistantMessage.id,
-        error: isCancelled ? 'Cancelled by user.' : errorMessage,
-        operation: failedOperation
-      })
+      onEvent?.(
+        {
+          type: 'operation-error',
+          operationId: currentOperation.id,
+          sessionId: eventScope.session.id,
+          topicId: eventScope.topic.id,
+          threadId: eventScope.thread.id,
+          messageId: assistantMessage.id,
+          error: isCancelled ? 'Cancelled by user.' : errorMessage,
+          operation: failedOperation
+        },
+        eventRouteHint
+      )
 
       throw error
     } finally {
@@ -1121,6 +1162,8 @@ export class SessionManager {
     operation: AgentOperationRecord
     scope: ConversationScope
   }): Promise<AgentEventApplicationResult> {
+    const eventRouteHint = createSessionEventRouteHint(scope.session)
+
     if (event.type === 'session_id_update') {
       const updatedOperation = await this.agentOperationsRepository.save(
         applyProviderSessionIdToOperation(operation, event.sessionId, createTimestamp())
@@ -1172,15 +1215,18 @@ export class SessionManager {
         updatedAt: createTimestamp()
       })
 
-      onEvent?.({
-        type: 'message-delta',
-        operationId: operation.id,
-        sessionId: scope.session.id,
-        topicId: scope.topic.id,
-        threadId: scope.thread.id,
-        messageId: message.id,
-        delta: event.text
-      })
+      onEvent?.(
+        {
+          type: 'message-delta',
+          operationId: operation.id,
+          sessionId: scope.session.id,
+          topicId: scope.topic.id,
+          threadId: scope.thread.id,
+          messageId: message.id,
+          delta: event.text
+        },
+        eventRouteHint
+      )
 
       return { message: updatedMessage, operation }
     }
@@ -1196,15 +1242,18 @@ export class SessionManager {
         updatedAt: createTimestamp()
       })
 
-      onEvent?.({
-        type: 'message-delta',
-        operationId: operation.id,
-        sessionId: scope.session.id,
-        topicId: scope.topic.id,
-        threadId: scope.thread.id,
-        messageId: message.id,
-        delta: event.text
-      })
+      onEvent?.(
+        {
+          type: 'message-delta',
+          operationId: operation.id,
+          sessionId: scope.session.id,
+          topicId: scope.topic.id,
+          threadId: scope.thread.id,
+          messageId: message.id,
+          delta: event.text
+        },
+        eventRouteHint
+      )
 
       return { message: updatedMessage, operation }
     }
@@ -1216,15 +1265,18 @@ export class SessionManager {
         updatedAt: createTimestamp()
       })
 
-      onEvent?.({
-        type: 'reasoning-delta',
-        operationId: operation.id,
-        sessionId: scope.session.id,
-        topicId: scope.topic.id,
-        threadId: scope.thread.id,
-        messageId: message.id,
-        delta: event.text
-      })
+      onEvent?.(
+        {
+          type: 'reasoning-delta',
+          operationId: operation.id,
+          sessionId: scope.session.id,
+          topicId: scope.topic.id,
+          threadId: scope.thread.id,
+          messageId: message.id,
+          delta: event.text
+        },
+        eventRouteHint
+      )
 
       return { message: updatedMessage, operation }
     }
@@ -1260,15 +1312,18 @@ export class SessionManager {
 
       this.trackPendingToolPermission(toolInvocation, waitingOperation.id)
 
-      onEvent?.({
-        type: 'tool-waiting-approval',
-        operationId: operation.id,
-        sessionId: scope.session.id,
-        topicId: scope.topic.id,
-        threadId: scope.thread.id,
-        messageId: message.id,
-        toolInvocation
-      })
+      onEvent?.(
+        {
+          type: 'tool-waiting-approval',
+          operationId: operation.id,
+          sessionId: scope.session.id,
+          topicId: scope.topic.id,
+          threadId: scope.thread.id,
+          messageId: message.id,
+          toolInvocation
+        },
+        eventRouteHint
+      )
 
       return { message, operation: waitingOperation }
     }
@@ -1300,15 +1355,18 @@ export class SessionManager {
         this.trackPendingToolPermission(toolInvocation, currentOperation.id)
       }
 
-      onEvent?.({
-        type: status === 'waiting_for_human' ? 'tool-waiting-approval' : 'tool-start',
-        operationId: operation.id,
-        sessionId: scope.session.id,
-        topicId: scope.topic.id,
-        threadId: scope.thread.id,
-        messageId: message.id,
-        toolInvocation
-      })
+      onEvent?.(
+        {
+          type: status === 'waiting_for_human' ? 'tool-waiting-approval' : 'tool-start',
+          operationId: operation.id,
+          sessionId: scope.session.id,
+          topicId: scope.topic.id,
+          threadId: scope.thread.id,
+          messageId: message.id,
+          toolInvocation
+        },
+        eventRouteHint
+      )
 
       return { message, operation: currentOperation }
     }
@@ -1332,15 +1390,18 @@ export class SessionManager {
 
       this.pendingToolPermissions.delete(toolInvocation.id)
 
-      onEvent?.({
-        type: 'tool-finish',
-        operationId: operation.id,
-        sessionId: scope.session.id,
-        topicId: scope.topic.id,
-        threadId: scope.thread.id,
-        messageId: message.id,
-        toolInvocation
-      })
+      onEvent?.(
+        {
+          type: 'tool-finish',
+          operationId: operation.id,
+          sessionId: scope.session.id,
+          topicId: scope.topic.id,
+          threadId: scope.thread.id,
+          messageId: message.id,
+          toolInvocation
+        },
+        eventRouteHint
+      )
 
       return { message, operation }
     }

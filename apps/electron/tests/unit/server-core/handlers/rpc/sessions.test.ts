@@ -359,12 +359,23 @@ describe('registerSessionHandlers', () => {
     } satisfies ChatOperationEvent
     const runOperationEventSink = vi.mocked(sessionHandlers.runOperation).mock.calls[0][1]
     const sendMessageEventSink = vi.mocked(sessionHandlers.sendMessage).mock.calls[0][1]
+    const routeHint = { workspaceId: 'project-1' }
 
-    runOperationEventSink?.(event)
-    sendMessageEventSink?.(event)
+    runOperationEventSink?.(event, routeHint)
+    sendMessageEventSink?.(event, routeHint)
 
     expect(emitSessionEvent).toHaveBeenCalledTimes(2)
-    expect(emitSessionEvent).toHaveBeenNthCalledWith(1, RPC_CHANNELS.sessions.event, event)
-    expect(emitSessionEvent).toHaveBeenNthCalledWith(2, RPC_CHANNELS.sessions.event, event)
+    expect(emitSessionEvent).toHaveBeenNthCalledWith(
+      1,
+      RPC_CHANNELS.sessions.event,
+      event,
+      routeHint
+    )
+    expect(emitSessionEvent).toHaveBeenNthCalledWith(
+      2,
+      RPC_CHANNELS.sessions.event,
+      event,
+      routeHint
+    )
   })
 })

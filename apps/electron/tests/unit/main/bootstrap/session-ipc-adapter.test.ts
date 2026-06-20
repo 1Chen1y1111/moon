@@ -227,6 +227,55 @@ describe('createSessionIpcRpcServer', () => {
     expect(senderWebContents.send).toHaveBeenCalledTimes(1)
   })
 
+  it('routes session events with route hints to workspace clients', async () => {
+    const { createSessionIpcRpcServer } = await import('@main/bootstrap/session-ipc-adapter')
+    const { ipcChannels } = await import('@ipc/channels')
+    const { RPC_CHANNELS } = await import('@moon/shared/protocol')
+    const { bindLegacyWebContentsClientWorkspace } = await import(
+      '@main/bootstrap/legacy-webcontents-client-registry'
+    )
+    const operationEvent = createMessageDeltaEvent()
+    const sender = { id: 502, send: vi.fn() }
+    const sameWorkspaceWebContents = { id: 501, send: vi.fn() }
+    const senderWebContents = { id: 502, send: vi.fn() }
+    const otherWorkspaceWebContents = { id: 503, send: vi.fn() }
+    const rpcServer = createSessionIpcRpcServer()
+
+    getAllWindowsMock.mockReturnValue([
+      { webContents: sameWorkspaceWebContents },
+      { webContents: senderWebContents },
+      { webContents: otherWorkspaceWebContents }
+    ])
+    bindLegacyWebContentsClientWorkspace(sameWorkspaceWebContents, 'project-1')
+    bindLegacyWebContentsClientWorkspace(senderWebContents, 'project-1')
+    bindLegacyWebContentsClientWorkspace(otherWorkspaceWebContents, 'project-2')
+
+    rpcServer.handle(RPC_CHANNELS.sessions.runOperation, (context, input) => {
+      context.emitSessionEvent?.(RPC_CHANNELS.sessions.event, operationEvent, {
+        workspaceId: 'project-1'
+      })
+
+      return input
+    })
+
+    const registeredHandler = getRegisteredHandler(ipcChannels.chat.runOperation)
+
+    expect(registeredHandler).toBeTypeOf('function')
+    await expect(registeredHandler?.({ sender }, { operationId: 'op-1' })).resolves.toEqual({
+      operationId: 'op-1'
+    })
+    expect(sender.send).not.toHaveBeenCalled()
+    expect(sameWorkspaceWebContents.send).toHaveBeenCalledWith(
+      ipcChannels.chat.sessionEvent,
+      operationEvent
+    )
+    expect(senderWebContents.send).toHaveBeenCalledWith(
+      ipcChannels.chat.sessionEvent,
+      operationEvent
+    )
+    expect(otherWorkspaceWebContents.send).not.toHaveBeenCalled()
+  })
+
   it('keeps payloads without direct session scoped to the current client', async () => {
     const { createSessionIpcRpcServer } = await import('@main/bootstrap/session-ipc-adapter')
     const { ipcChannels } = await import('@ipc/channels')

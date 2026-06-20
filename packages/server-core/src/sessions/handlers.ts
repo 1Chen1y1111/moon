@@ -31,9 +31,19 @@ import type {
 } from '@moon/shared/domain/chat-validation'
 
 /**
+ * session runtime 事件的内部路由提示，只供 transport adapter 选择推送目标。
+ */
+export type SessionEventRouteHint = {
+  workspaceId: string | null
+}
+
+/**
  * server-core 内部统一的 session event listener，后续可映射到 Craft 风格 `session:event`。
  */
-export type SessionEventListener = (event: ChatOperationEvent) => void
+export type SessionEventListener = (
+  event: ChatOperationEvent,
+  routeHint?: SessionEventRouteHint
+) => void
 
 /**
  * session event sink 是 handler 层对外暴露的事件出口，当前与 listener 语义一致。
