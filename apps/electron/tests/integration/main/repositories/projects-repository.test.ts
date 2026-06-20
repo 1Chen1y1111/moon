@@ -11,9 +11,9 @@ import { join } from 'node:path'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { bootstrapDatabase } from '@main/db/bootstrap'
-import { createDatabaseConnection, type AppDatabaseConnection } from '@main/db/connection'
-import { ProjectsRepository } from '@main/repositories/projects-repository'
+import { bootstrapDatabase } from '@moon/server/db/bootstrap'
+import { createDatabaseConnection, type AppDatabaseConnection } from '@moon/server/db/connection'
+import { ProjectsRepository } from '@moon/server/repositories/projects-repository'
 
 const pgliteTestTimeout = 30_000
 

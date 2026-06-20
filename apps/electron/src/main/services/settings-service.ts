@@ -42,7 +42,7 @@ import {
   type ProviderModelManualOverride
 } from '@moon/shared/domain/provider'
 import { getProviderCatalogModels } from '@moon/shared/config/provider-model-catalog'
-import type { SettingsRepository } from '../repositories/settings-repository'
+import type { SettingsRepository } from '@moon/server/repositories/settings-repository'
 
 const execFileAsync = promisify(execFile)
 const anthropicVersion = '2023-06-01'

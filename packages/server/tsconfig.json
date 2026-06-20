@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "lib": ["ES2022", "DOM"],
+    "strict": true,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "@moon/server": ["src"],
+      "@moon/server/*": ["src/*"],
+      "@moon/server-core": ["../server-core/src"],
+      "@moon/server-core/*": ["../server-core/src/*"],
+      "@moon/shared": ["../shared/src"],
+      "@moon/shared/*": ["../shared/src/*"]
+    },
+    "types": ["node"]
+  },
+  "include": ["src/**/*"]
+}

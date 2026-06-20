@@ -16,6 +16,8 @@
       "@ipc/*": ["src/ipc/*"],
       "@moon/server-core": ["../../packages/server-core/src"],
       "@moon/server-core/*": ["../../packages/server-core/src/*"],
+      "@moon/server": ["../../packages/server/src"],
+      "@moon/server/*": ["../../packages/server/src/*"],
       "@moon/shared": ["../../packages/shared/src"],
       "@moon/shared/*": ["../../packages/shared/src/*"],
       "@moon/ui": ["../../packages/ui/src"],

@@ -14,7 +14,7 @@ import {
   type SetActiveProjectInput
 } from '@moon/shared/domain/project-validation'
 import type { ProjectRecord, ProjectsChangeEvent } from '@moon/shared/domain/project'
-import type { ProjectsRepository } from '../repositories/projects-repository'
+import type { ProjectsRepository } from '@moon/server/repositories/projects-repository'
 
 type DirectoryPicker = () => Promise<string | null>
 

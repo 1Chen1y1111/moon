@@ -11,7 +11,7 @@ import {
   type WorkspaceWebSocketTransportInfo
 } from '@ipc/workspace-transport-contract'
 import { registerSessionHandlers } from '@moon/server-core/handlers/rpc'
-import type { ChatService } from '../services/chat-service'
+import type { ChatService } from '@moon/server/services/chat-service'
 import type { ProjectsService } from '../services/projects-service'
 import type { SettingsService } from '../services/settings-service'
 import { createElectronEnvelopeIpcRpcServer } from './electron-envelope-ipc-rpc-server'

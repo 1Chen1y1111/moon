@@ -7,28 +7,18 @@ import { app } from 'electron'
 import { join } from 'node:path'
 
 import { electronApp, optimizer } from '@electron-toolkit/utils'
+import { createMoonServerRuntime, type MoonServerRuntime } from '@moon/server'
 
 import { registerAppLifecycle } from './bootstrap/app-lifecycle'
 import { setApplicationIcon } from './bootstrap/app-icon'
 import { openSettingsWindow } from './bootstrap/create-settings-window'
 import { createMainWindow } from './bootstrap/create-window'
 import { registerIpcHandlers, type RegisteredIpcHandlers } from './bootstrap/register-ipc'
-import { bootstrapDatabase } from './db/bootstrap'
-import { createDatabaseConnection, type AppDatabaseConnection } from './db/connection'
-import { AgentOperationsRepository } from './repositories/agent-operations-repository'
-import { MessagesRepository } from './repositories/messages-repository'
-import { ProjectsRepository } from './repositories/projects-repository'
-import { SettingsRepository } from './repositories/settings-repository'
-import { SessionsRepository } from './repositories/sessions-repository'
-import { ThreadsRepository } from './repositories/threads-repository'
-import { ToolInvocationsRepository } from './repositories/tool-invocations-repository'
-import { TopicsRepository } from './repositories/topics-repository'
-import { ChatService } from './services/chat-service'
 import { ProjectsService } from './services/projects-service'
 import { ProviderProxyServer } from './services/provider-proxy-server'
 import { SettingsService } from './services/settings-service'
 
-let databaseConnection: AppDatabaseConnection | null = null
+let serverRuntime: MoonServerRuntime | null = null
 let providerProxyServer: ProviderProxyServer | null = null
 let registeredIpcHandlers: RegisteredIpcHandlers | null = null
 
@@ -40,17 +30,17 @@ function getMigrationsFolder(): string {
 }
 
 /**
- * 关闭当前数据库连接，并清空主进程持有的连接引用。
+ * 关闭当前 server runtime，并清空主进程持有的连接引用。
  */
-async function closeDatabaseConnection(): Promise<void> {
-  const connection = databaseConnection
+async function closeServerRuntime(): Promise<void> {
+  const runtime = serverRuntime
 
-  if (connection === null) {
+  if (runtime === null) {
     return
   }
 
-  databaseConnection = null
-  await connection.close()
+  serverRuntime = null
+  await runtime.close()
 }
 
 /**
@@ -76,9 +66,9 @@ async function closeApplicationResources(): Promise<void> {
   }
 
   try {
-    await closeDatabaseConnection()
+    await closeServerRuntime()
   } catch (error) {
-    console.error('Failed to close database connection', error)
+    console.error('Failed to close server runtime', error)
   }
 }
 
@@ -98,36 +88,22 @@ app.whenReady().then(async () => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  databaseConnection = await createDatabaseConnection(join(app.getPath('userData'), 'moon-pglite'))
-  await bootstrapDatabase(databaseConnection, getMigrationsFolder())
-
-  const settingsRepository = new SettingsRepository(databaseConnection)
-  const projectsRepository = new ProjectsRepository(databaseConnection)
-  const sessionsRepository = new SessionsRepository(databaseConnection)
-  const topicsRepository = new TopicsRepository(databaseConnection)
-  const threadsRepository = new ThreadsRepository(databaseConnection)
-  const agentOperationsRepository = new AgentOperationsRepository(databaseConnection)
-  const messagesRepository = new MessagesRepository(databaseConnection)
-  const toolInvocationsRepository = new ToolInvocationsRepository(databaseConnection)
-  providerProxyServer = new ProviderProxyServer(settingsRepository)
+  serverRuntime = await createMoonServerRuntime({
+    attachmentsDirectory: join(app.getPath('userData'), 'attachments'),
+    dataDir: join(app.getPath('userData'), 'moon-pglite'),
+    migrationsFolder: getMigrationsFolder()
+  })
+  providerProxyServer = new ProviderProxyServer(serverRuntime.settingsRepository)
   providerProxyServer.start()
-  const projectsService = new ProjectsService({ projectsRepository })
+  const projectsService = new ProjectsService({
+    projectsRepository: serverRuntime.projectsRepository
+  })
 
   registeredIpcHandlers = registerIpcHandlers({
-    chatService: new ChatService({
-      agentOperationsRepository,
-      attachmentsDirectory: join(app.getPath('userData'), 'attachments'),
-      messagesRepository,
-      projectsRepository,
-      sessionsRepository,
-      settingsRepository,
-      threadsRepository,
-      toolInvocationsRepository,
-      topicsRepository
-    }),
+    chatService: serverRuntime.chatService,
     openSettingsWindow,
     projectsService,
-    settingsService: new SettingsService(settingsRepository)
+    settingsService: new SettingsService(serverRuntime.settingsRepository)
   })
 
   createMainWindow()

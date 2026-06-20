@@ -6,8 +6,8 @@ import { tmpdir } from 'node:os'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { bootstrapDatabase } from '@main/db/bootstrap'
-import { createDatabaseConnection } from '@main/db/connection'
+import { bootstrapDatabase } from '@moon/server/db/bootstrap'
+import { createDatabaseConnection } from '@moon/server/db/connection'
 
 const pgliteTestTimeout = 30_000
 

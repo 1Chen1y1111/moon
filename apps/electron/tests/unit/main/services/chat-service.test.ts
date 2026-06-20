@@ -551,7 +551,7 @@ describe('SessionManager provider resolution', () => {
   })
 
   it('selects the first enabled supported Anthropic provider', async () => {
-    const { selectDefaultChatProvider } = await import('@main/services/chat-service')
+    const { selectDefaultChatProvider } = await import('@moon/server/services/chat-service')
     const azure = createProviderSettings({
       provider: 'azure-openai',
       type: 'azure',
@@ -582,7 +582,7 @@ describe('SessionManager provider resolution', () => {
   })
 
   it('falls back from selected model to enabled model lists', async () => {
-    const { selectChatModel } = await import('@main/services/chat-service')
+    const { selectChatModel } = await import('@moon/server/services/chat-service')
 
     expect(
       selectChatModel(

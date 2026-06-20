@@ -14,7 +14,7 @@ import {
 } from '@moon/shared/domain/provider-proxy'
 import { resolveProviderEffectiveBaseUrl } from '@moon/shared/domain/provider'
 import type { ProviderSettings } from '@moon/shared/domain/settings'
-import type { SettingsRepository } from '../repositories/settings-repository'
+import type { SettingsRepository } from '@moon/server/repositories/settings-repository'
 
 const anthropicVersion = '2023-06-01'
 const maxBodyBytes = 2 * 1024 * 1024

@@ -8,7 +8,7 @@ export default defineConfig({
   main: {
     build: {
       externalizeDeps: {
-        exclude: ['@moon/server-core', '@moon/shared']
+        exclude: ['@moon/server', '@moon/server-core', '@moon/shared']
       }
     },
     optimizeDeps: {
@@ -17,6 +17,7 @@ export default defineConfig({
     resolve: {
       alias: {
         '@ipc': resolve('src/ipc'),
+        '@moon/server': resolve('../../packages/server/src'),
         '@moon/server-core': resolve('../../packages/server-core/src'),
         '@moon/shared': resolve('../../packages/shared/src')
       }

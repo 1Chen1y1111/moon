@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 /**
- * 负责验证 Electron main 的 ChatService 只保留门面职责。
+ * 负责验证 @moon/server 的 ChatService 只保留门面职责。
  * 会话运行时行为由 server-core SessionManager 单测覆盖。
  */
 
@@ -55,7 +55,7 @@ describe('ChatService facade', () => {
       }
     })
 
-    const { ChatService } = await import('@main/services/chat-service')
+    const { ChatService } = await import('@moon/server/services/chat-service')
 
     const service = new ChatService(dependencies)
 

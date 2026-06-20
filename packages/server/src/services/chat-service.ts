@@ -1,6 +1,6 @@
 /**
- * 负责把 Electron main 的聊天服务入口委托给 server-core 会话运行时。
- * 本文件保留现有 IPC-facing service 形状，不再承载 agent loop 或落库编排细节。
+ * 负责把 Moon server 的聊天服务入口委托给 server-core 会话运行时。
+ * 本文件保留本地服务 API 形状，不承载 Electron IPC 或 renderer 适配逻辑。
  */
 
 import {
@@ -13,7 +13,7 @@ import {
   selectDefaultChatProvider,
   type SessionEventSink,
   type SessionHandlers,
-  type SessionManagerDependencies,
+  type SessionManagerDependencies
 } from '@moon/server-core/sessions'
 import type {
   AgentOperationRecord,
@@ -53,7 +53,7 @@ export type ChatServiceDependencies = SessionManagerDependencies
 export type ChatOperationEventListener = SessionEventSink
 
 /**
- * 维持 Electron main 侧原有 ChatService API，并把会话运行时调用转交给 SessionManager。
+ * 维持 Moon 本地聊天服务 API，并把会话运行时调用转交给 SessionManager。
  */
 export class ChatService {
   private readonly sessionHandlers: SessionHandlers

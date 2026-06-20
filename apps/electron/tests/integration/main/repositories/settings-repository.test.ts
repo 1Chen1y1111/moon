@@ -6,10 +6,10 @@ import { tmpdir } from 'node:os'
 
 import { afterEach, describe, expect, it } from 'vitest'
 
-import { bootstrapDatabase } from '@main/db/bootstrap'
-import { createDatabaseConnection, type AppDatabaseConnection } from '@main/db/connection'
-import { llmConnections, providerSettings } from '@main/db/schema'
-import { SettingsRepository } from '@main/repositories/settings-repository'
+import { bootstrapDatabase } from '@moon/server/db/bootstrap'
+import { createDatabaseConnection, type AppDatabaseConnection } from '@moon/server/db/connection'
+import { llmConnections, providerSettings } from '@moon/server/db/schema'
+import { SettingsRepository } from '@moon/server/repositories/settings-repository'
 
 const pgliteTestTimeout = 30_000
 
