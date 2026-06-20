@@ -65,4 +65,19 @@ describe('createWorkspaceWebSocketRpcServer', () => {
 
     expect(fakeServer.close).toHaveBeenCalledOnce()
   })
+
+  it('forwards client capability APIs through the server-core runtime', async () => {
+    const fakeServer = new FakeSocketServer()
+    const server = createWorkspaceWebSocketRpcServer({
+      createClientId: () => 'client-1',
+      createWebSocketServer: () => fakeServer
+    })
+
+    await server.getTransportInfo()
+
+    expect(server.hasClientCapability('client-1', 'client:testEcho')).toBe(false)
+    await expect(server.invokeClient('client-1', 'client:testEcho', 'hi')).rejects.toMatchObject({
+      code: 'CLIENT_DISCONNECTED'
+    })
+  })
 })

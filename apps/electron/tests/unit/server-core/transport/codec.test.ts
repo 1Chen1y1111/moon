@@ -26,6 +26,17 @@ describe('transport codec', () => {
     expect(deserializeEnvelope(serializeEnvelope(envelope))).toEqual(envelope)
   })
 
+  it('accepts handshake envelopes with advertised client capabilities', () => {
+    const envelope = {
+      id: 'handshake-1',
+      type: 'handshake',
+      clientCapabilities: ['client:testEcho']
+    } satisfies MessageEnvelope
+
+    expect(validateEnvelopeShape(envelope)).toBe(true)
+    expect(deserializeEnvelope(serializeEnvelope(envelope))).toEqual(envelope)
+  })
+
   it('rejects invalid JSON during deserialization', () => {
     expect(() => deserializeEnvelope('{not-json')).toThrow('Invalid RPC envelope JSON')
   })
@@ -46,6 +57,16 @@ describe('transport codec', () => {
         type: 'request',
         channel: 'sessions:getMessages',
         args: 'not-array'
+      })
+    ).toBe(false)
+  })
+
+  it('rejects envelopes with invalid client capabilities', () => {
+    expect(
+      validateEnvelopeShape({
+        id: 'handshake-1',
+        type: 'handshake',
+        clientCapabilities: ['client:testEcho', 42]
       })
     ).toBe(false)
   })

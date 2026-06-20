@@ -52,6 +52,8 @@ export function createWorkspaceWebSocketRpcServer({
     handle: (channel, handler) => {
       runtime.handle(channel, handler)
     },
+    hasClientCapability: (clientId, channel) => runtime.hasClientCapability(clientId, channel),
+    invokeClient: (clientId, channel, ...args) => runtime.invokeClient(clientId, channel, ...args),
     push: (channel, target, ...args) => {
       runtime.push(channel, target, ...args)
     }

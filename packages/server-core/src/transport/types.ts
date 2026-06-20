@@ -11,6 +11,11 @@ import type { BroadcastEventArgs, BroadcastEventChannel, PushTarget } from '@moo
 export type RpcClientListener = (...args: unknown[]) => void
 
 /**
+ * client capability handler 由 server 反向调用，返回值会通过 response envelope 回写。
+ */
+export type RpcClientCapabilityHandler = (...args: unknown[]) => Promise<unknown> | unknown
+
+/**
  * server-core 和 preload 可共用的最小 RPC client 端口。
  */
 export type RpcClientPort = {
@@ -23,6 +28,16 @@ export type RpcClientPort = {
    * 订阅指定 RPC event channel，返回取消订阅函数。
    */
   on: (channel: string, listener: RpcClientListener) => () => void
+}
+
+/**
+ * 支持 server 反向调用的 RPC client 扩展端口。
+ */
+export type RpcClientCapabilityPort = {
+  /**
+   * 注册当前 client 可以处理的 capability channel。
+   */
+  handleCapability: (channel: string, handler: RpcClientCapabilityHandler) => void
 }
 
 /**

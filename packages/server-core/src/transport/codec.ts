@@ -64,6 +64,14 @@ export function validateEnvelopeShape(value: unknown): value is MessageEnvelope 
     return false
   }
 
+  if (
+    value.clientCapabilities !== undefined &&
+    (!Array.isArray(value.clientCapabilities) ||
+      !value.clientCapabilities.every((capability) => typeof capability === 'string'))
+  ) {
+    return false
+  }
+
   if (value.clientId !== undefined && typeof value.clientId !== 'string') {
     return false
   }

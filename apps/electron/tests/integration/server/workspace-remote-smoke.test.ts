@@ -133,6 +133,7 @@ describe('workspace remote smoke', () => {
       workspaceServer = await startMoonWorkspaceServer({
         attachmentsDirectory: join(directory, 'attachments'),
         authToken: 'workspace-secret',
+        createClientId: () => 'client-1',
         dataDir: 'memory://',
         migrationsFolder
       })
@@ -160,6 +161,7 @@ describe('workspace remote smoke', () => {
         delta: 'hello from headless'
       } as const
 
+      client.handleCapability('client:testEcho', (value) => `echo:${value}`)
       client.on(RPC_CHANNELS.sessions.event, listener)
 
       await expect(rejectedClient.invoke(RPC_CHANNELS.sessions.listSessions)).rejects.toMatchObject(
@@ -168,6 +170,9 @@ describe('workspace remote smoke', () => {
         }
       )
       await expect(client.invoke(RPC_CHANNELS.sessions.listSessions)).resolves.toEqual([])
+      await expect(
+        workspaceServer.workspaceRpcServer.invokeClient('client-1', 'client:testEcho', 'hi')
+      ).resolves.toBe('echo:hi')
 
       workspaceServer.workspaceRpcServer.push(RPC_CHANNELS.sessions.event, { to: 'all' }, event)
 

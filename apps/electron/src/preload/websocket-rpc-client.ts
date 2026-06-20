@@ -7,9 +7,9 @@ import type { WorkspaceWebSocketTransportInfo } from '@ipc/workspace-transport-c
 import {
   createWorkspaceWebSocketRpcClient as createServerCoreWorkspaceWebSocketRpcClient,
   type WorkspaceWebSocketConnectionState,
-  type WorkspaceWebSocketConstructor
+  type WorkspaceWebSocketConstructor,
+  type WorkspaceWebSocketRpcClient
 } from '@moon/server-core/transport'
-import type { RpcClientPort } from '@moon/server-core/transport'
 
 export type { WorkspaceWebSocketConnectionState, WorkspaceWebSocketConstructor }
 
@@ -30,7 +30,7 @@ export function createWorkspaceWebSocketRpcClient({
   onConnectionStateChange,
   reconnectDelayMs,
   WebSocketCtor = getDefaultWebSocketConstructor()
-}: WorkspaceWebSocketRpcClientOptions): RpcClientPort {
+}: WorkspaceWebSocketRpcClientOptions): WorkspaceWebSocketRpcClient {
   const readTransportInfo = createTransportInfoReader(getTransportInfo)
 
   return createServerCoreWorkspaceWebSocketRpcClient({

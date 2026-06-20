@@ -7,7 +7,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 
-import type { RpcClientPort } from '@moon/server-core/transport'
+import type { RpcClientCapabilityHandler, RpcClientPort } from '@moon/server-core/transport'
 import { RPC_CHANNELS } from '@moon/shared/protocol'
 import { RoutedClient } from '@preload/routed-client'
 
@@ -29,6 +29,22 @@ function createClientFixture(): {
     invoke,
     on,
     unsubscribe
+  }
+}
+
+function createCapabilityClientFixture(): ReturnType<typeof createClientFixture> & {
+  handleCapability: ReturnType<typeof vi.fn>
+} {
+  const fixture = createClientFixture()
+  const handleCapability = vi.fn((_channel: string, _handler: RpcClientCapabilityHandler) => {})
+
+  return {
+    ...fixture,
+    client: {
+      ...fixture.client,
+      handleCapability
+    },
+    handleCapability
   }
 }
 
@@ -99,5 +115,27 @@ describe('RoutedClient', () => {
 
     await expect(client.invoke(RPC_CHANNELS.sessions.listSessions)).resolves.toEqual([])
     expect(local.invoke).toHaveBeenCalledWith(RPC_CHANNELS.sessions.listSessions)
+  })
+
+  it('registers client capabilities on the workspace client only', () => {
+    const local = createCapabilityClientFixture()
+    const workspace = createCapabilityClientFixture()
+    const client = new RoutedClient(local.client, workspace.client)
+    const handler = vi.fn()
+
+    client.handleCapability('client:testEcho', handler)
+
+    expect(workspace.handleCapability).toHaveBeenCalledWith('client:testEcho', handler)
+    expect(local.handleCapability).not.toHaveBeenCalled()
+  })
+
+  it('ignores capability registration when the workspace client does not support it yet', () => {
+    const local = createClientFixture()
+    const workspace = createClientFixture()
+    const client = new RoutedClient(local.client, workspace.client)
+
+    expect(() => {
+      client.handleCapability('client:testEcho', vi.fn())
+    }).not.toThrow()
   })
 })

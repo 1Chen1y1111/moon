@@ -3,14 +3,20 @@
  * 本文件只依赖注入的 WebSocket 构造器，不绑定 Electron preload、IPC 或 DOM 全局。
  */
 
-import { PROTOCOL_VERSION, type MessageEnvelope, type WireError } from '@moon/shared/protocol'
+import {
+  PROTOCOL_VERSION,
+  isErrorCode,
+  type ErrorCode,
+  type MessageEnvelope,
+  type WireError
+} from '@moon/shared/protocol'
 
 import {
   EnvelopeRpcClient,
   type EnvelopeRpcClientSubscribe
 } from './envelope-rpc-client'
 import { deserializeEnvelope, serializeEnvelope } from './codec'
-import type { RpcClientPort } from './types'
+import type { RpcClientCapabilityHandler, RpcClientCapabilityPort, RpcClientPort } from './types'
 
 export type WorkspaceWebSocketEvent = {
   data?: unknown
@@ -50,6 +56,8 @@ export type WorkspaceWebSocketRpcClientOptions = {
   WebSocketCtor: WorkspaceWebSocketConstructor
 }
 
+export type WorkspaceWebSocketRpcClient = RpcClientPort & RpcClientCapabilityPort
+
 const WEBSOCKET_OPEN = 1
 const WORKSPACE_HANDSHAKE_ID = 'workspace-handshake'
 const DEFAULT_RECONNECT_DELAY_MS = 100
@@ -64,7 +72,7 @@ export function createWorkspaceWebSocketRpcClient({
   onConnectionStateChange,
   reconnectDelayMs = DEFAULT_RECONNECT_DELAY_MS,
   WebSocketCtor
-}: WorkspaceWebSocketRpcClientOptions): RpcClientPort {
+}: WorkspaceWebSocketRpcClientOptions): WorkspaceWebSocketRpcClient {
   const transport = createWorkspaceWebSocketTransport({
     getAuthToken,
     getTransportUrl,
@@ -73,11 +81,17 @@ export function createWorkspaceWebSocketRpcClient({
     WebSocketCtor
   })
 
-  return new EnvelopeRpcClient({
+  const envelopeClient = new EnvelopeRpcClient({
     createId,
     request: (envelope) => transport.request(envelope),
     subscribe: transport.subscribe
   })
+
+  return {
+    handleCapability: transport.handleCapability,
+    invoke: (channel, ...args) => envelopeClient.invoke(channel, ...args),
+    on: (channel, listener) => envelopeClient.on(channel, listener)
+  }
 }
 
 /**
@@ -97,9 +111,11 @@ function createWorkspaceWebSocketTransport({
   | 'reconnectDelayMs'
   | 'WebSocketCtor'
 >): {
+  handleCapability: (channel: string, handler: RpcClientCapabilityHandler) => void
   request: (envelope: MessageEnvelope) => Promise<MessageEnvelope>
   subscribe: EnvelopeRpcClientSubscribe
 } {
+  const capabilityHandlers = new Map<string, RpcClientCapabilityHandler>()
   const envelopeListeners = new Set<(envelope: MessageEnvelope) => void>()
   const handshakeState = {
     clientId: null as string | null
@@ -118,6 +134,9 @@ function createWorkspaceWebSocketTransport({
   let socketPromise: Promise<WorkspaceWebSocketLike> | null = null
 
   return {
+    handleCapability: (channel, handler) => {
+      capabilityHandlers.set(channel, handler)
+    },
     request: async (envelope) => {
       const activeSocket = await ensureSocket()
 
@@ -238,6 +257,12 @@ function createWorkspaceWebSocketTransport({
       envelope.authToken = authToken
     }
 
+    const clientCapabilities = [...capabilityHandlers.keys()]
+
+    if (clientCapabilities.length > 0) {
+      envelope.clientCapabilities = clientCapabilities
+    }
+
     activeSocket.send(serializeEnvelope(envelope))
   }
 
@@ -285,7 +310,9 @@ function createWorkspaceWebSocketTransport({
 
     handshakeState.clientId = envelope.clientId
     activeSocket.removeEventListener('message', handleHandshake)
-    activeSocket.addEventListener('message', handleSocketMessage)
+    activeSocket.addEventListener('message', (messageEvent) => {
+      void handleSocketMessage(activeSocket, messageEvent)
+    })
     setConnectionState('connected')
     resolve(activeSocket)
   }
@@ -293,7 +320,10 @@ function createWorkspaceWebSocketTransport({
   /**
    * 把收到的 envelope 分发给等待中的 request 或 event 订阅者。
    */
-  function handleSocketMessage(event: WorkspaceWebSocketEvent): void {
+  async function handleSocketMessage(
+    activeSocket: WorkspaceWebSocketLike,
+    event: WorkspaceWebSocketEvent
+  ): Promise<void> {
     const envelope = deserializeEnvelope(String(event.data))
 
     if (envelope.type === 'response') {
@@ -308,9 +338,62 @@ function createWorkspaceWebSocketTransport({
       return
     }
 
+    if (envelope.type === 'request') {
+      await handleCapabilityRequest(activeSocket, envelope)
+      return
+    }
+
     envelopeListeners.forEach((listener) => {
       listener(envelope)
     })
+  }
+
+  /**
+   * 处理 server 反向调用的 client capability，并把结果写回 response envelope。
+   */
+  async function handleCapabilityRequest(
+    activeSocket: WorkspaceWebSocketLike,
+    envelope: MessageEnvelope
+  ): Promise<void> {
+    const channel = envelope.channel
+
+    if (typeof channel !== 'string' || channel.length === 0) {
+      sendEnvelope(
+        activeSocket,
+        createErrorResponse(envelope, 'CHANNEL_NOT_FOUND', 'Missing channel')
+      )
+      return
+    }
+
+    const handler = capabilityHandlers.get(channel)
+
+    if (handler === undefined) {
+      sendEnvelope(
+        activeSocket,
+        createErrorResponse(
+          envelope,
+          'CAPABILITY_UNAVAILABLE',
+          `No client capability for: ${channel}`
+        )
+      )
+      return
+    }
+
+    try {
+      const result = await handler(...(envelope.args ?? []))
+
+      sendEnvelope(activeSocket, {
+        id: envelope.id,
+        type: 'response',
+        channel,
+        result
+      })
+    } catch (error) {
+      sendEnvelope(
+        activeSocket,
+        createErrorResponse(envelope, selectErrorCode(error), getErrorMessage(error))
+      )
+    }
   }
 
   /**
@@ -403,6 +486,52 @@ function createWorkspaceWebSocketTransport({
  */
 function toError(error: unknown): Error {
   return error instanceof Error ? error : new Error(String(error))
+}
+
+/**
+ * 向当前 WebSocket 写入 envelope，连接已关闭时静默跳过。
+ */
+function sendEnvelope(socket: WorkspaceWebSocketLike, envelope: MessageEnvelope): void {
+  if (socket.readyState !== WEBSOCKET_OPEN) {
+    return
+  }
+
+  socket.send(serializeEnvelope(envelope))
+}
+
+/**
+ * 创建 client capability 失败 response，保留 request id/channel 便于 server 关联。
+ */
+function createErrorResponse(
+  envelope: MessageEnvelope,
+  code: ErrorCode,
+  message: string
+): MessageEnvelope {
+  return {
+    id: envelope.id,
+    type: 'response',
+    channel: envelope.channel,
+    error: {
+      code,
+      message
+    }
+  }
+}
+
+/**
+ * 从 client capability handler 抛出的错误中提取可跨 wire 传递的错误码。
+ */
+function selectErrorCode(error: unknown): ErrorCode {
+  const rawCode = (error as { code?: unknown } | null)?.code
+
+  return isErrorCode(rawCode) ? rawCode : 'HANDLER_ERROR'
+}
+
+/**
+ * 从未知错误中提取可读消息。
+ */
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 /**

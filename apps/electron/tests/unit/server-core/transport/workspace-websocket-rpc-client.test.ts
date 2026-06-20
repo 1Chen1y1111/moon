@@ -193,6 +193,40 @@ describe('createWorkspaceWebSocketRpcClient', () => {
     await expect(resultPromise).resolves.toEqual([])
   })
 
+  it('advertises registered client capabilities in handshake envelopes', async () => {
+    FakeWebSocket.instances = []
+    const client = createClient()
+    const resultPromise = client.invoke(RPC_CHANNELS.sessions.listSessions)
+
+    client.handleCapability('client:testEcho', (value) => value)
+
+    await flushPromises()
+    const socket = FakeWebSocket.instances[0]
+
+    socket.emit('open')
+    await flushPromises()
+
+    expect(parseSentEnvelope(socket, 0)).toEqual({
+      id: 'workspace-handshake',
+      type: 'handshake',
+      protocolVersion: PROTOCOL_VERSION,
+      clientCapabilities: ['client:testEcho']
+    })
+
+    acknowledgeHandshake(socket)
+    await flushPromises()
+    socket.emit('message', {
+      data: serializeEnvelope({
+        id: 'request-1',
+        type: 'response',
+        channel: RPC_CHANNELS.sessions.listSessions,
+        result: []
+      })
+    })
+
+    await expect(resultPromise).resolves.toEqual([])
+  })
+
   it('connects to the workspace URL returned by the transport provider', async () => {
     FakeWebSocket.instances = []
     const client = createClient({
@@ -336,6 +370,104 @@ describe('createWorkspaceWebSocketRpcClient', () => {
     })
 
     expect(listener).toHaveBeenCalledWith(event)
+  })
+
+  it('responds to server capability requests with handler results', async () => {
+    FakeWebSocket.instances = []
+    const client = createClient()
+    const listener = vi.fn()
+
+    client.handleCapability('client:testEcho', (value) => `echo:${value}`)
+    client.on(RPC_CHANNELS.sessions.event, listener)
+    await flushPromises()
+    const socket = FakeWebSocket.instances[0]
+
+    socket.emit('open')
+    acknowledgeHandshake(socket)
+    await flushPromises()
+    socket.emit('message', {
+      data: serializeEnvelope({
+        id: 'server-request-1',
+        type: 'request',
+        channel: 'client:testEcho',
+        args: ['hi']
+      })
+    })
+    await flushPromises()
+
+    expect(parseSentEnvelope(socket, 1)).toEqual({
+      id: 'server-request-1',
+      type: 'response',
+      channel: 'client:testEcho',
+      result: 'echo:hi'
+    })
+    expect(listener).not.toHaveBeenCalled()
+  })
+
+  it('returns CAPABILITY_UNAVAILABLE for unknown server capability requests', async () => {
+    FakeWebSocket.instances = []
+    const client = createClient()
+
+    client.on(RPC_CHANNELS.sessions.event, vi.fn())
+    await flushPromises()
+    const socket = FakeWebSocket.instances[0]
+
+    socket.emit('open')
+    acknowledgeHandshake(socket)
+    await flushPromises()
+    socket.emit('message', {
+      data: serializeEnvelope({
+        id: 'server-request-1',
+        type: 'request',
+        channel: 'client:missing',
+        args: []
+      })
+    })
+    await flushPromises()
+
+    expect(parseSentEnvelope(socket, 1)).toMatchObject({
+      id: 'server-request-1',
+      type: 'response',
+      channel: 'client:missing',
+      error: {
+        code: 'CAPABILITY_UNAVAILABLE'
+      }
+    })
+  })
+
+  it('returns HANDLER_ERROR when a client capability handler throws', async () => {
+    FakeWebSocket.instances = []
+    const client = createClient()
+
+    client.handleCapability('client:failing', () => {
+      throw new Error('boom')
+    })
+    client.on(RPC_CHANNELS.sessions.event, vi.fn())
+    await flushPromises()
+    const socket = FakeWebSocket.instances[0]
+
+    socket.emit('open')
+    acknowledgeHandshake(socket)
+    await flushPromises()
+    socket.emit('message', {
+      data: serializeEnvelope({
+        id: 'server-request-1',
+        type: 'request',
+        channel: 'client:failing',
+        args: []
+      })
+    })
+    await flushPromises()
+
+    expect(parseSentEnvelope(socket, 1)).toMatchObject({
+      id: 'server-request-1',
+      type: 'response',
+      channel: 'client:failing',
+      error: {
+        code: 'HANDLER_ERROR',
+        message: 'boom'
+      }
+    })
   })
 
   it('does not notify unsubscribed listeners after close', async () => {

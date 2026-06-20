@@ -8,6 +8,7 @@ import {
   PROTOCOL_VERSION,
   isRemoteEligible,
   RPC_CHANNELS,
+  type ErrorCode,
   type MessageEnvelope,
   type PushTarget,
   type WireError
@@ -53,9 +54,17 @@ export type CreateWorkspaceSocketServer = (
 ) => WorkspaceSocketServer | Promise<WorkspaceSocketServer>
 
 type WorkspaceSocketClient = {
+  capabilities: Set<string>
   clientId: string
   handshakeComplete: boolean
   isAlive: boolean
+  pendingRequests: Map<
+    string,
+    {
+      reject: (error: Error) => void
+      resolve: (value: unknown) => void
+    }
+  >
   socket: WorkspaceSocket
   workspaceId: string | null
 }
@@ -72,6 +81,8 @@ export type WorkspaceWebSocketRpcServer = RpcServerPort<SessionRpcRequestContext
   RpcPushPort & {
     close: () => Promise<void>
     getTransportUrl: () => Promise<string>
+    hasClientCapability: (clientId: string, channel: string) => boolean
+    invokeClient: (clientId: string, channel: string, ...args: unknown[]) => Promise<unknown>
   }
 
 const LOCALHOST = '127.0.0.1'
@@ -114,11 +125,40 @@ export function createWorkspaceWebSocketRpcServer({
     push: (channel, target, ...args) => {
       envelopePushPort.push(channel, target, ...args)
     },
+    hasClientCapability: (clientId, channel) => {
+      const client = findClientById(clients, clientId)
+
+      return client !== undefined && client.capabilities.has(channel)
+    },
+    invokeClient: (clientId, channel, ...args) => {
+      const client = findClientById(clients, clientId)
+
+      if (client === undefined || !isClientReady(client)) {
+        return Promise.reject(
+          createClientInvokeError('CLIENT_DISCONNECTED', `Client disconnected: ${clientId}`)
+        )
+      }
+
+      if (!client.capabilities.has(channel)) {
+        return Promise.reject(
+          createClientInvokeError(
+            'CAPABILITY_UNAVAILABLE',
+            `Client capability unavailable: ${channel}`
+          )
+        )
+      }
+
+      return invokeSocketClient(client, channel, args)
+    },
     close: async () => {
       const server = socketServer
 
       stopHeartbeat()
       clients.forEach((client) => {
+        rejectClientPendingRequests(
+          client,
+          createClientInvokeError('CLIENT_DISCONNECTED', 'Workspace WebSocket server closed')
+        )
         client.socket.close?.()
       })
       clients.clear()
@@ -205,9 +245,11 @@ function acceptSocketClient(
   socket: WorkspaceSocket
 ): void {
   const client: WorkspaceSocketClient = {
+    capabilities: new Set(),
     clientId,
     handshakeComplete: false,
     isAlive: false,
+    pendingRequests: new Map(),
     socket,
     workspaceId: null
   }
@@ -217,10 +259,10 @@ function acceptSocketClient(
     void dispatchSocketMessage(envelopeServer, rpcServer, client, authToken, rawMessage)
   })
   socket.on('close', () => {
-    clients.delete(client)
+    disconnectSocketClient(clients, client, 'Client disconnected')
   })
   socket.on('error', () => {
-    clients.delete(client)
+    disconnectSocketClient(clients, client, 'Client disconnected')
   })
   socket.on('pong', () => {
     client.isAlive = true
@@ -251,6 +293,11 @@ async function dispatchSocketMessage(
 
   if (!client.handshakeComplete) {
     handleHandshakeEnvelope(client, envelope, authToken)
+    return
+  }
+
+  if (envelope.type === 'response') {
+    handleClientResponse(client, envelope)
     return
   }
 
@@ -295,6 +342,7 @@ function handleHandshakeEnvelope(
 
   client.handshakeComplete = true
   client.isAlive = true
+  client.capabilities = new Set(envelope.clientCapabilities ?? [])
   sendEnvelope(client.socket, {
     id: envelope.id,
     type: 'handshake_ack',
@@ -342,13 +390,99 @@ function terminateSocketClient(
   clients: Set<WorkspaceSocketClient>,
   client: WorkspaceSocketClient
 ): void {
-  clients.delete(client)
+  disconnectSocketClient(clients, client, 'Client heartbeat expired')
   if (client.socket.terminate) {
     client.socket.terminate()
     return
   }
 
   client.socket.close?.()
+}
+
+/**
+ * 处理 client 对 server-to-client request 的 response envelope。
+ */
+function handleClientResponse(client: WorkspaceSocketClient, envelope: MessageEnvelope): void {
+  const pendingRequest = client.pendingRequests.get(envelope.id)
+
+  if (pendingRequest === undefined) {
+    return
+  }
+
+  client.pendingRequests.delete(envelope.id)
+
+  if (envelope.error) {
+    pendingRequest.reject(createWireError(envelope.error))
+    return
+  }
+
+  pendingRequest.resolve(envelope.result)
+}
+
+/**
+ * 通过当前 WebSocket client 发起一次 server-to-client capability 调用。
+ */
+function invokeSocketClient(
+  client: WorkspaceSocketClient,
+  channel: string,
+  args: unknown[]
+): Promise<unknown> {
+  if (!isClientReady(client)) {
+    return Promise.reject(
+      createClientInvokeError('CLIENT_DISCONNECTED', `Client disconnected: ${client.clientId}`)
+    )
+  }
+
+  const envelope: MessageEnvelope = {
+    id: createDefaultEnvelopeId(),
+    type: 'request',
+    channel,
+    args
+  }
+
+  return new Promise((resolve, reject) => {
+    client.pendingRequests.set(envelope.id, { reject, resolve })
+    sendEnvelope(client.socket, envelope)
+  })
+}
+
+/**
+ * 从 registry 移除 client，并拒绝所有等待中的 server-to-client 调用。
+ */
+function disconnectSocketClient(
+  clients: Set<WorkspaceSocketClient>,
+  client: WorkspaceSocketClient,
+  message: string
+): void {
+  clients.delete(client)
+  rejectClientPendingRequests(client, createClientInvokeError('CLIENT_DISCONNECTED', message))
+}
+
+/**
+ * 拒绝指定 client 上所有等待中的 server-to-client 调用。
+ */
+function rejectClientPendingRequests(client: WorkspaceSocketClient, error: Error): void {
+  client.pendingRequests.forEach(({ reject }) => {
+    reject(error)
+  })
+  client.pendingRequests.clear()
+}
+
+/**
+ * 判断 client 是否已完成握手且 socket 可写。
+ */
+function isClientReady(client: WorkspaceSocketClient): boolean {
+  return client.handshakeComplete && client.socket.readyState === WEBSOCKET_OPEN
+}
+
+/**
+ * 按 clientId 查找当前已连接的 WebSocket client。
+ */
+function findClientById(
+  clients: Set<WorkspaceSocketClient>,
+  clientId: string
+): WorkspaceSocketClient | undefined {
+  return [...clients].find((client) => client.clientId === clientId)
 }
 
 /**
@@ -464,6 +598,37 @@ function sendEnvelope(socket: WorkspaceSocket, envelope: MessageEnvelope): void 
   }
 
   socket.send(serializeEnvelope(envelope))
+}
+
+/**
+ * 把 client response error envelope 还原成带 code 的 Error。
+ */
+function createWireError(error: WireError): Error & { code: WireError['code'] } {
+  const responseError = new Error(error.message) as Error & { code: WireError['code'] }
+  responseError.code = error.code
+  return responseError
+}
+
+/**
+ * 创建 server-to-client invoke 的结构化错误。
+ */
+function createClientInvokeError(code: ErrorCode, message: string): Error & { code: ErrorCode } {
+  const error = new Error(message) as Error & { code: ErrorCode }
+  error.code = code
+  return error
+}
+
+/**
+ * 创建 server-to-client request envelope id，避免把 node:crypto 绑定进 server-core。
+ */
+function createDefaultEnvelopeId(): string {
+  const randomUUID = globalThis.crypto?.randomUUID
+
+  if (typeof randomUUID === 'function') {
+    return randomUUID.call(globalThis.crypto)
+  }
+
+  return `client-request-${Date.now()}-${Math.random().toString(36).slice(2)}`
 }
 
 /**

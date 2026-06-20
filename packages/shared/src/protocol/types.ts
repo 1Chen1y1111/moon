@@ -23,13 +23,17 @@ export type ErrorCode =
   | 'REQUEST_TIMEOUT'
   | 'PROTOCOL_VERSION_UNSUPPORTED'
   | 'AUTHENTICATION_FAILED'
+  | 'CAPABILITY_UNAVAILABLE'
+  | 'CLIENT_DISCONNECTED'
 
 const KNOWN_ERROR_CODES: ReadonlySet<string> = new Set<ErrorCode>([
   'HANDLER_ERROR',
   'CHANNEL_NOT_FOUND',
   'REQUEST_TIMEOUT',
   'PROTOCOL_VERSION_UNSUPPORTED',
-  'AUTHENTICATION_FAILED'
+  'AUTHENTICATION_FAILED',
+  'CAPABILITY_UNAVAILABLE',
+  'CLIENT_DISCONNECTED'
 ])
 
 /**
@@ -53,6 +57,7 @@ export type MessageEnvelope = {
   error?: WireError
   protocolVersion?: string
   authToken?: string
+  clientCapabilities?: string[]
   clientId?: string
   workspaceId?: string
 }

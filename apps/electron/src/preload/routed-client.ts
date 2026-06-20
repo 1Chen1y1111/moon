@@ -3,19 +3,29 @@
  * 当前 v1 只区分 local/workspace 目标，不处理远程连接、工作区切换或重连状态。
  */
 
-import type { RpcClientListener, RpcClientPort } from '@moon/server-core/transport'
+import type {
+  RpcClientCapabilityHandler,
+  RpcClientCapabilityPort,
+  RpcClientListener,
+  RpcClientPort
+} from '@moon/server-core/transport'
 import { isLocalOnly } from '@moon/shared/protocol'
+
+type CapabilityAwareRpcClient = RpcClientPort & Partial<RpcClientCapabilityPort>
 
 /**
  * Craft 风格的 preload RPC 路由器：LOCAL_ONLY 留在本地，其余交给 workspace client。
  */
 export class RoutedClient implements RpcClientPort {
-  private readonly workspaceClient: RpcClientPort
+  private readonly workspaceClient: CapabilityAwareRpcClient
 
   /**
    * 创建路由 client；未提供 workspace client 时默认复用 local client，保持当前 IPC 行为不变。
    */
-  constructor(private readonly localClient: RpcClientPort, workspaceClient?: RpcClientPort) {
+  constructor(
+    private readonly localClient: RpcClientPort,
+    workspaceClient?: CapabilityAwareRpcClient
+  ) {
     this.workspaceClient = workspaceClient ?? localClient
   }
 
@@ -31,6 +41,13 @@ export class RoutedClient implements RpcClientPort {
    */
   on(channel: string, listener: RpcClientListener): () => void {
     return this.getTargetClient(channel).on(channel, listener)
+  }
+
+  /**
+   * 注册 workspace client capability；v1 不把 capability 暴露给 renderer。
+   */
+  handleCapability(channel: string, handler: RpcClientCapabilityHandler): void {
+    this.workspaceClient.handleCapability?.(channel, handler)
   }
 
   /**

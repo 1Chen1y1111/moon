@@ -118,11 +118,13 @@ function parseSentEnvelope(socket: FakeSocket, index: number): unknown {
 async function performHandshake(
   socket: FakeSocket,
   id = 'handshake-1',
-  authToken?: string
+  authToken?: string,
+  clientCapabilities?: string[]
 ): Promise<void> {
   socket.emitMessage(
     serializeEnvelope({
       authToken,
+      clientCapabilities,
       id,
       type: 'handshake',
       protocolVersion: PROTOCOL_VERSION
@@ -187,6 +189,134 @@ describe('createWorkspaceWebSocketRpcServer', () => {
       type: 'handshake_ack',
       clientId: 'client-1',
       protocolVersion: PROTOCOL_VERSION
+    })
+  })
+
+  it('stores client capabilities from handshake and invokes client handlers', async () => {
+    const fakeServer = new FakeSocketServer()
+    const server = createWorkspaceWebSocketRpcServer({
+      createClientId: () => 'client-1',
+      createWebSocketServer: () => fakeServer
+    })
+
+    await server.getTransportUrl()
+    const socket = fakeServer.connect()
+
+    await performHandshake(socket, 'handshake-1', undefined, ['client:testEcho'])
+
+    expect(server.hasClientCapability('client-1', 'client:testEcho')).toBe(true)
+    expect(server.hasClientCapability('client-1', 'client:missing')).toBe(false)
+
+    const resultPromise = server.invokeClient('client-1', 'client:testEcho', 'hi')
+    const request = parseSentEnvelope(socket, 1) as { id: string }
+
+    expect(request).toMatchObject({
+      type: 'request',
+      channel: 'client:testEcho',
+      args: ['hi']
+    })
+
+    socket.emitMessage(
+      serializeEnvelope({
+        id: request.id,
+        type: 'response',
+        channel: 'client:testEcho',
+        result: 'echo:hi'
+      })
+    )
+    await flushPromises()
+
+    await expect(resultPromise).resolves.toBe('echo:hi')
+  })
+
+  it('rejects server-to-client invokes for missing capabilities', async () => {
+    const fakeServer = new FakeSocketServer()
+    const server = createWorkspaceWebSocketRpcServer({
+      createClientId: () => 'client-1',
+      createWebSocketServer: () => fakeServer
+    })
+
+    await server.getTransportUrl()
+    const socket = fakeServer.connect()
+
+    await performHandshake(socket)
+
+    await expect(server.invokeClient('client-1', 'client:missing')).rejects.toMatchObject({
+      code: 'CAPABILITY_UNAVAILABLE'
+    })
+    expect(socket.sent).toHaveLength(1)
+  })
+
+  it('rejects server-to-client invokes for disconnected clients', async () => {
+    const fakeServer = new FakeSocketServer()
+    const server = createWorkspaceWebSocketRpcServer({
+      createClientId: () => 'client-1',
+      createWebSocketServer: () => fakeServer
+    })
+
+    await server.getTransportUrl()
+    const socket = fakeServer.connect()
+
+    await performHandshake(socket, 'handshake-1', undefined, ['client:testEcho'])
+    socket.close()
+
+    await expect(server.invokeClient('client-1', 'client:testEcho')).rejects.toMatchObject({
+      code: 'CLIENT_DISCONNECTED'
+    })
+    expect(server.hasClientCapability('client-1', 'client:testEcho')).toBe(false)
+  })
+
+  it('rejects pending server-to-client invokes when a client disconnects mid-flight', async () => {
+    const fakeServer = new FakeSocketServer()
+    const server = createWorkspaceWebSocketRpcServer({
+      createClientId: () => 'client-1',
+      createWebSocketServer: () => fakeServer
+    })
+
+    await server.getTransportUrl()
+    const socket = fakeServer.connect()
+
+    await performHandshake(socket, 'handshake-1', undefined, ['client:slow'])
+    const resultPromise = server.invokeClient('client-1', 'client:slow')
+
+    socket.close()
+
+    await expect(resultPromise).rejects.toMatchObject({
+      code: 'CLIENT_DISCONNECTED'
+    })
+  })
+
+  it('turns client capability response errors into coded errors', async () => {
+    const fakeServer = new FakeSocketServer()
+    const server = createWorkspaceWebSocketRpcServer({
+      createClientId: () => 'client-1',
+      createWebSocketServer: () => fakeServer
+    })
+
+    await server.getTransportUrl()
+    const socket = fakeServer.connect()
+
+    await performHandshake(socket, 'handshake-1', undefined, ['client:failing'])
+
+    const resultPromise = server.invokeClient('client-1', 'client:failing')
+    const request = parseSentEnvelope(socket, 1) as { id: string }
+
+    socket.emitMessage(
+      serializeEnvelope({
+        id: request.id,
+        type: 'response',
+        channel: 'client:failing',
+        error: {
+          code: 'HANDLER_ERROR',
+          message: 'boom'
+        }
+      })
+    )
+    await flushPromises()
+
+    await expect(resultPromise).rejects.toMatchObject({
+      code: 'HANDLER_ERROR',
+      message: 'boom'
     })
   })
 
