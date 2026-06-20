@@ -160,6 +160,9 @@ describe('registerAppShellHandlers', () => {
   it('delegates project handlers and broadcasts project changes', async () => {
     const { RPC_CHANNELS } = await import('@moon/shared/protocol')
     const { registerAppShellHandlers } = await import('@main/bootstrap/app-shell-rpc-handlers')
+    const { findLegacyWebContentsClient } = await import(
+      '@main/bootstrap/legacy-webcontents-client-registry'
+    )
     const project = {
       id: 'project-1',
       name: 'moon',
@@ -172,6 +175,8 @@ describe('registerAppShellHandlers', () => {
       projects: [project]
     }
     const { server, getHandler, push } = createRpcServerFixture()
+    const sender = { id: 501, send: vi.fn() }
+    const context = { event: { sender } as never }
 
     projectsService.listProjects.mockResolvedValue([project])
     projectsService.getActiveProject.mockResolvedValue(project)
@@ -179,6 +184,7 @@ describe('registerAppShellHandlers', () => {
     projectsService.setActiveProject.mockResolvedValue(project)
     projectsService.deleteProject.mockResolvedValue(undefined)
     projectsService.createChangeEvent.mockResolvedValue(event)
+    getAllWindowsMock.mockReturnValue([{ webContents: sender }])
 
     registerAppShellHandlers(server, {
       openSettingsWindow,
@@ -186,32 +192,65 @@ describe('registerAppShellHandlers', () => {
       settingsService: settingsService as never
     })
 
-    await expect(getHandler(RPC_CHANNELS.projects.list)?.({ event: { sender: {} } as never })).resolves.toEqual([
-      project
-    ])
-    await expect(getHandler(RPC_CHANNELS.projects.getActive)?.({ event: { sender: {} } as never })).resolves.toBe(
-      project
-    )
+    await expect(getHandler(RPC_CHANNELS.projects.list)?.(context)).resolves.toEqual([project])
+    await expect(getHandler(RPC_CHANNELS.projects.getActive)?.(context)).resolves.toBe(project)
+    expect(findLegacyWebContentsClient('501')?.workspaceId).toBe('project-1')
     await expect(
-      getHandler(RPC_CHANNELS.projects.useExistingFolder)?.({ event: { sender: {} } as never })
+      getHandler(RPC_CHANNELS.projects.useExistingFolder)?.(context)
     ).resolves.toBe(project)
+    expect(findLegacyWebContentsClient('501')?.workspaceId).toBe('project-1')
     await expect(
       getHandler(RPC_CHANNELS.projects.setActive)?.(
-        { event: { sender: {} } as never },
+        context,
         { projectId: 'project-1' }
       )
     ).resolves.toBe(project)
+    expect(findLegacyWebContentsClient('501')?.workspaceId).toBe('project-1')
     await expect(
       getHandler(RPC_CHANNELS.projects.delete)?.(
-        { event: { sender: {} } as never },
+        context,
         { projectId: 'project-1' }
       )
     ).resolves.toBeUndefined()
+    expect(findLegacyWebContentsClient('501')?.workspaceId).toBe('project-1')
 
     expect(projectsService.setActiveProject).toHaveBeenCalledWith({ projectId: 'project-1' })
     expect(projectsService.deleteProject).toHaveBeenCalledWith({ projectId: 'project-1' })
     expect(push).toHaveBeenCalledTimes(3)
     expect(push).toHaveBeenCalledWith(RPC_CHANNELS.projects.onChange, { to: 'all' }, event)
+  })
+
+  it('syncs a null active project as an unbound sender workspace', async () => {
+    const { RPC_CHANNELS } = await import('@moon/shared/protocol')
+    const { registerAppShellHandlers } = await import('@main/bootstrap/app-shell-rpc-handlers')
+    const { findLegacyWebContentsClient } = await import(
+      '@main/bootstrap/legacy-webcontents-client-registry'
+    )
+    const { server, getHandler } = createRpcServerFixture()
+    const sender = { id: 502, send: vi.fn() }
+    const context = { event: { sender } as never }
+
+    projectsService.getActiveProject.mockResolvedValue(null)
+    projectsService.setActiveProject.mockResolvedValue(null)
+    projectsService.createChangeEvent.mockResolvedValue({
+      activeProject: null,
+      projects: []
+    })
+    getAllWindowsMock.mockReturnValue([{ webContents: sender }])
+
+    registerAppShellHandlers(server, {
+      openSettingsWindow,
+      projectsService: projectsService as never,
+      settingsService: settingsService as never
+    })
+
+    await expect(getHandler(RPC_CHANNELS.projects.getActive)?.(context)).resolves.toBeNull()
+    expect(findLegacyWebContentsClient('502')?.workspaceId).toBeNull()
+
+    await expect(
+      getHandler(RPC_CHANNELS.projects.setActive)?.(context, { projectId: null })
+    ).resolves.toBeNull()
+    expect(findLegacyWebContentsClient('502')?.workspaceId).toBeNull()
   })
 
   it('keeps window control behavior on the sender window', async () => {

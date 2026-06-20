@@ -1,6 +1,6 @@
 /**
  * 负责把 Electron main 内部 shared RPC event channel 映射回当前 legacy IPC event。
- * 本文件只处理本地窗口事件分发和临时 client 定向，不引入 WebSocket 或 workspace routing。
+ * 本文件只处理本地窗口事件分发、临时 client 定向和本地 workspace 定向，不引入 WebSocket。
  */
 
 import type { WebContents } from 'electron'
@@ -14,6 +14,7 @@ import {
 } from '@moon/shared/protocol'
 import {
   findLegacyWebContentsClient,
+  listLegacyWebContentsClientsByWorkspace,
   listLegacyWebContentsClients
 } from './legacy-webcontents-client-registry'
 
@@ -52,9 +53,8 @@ export function emitLegacyRpcEvent<TChannel extends BroadcastEventChannel>(
   }
 
   if (target.to === 'workspace') {
-    throw new Error(
-      `Workspace push targets are not supported by legacy IPC event bridge: ${target.workspaceId}`
-    )
+    sendToWorkspaceWindows(legacyChannel, target.workspaceId, target.exclude, args)
+    return
   }
 
   target.sender.send(legacyChannel, ...args)
@@ -80,6 +80,24 @@ function sendToClientWindow(legacyChannel: string, clientId: string, args: unkno
   const client = findLegacyWebContentsClient(clientId)
 
   client?.webContents.send(legacyChannel, ...args)
+}
+
+/**
+ * 向绑定到指定 workspace 的本地窗口发送 legacy IPC 事件。
+ */
+function sendToWorkspaceWindows(
+  legacyChannel: string,
+  workspaceId: string,
+  exclude: string | undefined,
+  args: unknown[]
+): void {
+  listLegacyWebContentsClientsByWorkspace(workspaceId).forEach((client) => {
+    if (exclude !== undefined && client.clientId === exclude) {
+      return
+    }
+
+    client.webContents.send(legacyChannel, ...args)
+  })
 }
 
 /**

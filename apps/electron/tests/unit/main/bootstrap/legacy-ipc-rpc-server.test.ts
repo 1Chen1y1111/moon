@@ -222,16 +222,32 @@ describe('createLegacyIpcRpcServer', () => {
     expect(secondWebContents.send).toHaveBeenCalledWith(ipcChannels.window.onStateChange, state)
   })
 
-  it('rejects workspace push targets until workspace routing exists', async () => {
+  it('pushes RPC events to legacy clients bound to a workspace', async () => {
+    const { ipcChannels } = await import('@ipc/channels')
     const { createLegacyIpcRpcServer } = await import('@main/bootstrap/legacy-ipc-rpc-server')
+    const { bindLegacyWebContentsClientWorkspace } = await import(
+      '@main/bootstrap/legacy-webcontents-client-registry'
+    )
+    const { createDefaultAppSettings } = await import('@moon/shared/domain/settings')
     const { RPC_CHANNELS } = await import('@moon/shared/protocol')
+    const firstWebContents = { id: 1, send: vi.fn() }
+    const secondWebContents = { id: 2, send: vi.fn() }
+    const settings = createDefaultAppSettings()
     const rpcServer = createLegacyIpcRpcServer({
       channelMap: { 'demo:known': 'legacy:known' },
       createContext: () => ({ requestId: 'request-1' })
     })
 
-    expect(() =>
-      rpcServer.push(RPC_CHANNELS.settings.onChange, { to: 'workspace', workspaceId: 'workspace-1' })
-    ).toThrow('Workspace push targets are not supported by legacy IPC event bridge: workspace-1')
+    getAllWindowsMock.mockReturnValue([
+      { webContents: firstWebContents },
+      { webContents: secondWebContents }
+    ])
+    bindLegacyWebContentsClientWorkspace(firstWebContents, 'workspace-1')
+    bindLegacyWebContentsClientWorkspace(secondWebContents, 'workspace-2')
+
+    rpcServer.push(RPC_CHANNELS.settings.onChange, { to: 'workspace', workspaceId: 'workspace-1' }, settings)
+
+    expect(firstWebContents.send).toHaveBeenCalledWith(ipcChannels.settings.onChange, settings)
+    expect(secondWebContents.send).not.toHaveBeenCalled()
   })
 })

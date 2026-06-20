@@ -25,8 +25,8 @@ describe('emitLegacyRpcEvent', () => {
     const { RPC_CHANNELS } = await import('@moon/shared/protocol')
     const { createDefaultAppSettings } = await import('@moon/shared/domain/settings')
     const { emitLegacyRpcEvent } = await import('@main/bootstrap/legacy-rpc-event-bridge')
-    const firstWebContents = { send: vi.fn() }
-    const secondWebContents = { send: vi.fn() }
+    const firstWebContents = { id: 101, send: vi.fn() }
+    const secondWebContents = { id: 102, send: vi.fn() }
     const settings = createDefaultAppSettings()
     const projectEvent = { projects: [], activeProject: null }
 
@@ -42,6 +42,64 @@ describe('emitLegacyRpcEvent', () => {
     expect(secondWebContents.send).toHaveBeenCalledWith(ipcChannels.settings.onChange, settings)
     expect(firstWebContents.send).toHaveBeenCalledWith(ipcChannels.projects.onChange, projectEvent)
     expect(secondWebContents.send).toHaveBeenCalledWith(ipcChannels.projects.onChange, projectEvent)
+  })
+
+  it('maps workspace RPC event targets to clients bound to that workspace', async () => {
+    const { ipcChannels } = await import('@ipc/channels')
+    const { RPC_CHANNELS } = await import('@moon/shared/protocol')
+    const { createDefaultAppSettings } = await import('@moon/shared/domain/settings')
+    const { emitLegacyRpcEvent } = await import('@main/bootstrap/legacy-rpc-event-bridge')
+    const { bindLegacyWebContentsClientWorkspace } = await import(
+      '@main/bootstrap/legacy-webcontents-client-registry'
+    )
+    const firstWebContents = { id: 201, send: vi.fn() }
+    const secondWebContents = { id: 202, send: vi.fn() }
+    const thirdWebContents = { id: 203, send: vi.fn() }
+    const settings = createDefaultAppSettings()
+
+    getAllWindowsMock.mockReturnValue([
+      { webContents: firstWebContents },
+      { webContents: secondWebContents },
+      { webContents: thirdWebContents }
+    ])
+    bindLegacyWebContentsClientWorkspace(firstWebContents, 'workspace-1')
+    bindLegacyWebContentsClientWorkspace(secondWebContents, 'workspace-1')
+    bindLegacyWebContentsClientWorkspace(thirdWebContents, 'workspace-2')
+
+    emitLegacyRpcEvent(RPC_CHANNELS.settings.onChange, { to: 'workspace', workspaceId: 'workspace-1' }, settings)
+
+    expect(firstWebContents.send).toHaveBeenCalledWith(ipcChannels.settings.onChange, settings)
+    expect(secondWebContents.send).toHaveBeenCalledWith(ipcChannels.settings.onChange, settings)
+    expect(thirdWebContents.send).not.toHaveBeenCalled()
+  })
+
+  it('honors workspace RPC event exclusions', async () => {
+    const { ipcChannels } = await import('@ipc/channels')
+    const { RPC_CHANNELS } = await import('@moon/shared/protocol')
+    const { createDefaultAppSettings } = await import('@moon/shared/domain/settings')
+    const { emitLegacyRpcEvent } = await import('@main/bootstrap/legacy-rpc-event-bridge')
+    const { bindLegacyWebContentsClientWorkspace } = await import(
+      '@main/bootstrap/legacy-webcontents-client-registry'
+    )
+    const firstWebContents = { id: 301, send: vi.fn() }
+    const secondWebContents = { id: 302, send: vi.fn() }
+    const settings = createDefaultAppSettings()
+
+    getAllWindowsMock.mockReturnValue([
+      { webContents: firstWebContents },
+      { webContents: secondWebContents }
+    ])
+    bindLegacyWebContentsClientWorkspace(firstWebContents, 'workspace-1')
+    bindLegacyWebContentsClientWorkspace(secondWebContents, 'workspace-1')
+
+    emitLegacyRpcEvent(
+      RPC_CHANNELS.settings.onChange,
+      { to: 'workspace', workspaceId: 'workspace-1', exclude: '302' },
+      settings
+    )
+
+    expect(firstWebContents.send).toHaveBeenCalledWith(ipcChannels.settings.onChange, settings)
+    expect(secondWebContents.send).not.toHaveBeenCalledWith(ipcChannels.settings.onChange, settings)
   })
 
   it('maps window RPC events to the selected webContents legacy IPC event', async () => {

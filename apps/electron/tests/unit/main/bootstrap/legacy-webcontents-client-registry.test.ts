@@ -32,8 +32,8 @@ describe('legacy webContents client registry', () => {
     const { listLegacyWebContentsClients } = await import(
       '@main/bootstrap/legacy-webcontents-client-registry'
     )
-    const firstWebContents = { id: 1, send: vi.fn() }
-    const secondWebContents = { id: 2, send: vi.fn() }
+    const firstWebContents = { id: 101, send: vi.fn() }
+    const secondWebContents = { id: 102, send: vi.fn() }
 
     getAllWindowsMock.mockReturnValue([
       { webContents: firstWebContents },
@@ -41,8 +41,8 @@ describe('legacy webContents client registry', () => {
     ])
 
     expect(listLegacyWebContentsClients()).toEqual([
-      { clientId: '1', webContents: firstWebContents },
-      { clientId: '2', webContents: secondWebContents }
+      { clientId: '101', workspaceId: null, webContents: firstWebContents },
+      { clientId: '102', workspaceId: null, webContents: secondWebContents }
     ])
   })
 
@@ -50,18 +50,68 @@ describe('legacy webContents client registry', () => {
     const { findLegacyWebContentsClient } = await import(
       '@main/bootstrap/legacy-webcontents-client-registry'
     )
-    const firstWebContents = { id: 1, send: vi.fn() }
-    const secondWebContents = { id: 2, send: vi.fn() }
+    const firstWebContents = { id: 201, send: vi.fn() }
+    const secondWebContents = { id: 202, send: vi.fn() }
 
     getAllWindowsMock.mockReturnValue([
       { webContents: firstWebContents },
       { webContents: secondWebContents }
     ])
 
-    expect(findLegacyWebContentsClient('2')).toEqual({
-      clientId: '2',
+    expect(findLegacyWebContentsClient('202')).toEqual({
+      clientId: '202',
+      workspaceId: null,
       webContents: secondWebContents
     })
-    expect(findLegacyWebContentsClient('3')).toBeUndefined()
+    expect(findLegacyWebContentsClient('203')).toBeUndefined()
+  })
+
+  it('binds, overwrites, and clears workspace ids for clients', async () => {
+    const {
+      bindLegacyWebContentsClientWorkspace,
+      findLegacyWebContentsClient,
+      listLegacyWebContentsClientsByWorkspace
+    } = await import('@main/bootstrap/legacy-webcontents-client-registry')
+    const webContents = { id: 301, send: vi.fn() }
+
+    getAllWindowsMock.mockReturnValue([{ webContents }])
+
+    bindLegacyWebContentsClientWorkspace(webContents, 'workspace-1')
+
+    expect(findLegacyWebContentsClient('301')?.workspaceId).toBe('workspace-1')
+    expect(listLegacyWebContentsClientsByWorkspace('workspace-1')).toEqual([
+      { clientId: '301', workspaceId: 'workspace-1', webContents }
+    ])
+
+    bindLegacyWebContentsClientWorkspace(webContents, 'workspace-2')
+
+    expect(findLegacyWebContentsClient('301')?.workspaceId).toBe('workspace-2')
+    expect(listLegacyWebContentsClientsByWorkspace('workspace-1')).toEqual([])
+
+    bindLegacyWebContentsClientWorkspace(webContents, null)
+
+    expect(findLegacyWebContentsClient('301')?.workspaceId).toBeNull()
+    expect(listLegacyWebContentsClientsByWorkspace('workspace-2')).toEqual([])
+  })
+
+  it('lists only clients bound to the requested workspace', async () => {
+    const { bindLegacyWebContentsClientWorkspace, listLegacyWebContentsClientsByWorkspace } =
+      await import('@main/bootstrap/legacy-webcontents-client-registry')
+    const firstWebContents = { id: 401, send: vi.fn() }
+    const secondWebContents = { id: 402, send: vi.fn() }
+    const thirdWebContents = { id: 403, send: vi.fn() }
+
+    getAllWindowsMock.mockReturnValue([
+      { webContents: firstWebContents },
+      { webContents: secondWebContents },
+      { webContents: thirdWebContents }
+    ])
+
+    bindLegacyWebContentsClientWorkspace(firstWebContents, 'workspace-1')
+    bindLegacyWebContentsClientWorkspace(secondWebContents, 'workspace-2')
+
+    expect(listLegacyWebContentsClientsByWorkspace('workspace-1')).toEqual([
+      { clientId: '401', workspaceId: 'workspace-1', webContents: firstWebContents }
+    ])
   })
 })

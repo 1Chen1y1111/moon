@@ -17,11 +17,13 @@ import type {
   SaveProviderInput
 } from '@moon/shared/domain/settings-validation'
 import type { AppSettings } from '@moon/shared/domain/settings'
+import type { ProjectRecord } from '@moon/shared/domain/project'
 import type { DeleteProjectInput, SetActiveProjectInput } from '@moon/shared/domain/project-validation'
 import { RPC_CHANNELS } from '@moon/shared/protocol'
 import type { ProjectsService } from '../services/projects-service'
 import type { SettingsService } from '../services/settings-service'
 import type { AppShellRpcRequestContext } from './app-shell-ipc-adapter'
+import { bindLegacyWebContentsClientWorkspace } from './legacy-webcontents-client-registry'
 
 type AppShellRpcServer = RpcServerPort<AppShellRpcRequestContext> & RpcPushPort
 
@@ -59,10 +61,22 @@ function broadcastSettingsChange(server: RpcPushPort, settings: AppSettings): vo
 async function broadcastProjectsChange(
   server: RpcPushPort,
   projectsService: ProjectsService
-): Promise<void> {
+): Promise<{ activeProject: ProjectRecord | null }> {
   const event = await projectsService.createChangeEvent()
 
   pushTyped(server, RPC_CHANNELS.projects.onChange, { to: 'all' }, event)
+
+  return event
+}
+
+/**
+ * 将当前 IPC sender 绑定到对应 workspace；null 表示普通未绑定聊天空间。
+ */
+function bindSenderWorkspace(
+  context: AppShellRpcRequestContext,
+  project: Pick<ProjectRecord, 'id'> | null
+): void {
+  bindLegacyWebContentsClientWorkspace(context.event.sender, project?.id ?? null)
 }
 
 /**
@@ -143,22 +157,35 @@ function registerProjectsHandlers(
   projectsService: ProjectsService
 ): void {
   server.handle(RPC_CHANNELS.projects.list, () => projectsService.listProjects())
-  server.handle(RPC_CHANNELS.projects.getActive, () => projectsService.getActiveProject())
-  server.handle(RPC_CHANNELS.projects.useExistingFolder, async () => {
+  server.handle(RPC_CHANNELS.projects.getActive, async (context) => {
+    const project = await projectsService.getActiveProject()
+
+    bindSenderWorkspace(context, project)
+
+    return project
+  })
+  server.handle(RPC_CHANNELS.projects.useExistingFolder, async (context) => {
     const project = await projectsService.useExistingFolder()
 
     await broadcastProjectsChange(server, projectsService)
 
+    if (project !== null) {
+      bindSenderWorkspace(context, project)
+    }
+
     return project
   })
-  server.handle(RPC_CHANNELS.projects.delete, async (_context, input: DeleteProjectInput) => {
+  server.handle(RPC_CHANNELS.projects.delete, async (context, input: DeleteProjectInput) => {
     await projectsService.deleteProject(input)
-    await broadcastProjectsChange(server, projectsService)
+    const event = await broadcastProjectsChange(server, projectsService)
+
+    bindSenderWorkspace(context, event.activeProject)
   })
-  server.handle(RPC_CHANNELS.projects.setActive, async (_context, input: SetActiveProjectInput) => {
+  server.handle(RPC_CHANNELS.projects.setActive, async (context, input: SetActiveProjectInput) => {
     const project = await projectsService.setActiveProject(input)
 
     await broadcastProjectsChange(server, projectsService)
+    bindSenderWorkspace(context, project)
 
     return project
   })
