@@ -121,17 +121,19 @@ function createRequestEnvelope(channel: string, args: unknown[] = []) {
   }
 }
 
-describe('createSessionIpcRpcServer', () => {
+describe('createElectronEnvelopeIpcRpcServer session behavior', () => {
   beforeEach(() => {
     handleMock.mockReset()
     getAllWindowsMock.mockReset()
   })
 
   it('returns response envelopes through the workspace IPC dispatcher', async () => {
-    const { createSessionIpcRpcServer } = await import('@main/bootstrap/session-ipc-adapter')
+    const { createElectronEnvelopeIpcRpcServer } = await import(
+      '@main/bootstrap/electron-envelope-ipc-rpc-server'
+    )
     const { ipcChannels } = await import('@ipc/channels')
     const { RPC_CHANNELS } = await import('@moon/shared/protocol')
-    const rpcServer = createSessionIpcRpcServer()
+    const rpcServer = createElectronEnvelopeIpcRpcServer()
 
     rpcServer.handle(RPC_CHANNELS.sessions.listSessions, () => [{ id: 'session-1' }])
 
@@ -152,7 +154,9 @@ describe('createSessionIpcRpcServer', () => {
   })
 
   it('routes session events with direct projectId to workspace clients', async () => {
-    const { createSessionIpcRpcServer } = await import('@main/bootstrap/session-ipc-adapter')
+    const { createElectronEnvelopeIpcRpcServer } = await import(
+      '@main/bootstrap/electron-envelope-ipc-rpc-server'
+    )
     const { ipcChannels } = await import('@ipc/channels')
     const { RPC_CHANNELS } = await import('@moon/shared/protocol')
     const { bindLegacyWebContentsClientWorkspace } = await import(
@@ -164,7 +168,7 @@ describe('createSessionIpcRpcServer', () => {
     const sameWorkspaceWebContents = { id: 301, send: vi.fn() }
     const senderWebContents = { id: 302, send: vi.fn() }
     const otherWorkspaceWebContents = { id: 303, send: vi.fn() }
-    const rpcServer = createSessionIpcRpcServer()
+    const rpcServer = createElectronEnvelopeIpcRpcServer()
 
     getAllWindowsMock.mockReturnValue([
       { webContents: sameWorkspaceWebContents },
@@ -235,14 +239,16 @@ describe('createSessionIpcRpcServer', () => {
   })
 
   it('keeps null-project session events scoped to the current client', async () => {
-    const { createSessionIpcRpcServer } = await import('@main/bootstrap/session-ipc-adapter')
+    const { createElectronEnvelopeIpcRpcServer } = await import(
+      '@main/bootstrap/electron-envelope-ipc-rpc-server'
+    )
     const { ipcChannels } = await import('@ipc/channels')
     const { RPC_CHANNELS } = await import('@moon/shared/protocol')
     const operationEvent = createMessageCreatedEvent(null)
     const sender = { id: 2, send: vi.fn() }
     const otherWebContents = { id: 1, send: vi.fn() }
     const senderWebContents = { id: 2, send: vi.fn() }
-    const rpcServer = createSessionIpcRpcServer()
+    const rpcServer = createElectronEnvelopeIpcRpcServer()
 
     getAllWindowsMock.mockReturnValue([
       { webContents: otherWebContents },
@@ -282,7 +288,9 @@ describe('createSessionIpcRpcServer', () => {
   })
 
   it('routes session events with route hints to workspace clients', async () => {
-    const { createSessionIpcRpcServer } = await import('@main/bootstrap/session-ipc-adapter')
+    const { createElectronEnvelopeIpcRpcServer } = await import(
+      '@main/bootstrap/electron-envelope-ipc-rpc-server'
+    )
     const { ipcChannels } = await import('@ipc/channels')
     const { RPC_CHANNELS } = await import('@moon/shared/protocol')
     const { bindLegacyWebContentsClientWorkspace } = await import(
@@ -293,7 +301,7 @@ describe('createSessionIpcRpcServer', () => {
     const sameWorkspaceWebContents = { id: 501, send: vi.fn() }
     const senderWebContents = { id: 502, send: vi.fn() }
     const otherWorkspaceWebContents = { id: 503, send: vi.fn() }
-    const rpcServer = createSessionIpcRpcServer()
+    const rpcServer = createElectronEnvelopeIpcRpcServer()
 
     getAllWindowsMock.mockReturnValue([
       { webContents: sameWorkspaceWebContents },
@@ -347,14 +355,16 @@ describe('createSessionIpcRpcServer', () => {
   })
 
   it('keeps payloads without direct session scoped to the current client', async () => {
-    const { createSessionIpcRpcServer } = await import('@main/bootstrap/session-ipc-adapter')
+    const { createElectronEnvelopeIpcRpcServer } = await import(
+      '@main/bootstrap/electron-envelope-ipc-rpc-server'
+    )
     const { ipcChannels } = await import('@ipc/channels')
     const { RPC_CHANNELS } = await import('@moon/shared/protocol')
     const operationEvent = createMessageDeltaEvent()
     const sender = { id: 402, send: vi.fn() }
     const otherWebContents = { id: 401, send: vi.fn() }
     const senderWebContents = { id: 402, send: vi.fn() }
-    const rpcServer = createSessionIpcRpcServer()
+    const rpcServer = createElectronEnvelopeIpcRpcServer()
 
     getAllWindowsMock.mockReturnValue([
       { webContents: otherWebContents },
@@ -394,10 +404,12 @@ describe('createSessionIpcRpcServer', () => {
   })
 
   it('returns HANDLER_ERROR response envelopes for ordinary handler errors', async () => {
-    const { createSessionIpcRpcServer } = await import('@main/bootstrap/session-ipc-adapter')
+    const { createElectronEnvelopeIpcRpcServer } = await import(
+      '@main/bootstrap/electron-envelope-ipc-rpc-server'
+    )
     const { ipcChannels } = await import('@ipc/channels')
     const { RPC_CHANNELS } = await import('@moon/shared/protocol')
-    const rpcServer = createSessionIpcRpcServer()
+    const rpcServer = createElectronEnvelopeIpcRpcServer()
 
     rpcServer.handle(RPC_CHANNELS.sessions.getMessages, () => {
       throw new Error('boom')
@@ -421,10 +433,12 @@ describe('createSessionIpcRpcServer', () => {
   })
 
   it('preserves CodedError codes in response envelopes', async () => {
-    const { createSessionIpcRpcServer } = await import('@main/bootstrap/session-ipc-adapter')
+    const { createElectronEnvelopeIpcRpcServer } = await import(
+      '@main/bootstrap/electron-envelope-ipc-rpc-server'
+    )
     const { ipcChannels } = await import('@ipc/channels')
     const { CodedError, RPC_CHANNELS } = await import('@moon/shared/protocol')
-    const rpcServer = createSessionIpcRpcServer()
+    const rpcServer = createElectronEnvelopeIpcRpcServer()
 
     rpcServer.handle(RPC_CHANNELS.sessions.cancelOperation, () => {
       throw new CodedError('REQUEST_TIMEOUT', 'too slow')

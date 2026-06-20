@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { ipcChannels } from '@ipc/channels'
 import { registerWindowStateEvents } from '@main/bootstrap/window-state-events'
+import { RPC_CHANNELS } from '@moon/shared/protocol'
 
 type WindowEventName = 'maximize' | 'unmaximize' | 'restore'
 
@@ -29,6 +30,13 @@ describe('registerWindowStateEvents', () => {
 
     listeners.get('maximize')?.()
 
-    expect(send).toHaveBeenCalledWith(ipcChannels.window.onStateChange, { isMaximized: true })
+    expect(send).toHaveBeenCalledWith(
+      ipcChannels.rpc.event,
+      expect.objectContaining({
+        type: 'event',
+        channel: RPC_CHANNELS.window.onStateChange,
+        args: [{ isMaximized: true }]
+      })
+    )
   })
 })

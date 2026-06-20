@@ -7,7 +7,6 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { ipcChannels } from '@ipc/channels'
 import { RPC_CHANNELS } from '@moon/shared/protocol'
 import { MOON_API_CHANNEL_MAP } from '@preload/channel-map'
 
@@ -21,9 +20,6 @@ describe('MOON_API_CHANNEL_MAP', () => {
       type: 'listener',
       channel: RPC_CHANNELS.settings.onChange
     })
-    expect(MOON_API_CHANNEL_MAP['settings.saveProvider'].channel).not.toBe(
-      ipcChannels.settings.saveProvider
-    )
   })
 
   it('uses shared RPC channels for projects APIs', () => {
@@ -35,9 +31,6 @@ describe('MOON_API_CHANNEL_MAP', () => {
       type: 'listener',
       channel: RPC_CHANNELS.projects.onChange
     })
-    expect(MOON_API_CHANNEL_MAP['projects.getActive'].channel).not.toBe(
-      ipcChannels.projects.getActive
-    )
   })
 
   it('uses shared RPC channels for window control APIs', () => {
@@ -49,8 +42,5 @@ describe('MOON_API_CHANNEL_MAP', () => {
       type: 'listener',
       channel: RPC_CHANNELS.window.onStateChange
     })
-    expect(MOON_API_CHANNEL_MAP['windowControls.openSettings'].channel).not.toBe(
-      ipcChannels.window.openSettings
-    )
   })
 })

@@ -110,10 +110,27 @@ describe('registerIpcHandlers', () => {
     openSettingsWindow.mockReset()
   })
 
+  it('registers a single unified rpc request handler', async () => {
+    const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
+    const { ipcChannels } = await import('@ipc/channels')
+
+    registerIpcHandlers({
+      chatService: chatService as never,
+      openSettingsWindow,
+      projectsService: projectsService as never,
+      settingsService: settingsService as never
+    })
+
+    expect(removeHandlerMock).toHaveBeenCalledTimes(1)
+    expect(removeHandlerMock).toHaveBeenCalledWith(ipcChannels.rpc.request)
+    expect(handleMock.mock.calls.map(([channel]) => channel)).toEqual([ipcChannels.rpc.request])
+  })
+
   it('registers settings handlers that delegate through the settings service', async () => {
     const { createDefaultAppSettings } = await import('@moon/shared/domain/settings')
     const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
     const { ipcChannels } = await import('@ipc/channels')
+    const { RPC_CHANNELS } = await import('@moon/shared/protocol')
     const settings = createDefaultAppSettings()
     const input = {
       provider: 'claude',
@@ -133,16 +150,25 @@ describe('registerIpcHandlers', () => {
       settingsService: settingsService as never
     })
 
-    const getSettingsHandler = getRegisteredHandler(ipcChannels.settings.get)
-    const saveAppearanceHandler = getRegisteredHandler(ipcChannels.settings.saveAppearance)
-    const saveProviderHandler = getRegisteredHandler(ipcChannels.settings.saveProvider)
-
-    expect(getSettingsHandler).toBeTypeOf('function')
-    expect(saveAppearanceHandler).toBeTypeOf('function')
-    expect(saveProviderHandler).toBeTypeOf('function')
-    expect(await getSettingsHandler?.({ sender: {} })).toBe(settings)
-    expect(await saveAppearanceHandler?.({ sender: {} }, { theme: 'dark' })).toBe(settings)
-    expect(await saveProviderHandler?.({ sender: {} }, input)).toBe(settings)
+    expect(
+      await dispatchRpcRequest(ipcChannels.rpc.request, { sender: {} }, RPC_CHANNELS.settings.get)
+    ).toBe(settings)
+    expect(
+      await dispatchRpcRequest(
+        ipcChannels.rpc.request,
+        { sender: {} },
+        RPC_CHANNELS.settings.saveAppearance,
+        [{ theme: 'dark' }]
+      )
+    ).toBe(settings)
+    expect(
+      await dispatchRpcRequest(
+        ipcChannels.rpc.request,
+        { sender: {} },
+        RPC_CHANNELS.settings.saveProvider,
+        [input]
+      )
+    ).toBe(settings)
     expect(settingsService.saveAppearance).toHaveBeenCalledWith({ theme: 'dark' })
     expect(settingsService.saveProvider).toHaveBeenCalledWith(input)
   })
@@ -461,9 +487,10 @@ describe('registerIpcHandlers', () => {
     const { createDefaultAppSettings } = await import('@moon/shared/domain/settings')
     const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
     const { ipcChannels } = await import('@ipc/channels')
+    const { RPC_CHANNELS } = await import('@moon/shared/protocol')
     const settings = createDefaultAppSettings()
-    const firstWebContents = { send: vi.fn() }
-    const secondWebContents = { send: vi.fn() }
+    const firstWebContents = { id: 1, send: vi.fn() }
+    const secondWebContents = { id: 2, send: vi.fn() }
 
     settingsService.saveAppearance.mockResolvedValue(settings)
     getAllWindowsMock.mockReturnValue([
@@ -478,16 +505,36 @@ describe('registerIpcHandlers', () => {
       settingsService: settingsService as never
     })
 
-    const saveAppearanceHandler = getRegisteredHandler(ipcChannels.settings.saveAppearance)
-
-    expect(await saveAppearanceHandler?.({ sender: {} }, { theme: 'dark' })).toBe(settings)
-    expect(firstWebContents.send).toHaveBeenCalledWith(ipcChannels.settings.onChange, settings)
-    expect(secondWebContents.send).toHaveBeenCalledWith(ipcChannels.settings.onChange, settings)
+    expect(
+      await dispatchRpcRequest(
+        ipcChannels.rpc.request,
+        { sender: { id: 1 } },
+        RPC_CHANNELS.settings.saveAppearance,
+        [{ theme: 'dark' }]
+      )
+    ).toBe(settings)
+    expect(firstWebContents.send).toHaveBeenCalledWith(
+      ipcChannels.rpc.event,
+      expect.objectContaining({
+        type: 'event',
+        channel: RPC_CHANNELS.settings.onChange,
+        args: [settings]
+      })
+    )
+    expect(secondWebContents.send).toHaveBeenCalledWith(
+      ipcChannels.rpc.event,
+      expect.objectContaining({
+        type: 'event',
+        channel: RPC_CHANNELS.settings.onChange,
+        args: [settings]
+      })
+    )
   })
 
   it('registers project handlers and broadcasts project changes', async () => {
     const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
     const { ipcChannels } = await import('@ipc/channels')
+    const { RPC_CHANNELS } = await import('@moon/shared/protocol')
     const project = {
       id: 'project-1',
       name: 'moon',
@@ -499,8 +546,8 @@ describe('registerIpcHandlers', () => {
       activeProject: project,
       projects: [project]
     }
-    const firstWebContents = { send: vi.fn() }
-    const secondWebContents = { send: vi.fn() }
+    const firstWebContents = { id: 1, send: vi.fn() }
+    const secondWebContents = { id: 2, send: vi.fn() }
 
     projectsService.listProjects.mockResolvedValue([project])
     projectsService.getActiveProject.mockResolvedValue(project)
@@ -520,32 +567,58 @@ describe('registerIpcHandlers', () => {
       settingsService: settingsService as never
     })
 
-    expect(await getRegisteredHandler(ipcChannels.projects.list)?.({ sender: {} })).toEqual([
-      project
-    ])
-    expect(await getRegisteredHandler(ipcChannels.projects.getActive)?.({ sender: {} })).toBe(
-      project
-    )
     expect(
-      await getRegisteredHandler(ipcChannels.projects.useExistingFolder)?.({ sender: {} })
-    ).toBe(project)
+      await dispatchRpcRequest(ipcChannels.rpc.request, { sender: { id: 1 } }, RPC_CHANNELS.projects.list)
+    ).toEqual([project])
     expect(
-      await getRegisteredHandler(ipcChannels.projects.setActive)?.(
-        { sender: {} },
-        { projectId: 'project-1' }
+      await dispatchRpcRequest(
+        ipcChannels.rpc.request,
+        { sender: { id: 1 } },
+        RPC_CHANNELS.projects.getActive
       )
     ).toBe(project)
     expect(
-      await getRegisteredHandler(ipcChannels.projects.delete)?.(
-        { sender: {} },
-        { projectId: 'project-1' }
+      await dispatchRpcRequest(
+        ipcChannels.rpc.request,
+        { sender: { id: 1 } },
+        RPC_CHANNELS.projects.useExistingFolder
+      )
+    ).toBe(project)
+    expect(
+      await dispatchRpcRequest(
+        ipcChannels.rpc.request,
+        { sender: { id: 1 } },
+        RPC_CHANNELS.projects.setActive,
+        [{ projectId: 'project-1' }]
+      )
+    ).toBe(project)
+    expect(
+      await dispatchRpcRequest(
+        ipcChannels.rpc.request,
+        { sender: { id: 1 } },
+        RPC_CHANNELS.projects.delete,
+        [{ projectId: 'project-1' }]
       )
     ).toBeUndefined()
 
     expect(projectsService.setActiveProject).toHaveBeenCalledWith({ projectId: 'project-1' })
     expect(projectsService.deleteProject).toHaveBeenCalledWith({ projectId: 'project-1' })
-    expect(firstWebContents.send).toHaveBeenCalledWith(ipcChannels.projects.onChange, event)
-    expect(secondWebContents.send).toHaveBeenCalledWith(ipcChannels.projects.onChange, event)
+    expect(firstWebContents.send).toHaveBeenCalledWith(
+      ipcChannels.rpc.event,
+      expect.objectContaining({
+        type: 'event',
+        channel: RPC_CHANNELS.projects.onChange,
+        args: [event]
+      })
+    )
+    expect(secondWebContents.send).toHaveBeenCalledWith(
+      ipcChannels.rpc.event,
+      expect.objectContaining({
+        type: 'event',
+        channel: RPC_CHANNELS.projects.onChange,
+        args: [event]
+      })
+    )
   })
 
   it('registers window control handlers that operate on the sender window', async () => {
@@ -561,6 +634,7 @@ describe('registerIpcHandlers', () => {
 
     const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
     const { ipcChannels } = await import('@ipc/channels')
+    const { RPC_CHANNELS } = await import('@moon/shared/protocol')
 
     registerIpcHandlers({
       chatService: chatService as never,
@@ -569,19 +643,11 @@ describe('registerIpcHandlers', () => {
       settingsService: settingsService as never
     })
 
-    const closeHandler = getRegisteredHandler(ipcChannels.window.close)
-    const minimizeHandler = getRegisteredHandler(ipcChannels.window.minimize)
-    const toggleMaximizeHandler = getRegisteredHandler(ipcChannels.window.toggleMaximize)
-
-    expect(closeHandler).toBeTypeOf('function')
-    expect(minimizeHandler).toBeTypeOf('function')
-    expect(toggleMaximizeHandler).toBeTypeOf('function')
-
     const event = { sender: {} }
 
-    await closeHandler?.(event)
-    await minimizeHandler?.(event)
-    await toggleMaximizeHandler?.(event)
+    await dispatchRpcRequest(ipcChannels.rpc.request, event, RPC_CHANNELS.window.close)
+    await dispatchRpcRequest(ipcChannels.rpc.request, event, RPC_CHANNELS.window.minimize)
+    await dispatchRpcRequest(ipcChannels.rpc.request, event, RPC_CHANNELS.window.toggleMaximize)
 
     expect(fromWebContentsMock).toHaveBeenCalledTimes(3)
     expect(browserWindow.close).toHaveBeenCalledTimes(1)
@@ -593,6 +659,7 @@ describe('registerIpcHandlers', () => {
   it('registers a handler that opens the dedicated settings window', async () => {
     const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
     const { ipcChannels } = await import('@ipc/channels')
+    const { RPC_CHANNELS } = await import('@moon/shared/protocol')
 
     registerIpcHandlers({
       chatService: chatService as never,
@@ -601,12 +668,13 @@ describe('registerIpcHandlers', () => {
       openSettingsWindow
     })
 
-    const openSettingsHandler = getRegisteredHandler(ipcChannels.window.openSettings)
-
-    expect(openSettingsHandler).toBeTypeOf('function')
-
-    await openSettingsHandler?.()
-    await openSettingsHandler?.({ sender: {} }, { section: 'providers' })
+    await dispatchRpcRequest(ipcChannels.rpc.request, { sender: {} }, RPC_CHANNELS.window.openSettings)
+    await dispatchRpcRequest(
+      ipcChannels.rpc.request,
+      { sender: {} },
+      RPC_CHANNELS.window.openSettings,
+      [{ section: 'providers' }]
+    )
 
     expect(openSettingsWindow).toHaveBeenCalledTimes(2)
     expect(openSettingsWindow).toHaveBeenCalledWith(undefined)
@@ -616,6 +684,7 @@ describe('registerIpcHandlers', () => {
   it('rejects unsupported settings-window sections before opening a window', async () => {
     const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
     const { ipcChannels } = await import('@ipc/channels')
+    const { RPC_CHANNELS } = await import('@moon/shared/protocol')
 
     registerIpcHandlers({
       chatService: chatService as never,
@@ -624,9 +693,25 @@ describe('registerIpcHandlers', () => {
       openSettingsWindow
     })
 
-    const openSettingsHandler = getRegisteredHandler(ipcChannels.window.openSettings)
+    const handler = getRegisteredHandler(ipcChannels.rpc.request)
 
-    await expect(openSettingsHandler?.({ sender: {} }, { section: 'general' })).rejects.toThrow()
+    await expect(
+      handler?.(
+        { sender: {} },
+        {
+          id: 'request-1',
+          type: 'request',
+          channel: RPC_CHANNELS.window.openSettings,
+          args: [{ section: 'general' }]
+        }
+      )
+    ).resolves.toMatchObject({
+      type: 'response',
+      channel: RPC_CHANNELS.window.openSettings,
+      error: {
+        code: 'HANDLER_ERROR'
+      }
+    })
     expect(openSettingsWindow).not.toHaveBeenCalled()
   })
 
@@ -639,6 +724,7 @@ describe('registerIpcHandlers', () => {
 
     const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
     const { ipcChannels } = await import('@ipc/channels')
+    const { RPC_CHANNELS } = await import('@moon/shared/protocol')
 
     registerIpcHandlers({
       chatService: chatService as never,
@@ -647,9 +733,8 @@ describe('registerIpcHandlers', () => {
       openSettingsWindow
     })
 
-    const getStateHandler = getRegisteredHandler(ipcChannels.window.getState)
-
-    expect(getStateHandler).toBeTypeOf('function')
-    await expect(getStateHandler?.({ sender: {} })).resolves.toEqual({ isMaximized: true })
+    await expect(
+      dispatchRpcRequest(ipcChannels.rpc.request, { sender: {} }, RPC_CHANNELS.window.getState)
+    ).resolves.toEqual({ isMaximized: true })
   })
 })

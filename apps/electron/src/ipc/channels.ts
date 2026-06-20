@@ -11,31 +11,4 @@ export const ipcChannels = {
     request: 'rpc:request',
     event: 'rpc:event'
   },
-  settings: {
-    get: 'settings:get',
-    createCustomProvider: 'settings:create-custom-provider',
-    createCustomAcpProvider: 'settings:create-custom-acp-provider',
-    saveProvider: 'settings:save-provider',
-    deleteProvider: 'settings:delete-provider',
-    fetchProviderModels: 'settings:fetch-provider-models',
-    testProvider: 'settings:test-provider',
-    saveAppearance: 'settings:save-appearance',
-    onChange: 'settings:on-change'
-  },
-  projects: {
-    list: 'projects:list',
-    getActive: 'projects:get-active',
-    useExistingFolder: 'projects:use-existing-folder',
-    delete: 'projects:delete',
-    setActive: 'projects:set-active',
-    onChange: 'projects:on-change'
-  },
-  window: {
-    close: 'window:close',
-    minimize: 'window:minimize',
-    toggleMaximize: 'window:toggle-maximize',
-    openSettings: 'window:open-settings',
-    getState: 'window:get-state',
-    onStateChange: 'window:on-state-change'
-  }
 } as const

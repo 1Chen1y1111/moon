@@ -10,9 +10,8 @@ import { registerSessionHandlers } from '@moon/server-core/handlers/rpc'
 import type { ChatService } from '../services/chat-service'
 import type { ProjectsService } from '../services/projects-service'
 import type { SettingsService } from '../services/settings-service'
-import { createAppShellIpcRpcServer } from './app-shell-ipc-adapter'
+import { createElectronEnvelopeIpcRpcServer } from './electron-envelope-ipc-rpc-server'
 import { registerAppShellHandlers } from './app-shell-rpc-handlers'
-import { createSessionIpcRpcServer } from './session-ipc-adapter'
 
 type RegisterIpcDependencies = {
   chatService: ChatService
@@ -31,27 +30,11 @@ export function registerIpcHandlers({
   settingsService
 }: RegisterIpcDependencies): void {
   ipcMain.removeHandler(ipcChannels.rpc.request)
-  ipcMain.removeHandler(ipcChannels.settings.get)
-  ipcMain.removeHandler(ipcChannels.settings.createCustomProvider)
-  ipcMain.removeHandler(ipcChannels.settings.createCustomAcpProvider)
-  ipcMain.removeHandler(ipcChannels.settings.saveProvider)
-  ipcMain.removeHandler(ipcChannels.settings.deleteProvider)
-  ipcMain.removeHandler(ipcChannels.settings.fetchProviderModels)
-  ipcMain.removeHandler(ipcChannels.settings.testProvider)
-  ipcMain.removeHandler(ipcChannels.settings.saveAppearance)
-  ipcMain.removeHandler(ipcChannels.projects.list)
-  ipcMain.removeHandler(ipcChannels.projects.getActive)
-  ipcMain.removeHandler(ipcChannels.projects.useExistingFolder)
-  ipcMain.removeHandler(ipcChannels.projects.delete)
-  ipcMain.removeHandler(ipcChannels.projects.setActive)
-  ipcMain.removeHandler(ipcChannels.window.close)
-  ipcMain.removeHandler(ipcChannels.window.minimize)
-  ipcMain.removeHandler(ipcChannels.window.toggleMaximize)
-  ipcMain.removeHandler(ipcChannels.window.openSettings)
-  ipcMain.removeHandler(ipcChannels.window.getState)
 
-  registerSessionHandlers(createSessionIpcRpcServer(), { sessionHandlers: chatService })
-  registerAppShellHandlers(createAppShellIpcRpcServer(), {
+  const rpcServer = createElectronEnvelopeIpcRpcServer()
+
+  registerSessionHandlers(rpcServer, { sessionHandlers: chatService })
+  registerAppShellHandlers(rpcServer, {
     openSettingsWindow,
     projectsService,
     settingsService

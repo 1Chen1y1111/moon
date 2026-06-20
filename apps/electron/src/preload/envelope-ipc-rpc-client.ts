@@ -1,7 +1,9 @@
 /**
- * 负责把 preload workspace RPC client 适配到 Electron 内部 envelope IPC。
+ * 负责把 preload RPC client 适配到 Electron 内部 envelope IPC。
  * 本文件在 preload 内部使用 MessageEnvelope 语义，但不改变 renderer 可见 API 或 IPC channel。
  */
+
+import type { IpcRenderer } from 'electron'
 
 import {
   EnvelopeRpcClient,
@@ -14,7 +16,11 @@ import {
   type WireError
 } from '@moon/shared/protocol'
 import { ipcChannels } from '@ipc/channels'
-import type { IpcRendererBridge } from './ipc-rpc-channels'
+
+/**
+ * preload 中实际会调用的 Electron ipcRenderer 子集，方便单测注入 fake。
+ */
+export type IpcRendererBridge = Pick<IpcRenderer, 'invoke' | 'on' | 'off'>
 
 export type EnvelopeIpcRpcClientOptions = {
   /**
@@ -24,7 +30,7 @@ export type EnvelopeIpcRpcClientOptions = {
 }
 
 /**
- * 创建基于 Electron workspace envelope IPC 的 RPC client。
+ * 创建基于 Electron envelope IPC 的 RPC client。
  */
 export function createEnvelopeIpcRpcClient(
   ipcRenderer: IpcRendererBridge,
@@ -32,15 +38,15 @@ export function createEnvelopeIpcRpcClient(
 ): RpcClientPort {
   return new EnvelopeRpcClient({
     createId: options.createId,
-    request: (envelope) => requestWorkspaceIpcEnvelope(ipcRenderer, envelope),
-    subscribe: createWorkspaceIpcEnvelopeSubscription(ipcRenderer)
+    request: (envelope) => requestElectronIpcEnvelope(ipcRenderer, envelope),
+    subscribe: createElectronIpcEnvelopeSubscription(ipcRenderer)
   })
 }
 
 /**
- * 将 request envelope 发送到 main 侧 workspace envelope dispatcher。
+ * 将 request envelope 发送到 main 侧 unified envelope dispatcher。
  */
-async function requestWorkspaceIpcEnvelope(
+async function requestElectronIpcEnvelope(
   ipcRenderer: IpcRendererBridge,
   envelope: MessageEnvelope
 ): Promise<MessageEnvelope> {
@@ -70,9 +76,9 @@ async function requestWorkspaceIpcEnvelope(
 }
 
 /**
- * 订阅 main 侧 workspace event envelope stream。
+ * 订阅 main 侧 event envelope stream。
  */
-function createWorkspaceIpcEnvelopeSubscription(
+function createElectronIpcEnvelopeSubscription(
   ipcRenderer: IpcRendererBridge
 ): EnvelopeRpcClientSubscribe {
   return (listener) => {
@@ -88,7 +94,7 @@ function createWorkspaceIpcEnvelopeSubscription(
 }
 
 /**
- * 将 workspace IPC rejection 转成 WireError，保留可识别的协议错误码。
+ * 将 IPC rejection 转成 WireError，保留可识别的协议错误码。
  */
 function createWireError(error: unknown): WireError {
   const rawCode = (error as { code?: unknown } | null)?.code

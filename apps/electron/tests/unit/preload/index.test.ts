@@ -101,7 +101,14 @@ describe('preload api', () => {
     await api.projects.setActive({ projectId: 'project-1' })
     await api.windowControls.openSettings({ section: 'providers' })
 
-    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.settings.get)
+    expect(ipcInvokeMock).toHaveBeenCalledWith(
+      ipcChannels.rpc.request,
+      expect.objectContaining({
+        type: 'request',
+        channel: RPC_CHANNELS.settings.get,
+        args: []
+      })
+    )
     expect(ipcInvokeMock).toHaveBeenCalledWith(
       ipcChannels.rpc.request,
       expect.objectContaining({
@@ -213,22 +220,70 @@ describe('preload api', () => {
         args: [{ toolInvocationId: 'tool-1' }]
       })
     )
-    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.settings.saveAppearance, {
-      theme: 'dark'
-    })
-    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.settings.saveProvider, input)
-    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.projects.list)
-    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.projects.getActive)
-    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.projects.useExistingFolder)
-    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.projects.delete, {
-      projectId: 'project-1'
-    })
-    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.projects.setActive, {
-      projectId: 'project-1'
-    })
-    expect(ipcInvokeMock).toHaveBeenCalledWith(ipcChannels.window.openSettings, {
-      section: 'providers'
-    })
+    expect(ipcInvokeMock).toHaveBeenCalledWith(
+      ipcChannels.rpc.request,
+      expect.objectContaining({
+        type: 'request',
+        channel: RPC_CHANNELS.settings.saveAppearance,
+        args: [{ theme: 'dark' }]
+      })
+    )
+    expect(ipcInvokeMock).toHaveBeenCalledWith(
+      ipcChannels.rpc.request,
+      expect.objectContaining({
+        type: 'request',
+        channel: RPC_CHANNELS.settings.saveProvider,
+        args: [input]
+      })
+    )
+    expect(ipcInvokeMock).toHaveBeenCalledWith(
+      ipcChannels.rpc.request,
+      expect.objectContaining({
+        type: 'request',
+        channel: RPC_CHANNELS.projects.list,
+        args: []
+      })
+    )
+    expect(ipcInvokeMock).toHaveBeenCalledWith(
+      ipcChannels.rpc.request,
+      expect.objectContaining({
+        type: 'request',
+        channel: RPC_CHANNELS.projects.getActive,
+        args: []
+      })
+    )
+    expect(ipcInvokeMock).toHaveBeenCalledWith(
+      ipcChannels.rpc.request,
+      expect.objectContaining({
+        type: 'request',
+        channel: RPC_CHANNELS.projects.useExistingFolder,
+        args: []
+      })
+    )
+    expect(ipcInvokeMock).toHaveBeenCalledWith(
+      ipcChannels.rpc.request,
+      expect.objectContaining({
+        type: 'request',
+        channel: RPC_CHANNELS.projects.delete,
+        args: [{ projectId: 'project-1' }]
+      })
+    )
+    expect(ipcInvokeMock).toHaveBeenCalledWith(
+      ipcChannels.rpc.request,
+      expect.objectContaining({
+        type: 'request',
+        channel: RPC_CHANNELS.projects.setActive,
+        args: [{ projectId: 'project-1' }]
+      })
+    )
+    expect(ipcInvokeMock).toHaveBeenCalledWith(
+      ipcChannels.rpc.request,
+      expect.objectContaining({
+        type: 'request',
+        channel: RPC_CHANNELS.window.openSettings,
+        args: [{ section: 'providers' }]
+      })
+    )
   })
 
   it('cleans up the window state event subscription', async () => {
@@ -238,17 +293,23 @@ describe('preload api', () => {
     const listener = vi.fn()
 
     const unsubscribe = api.windowControls.onStateChange(listener)
-    const handler = ipcOnMock.mock.calls.find(
-      ([channel]) => channel === ipcChannels.window.onStateChange
-    )?.[1]
+    const handler = ipcOnMock.mock.calls.find(([channel]) => channel === ipcChannels.rpc.event)?.[1]
 
     expect(handler).toBeTypeOf('function')
 
-    handler?.({}, { isMaximized: true })
+    handler?.(
+      {},
+      {
+        id: 'event-1',
+        type: 'event',
+        channel: RPC_CHANNELS.window.onStateChange,
+        args: [{ isMaximized: true }]
+      }
+    )
     unsubscribe()
 
     expect(listener).toHaveBeenCalledWith({ isMaximized: true })
-    expect(ipcOffMock).toHaveBeenCalledWith(ipcChannels.window.onStateChange, handler)
+    expect(ipcOffMock).toHaveBeenCalledWith(ipcChannels.rpc.event, handler)
   })
 
   it('cleans up the settings change event subscription', async () => {
@@ -260,17 +321,23 @@ describe('preload api', () => {
     const settings = createDefaultAppSettings()
 
     const unsubscribe = api.settings.onChange(listener)
-    const handler = ipcOnMock.mock.calls.find(
-      ([channel]) => channel === ipcChannels.settings.onChange
-    )?.[1]
+    const handler = ipcOnMock.mock.calls.find(([channel]) => channel === ipcChannels.rpc.event)?.[1]
 
     expect(handler).toBeTypeOf('function')
 
-    handler?.({}, settings)
+    handler?.(
+      {},
+      {
+        id: 'event-1',
+        type: 'event',
+        channel: RPC_CHANNELS.settings.onChange,
+        args: [settings]
+      }
+    )
     unsubscribe()
 
     expect(listener).toHaveBeenCalledWith(settings)
-    expect(ipcOffMock).toHaveBeenCalledWith(ipcChannels.settings.onChange, handler)
+    expect(ipcOffMock).toHaveBeenCalledWith(ipcChannels.rpc.event, handler)
   })
 
   it('cleans up the unified session event subscription', async () => {
@@ -319,17 +386,23 @@ describe('preload api', () => {
     }
 
     const unsubscribe = api.projects.onChange(listener)
-    const handler = ipcOnMock.mock.calls.find(
-      ([channel]) => channel === ipcChannels.projects.onChange
-    )?.[1]
+    const handler = ipcOnMock.mock.calls.find(([channel]) => channel === ipcChannels.rpc.event)?.[1]
 
     expect(handler).toBeTypeOf('function')
 
-    handler?.({}, event)
+    handler?.(
+      {},
+      {
+        id: 'event-1',
+        type: 'event',
+        channel: RPC_CHANNELS.projects.onChange,
+        args: [event]
+      }
+    )
     unsubscribe()
 
     expect(listener).toHaveBeenCalledWith(event)
-    expect(ipcOffMock).toHaveBeenCalledWith(ipcChannels.projects.onChange, handler)
+    expect(ipcOffMock).toHaveBeenCalledWith(ipcChannels.rpc.event, handler)
   })
 
 })

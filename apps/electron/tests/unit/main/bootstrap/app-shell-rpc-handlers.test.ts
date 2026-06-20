@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { RpcRequestHandler, RpcServerPort } from '@moon/server-core/handlers'
 import type { RpcPushPort } from '@moon/server-core/transport'
-import type { AppShellRpcRequestContext } from '@main/bootstrap/app-shell-ipc-adapter'
+import type { ElectronEnvelopeRpcRequestContext } from '@main/bootstrap/electron-envelope-ipc-rpc-server'
 
 const fromWebContentsMock = vi.fn()
 const getAllWindowsMock = vi.fn()
@@ -22,17 +22,19 @@ vi.mock('electron', () => ({
 }))
 
 function createRpcServerFixture(): {
-  server: RpcServerPort<AppShellRpcRequestContext> & RpcPushPort
-  getHandler: (channel: string) => RpcRequestHandler<AppShellRpcRequestContext> | undefined
+  server: RpcServerPort<ElectronEnvelopeRpcRequestContext> & RpcPushPort
+  getHandler: (
+    channel: string
+  ) => RpcRequestHandler<ElectronEnvelopeRpcRequestContext> | undefined
   push: ReturnType<typeof vi.fn>
 } {
-  const handlers = new Map<string, RpcRequestHandler<AppShellRpcRequestContext>>()
+  const handlers = new Map<string, RpcRequestHandler<ElectronEnvelopeRpcRequestContext>>()
   const push = vi.fn()
 
   return {
     server: {
       handle: (channel, handler) => {
-        handlers.set(channel, handler as RpcRequestHandler<AppShellRpcRequestContext>)
+        handlers.set(channel, handler as RpcRequestHandler<ElectronEnvelopeRpcRequestContext>)
       },
       push
     },

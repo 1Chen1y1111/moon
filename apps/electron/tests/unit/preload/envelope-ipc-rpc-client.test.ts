@@ -1,7 +1,7 @@
 // @vitest-environment node
 
 /**
- * 负责验证 preload envelope IPC client 的 legacy IPC 适配行为。
+ * 负责验证 preload envelope IPC client 的统一 rpc:request/rpc:event 适配行为。
  * 测试只覆盖 preload 内部 transport，不触发真实 Electron、renderer 或主进程 handler。
  */
 
@@ -34,7 +34,7 @@ function createIpcRendererFixture(): {
 }
 
 describe('createEnvelopeIpcRpcClient', () => {
-  it('maps session invoke envelopes to legacy chat IPC channels', async () => {
+  it('sends session invoke envelopes through rpc:request', async () => {
     const { ipcRenderer, invoke } = createIpcRendererFixture()
     const client = createEnvelopeIpcRpcClient(ipcRenderer, { createId: () => 'request-1' })
     const input = { sessionId: 'session-1' }
@@ -53,6 +53,34 @@ describe('createEnvelopeIpcRpcClient', () => {
       id: 'request-1',
       type: 'request',
       channel: RPC_CHANNELS.sessions.getMessages,
+      args: [input]
+    })
+  })
+
+  it('sends app-shell invoke envelopes through rpc:request', async () => {
+    const { ipcRenderer, invoke } = createIpcRendererFixture()
+    const client = createEnvelopeIpcRpcClient(ipcRenderer, { createId: () => 'request-1' })
+    const input = {
+      provider: 'claude',
+      apiKey: 'sk-ant-demo',
+      model: 'claude-3-7-sonnet-latest',
+      baseUrl: ''
+    }
+
+    invoke.mockResolvedValue({
+      id: 'request-1',
+      type: 'response',
+      channel: RPC_CHANNELS.settings.saveProvider,
+      result: { providers: [] }
+    })
+
+    await expect(client.invoke(RPC_CHANNELS.settings.saveProvider, input)).resolves.toEqual({
+      providers: []
+    })
+    expect(invoke).toHaveBeenCalledWith(ipcChannels.rpc.request, {
+      id: 'request-1',
+      type: 'request',
+      channel: RPC_CHANNELS.settings.saveProvider,
       args: [input]
     })
   })
@@ -78,7 +106,7 @@ describe('createEnvelopeIpcRpcClient', () => {
     expect(invoke).not.toHaveBeenCalledWith(ipcChannels.rpc.request, undefined)
   })
 
-  it('turns legacy IPC rejections into coded client errors', async () => {
+  it('turns IPC rejections into coded client errors', async () => {
     const { ipcRenderer, invoke } = createIpcRendererFixture()
     const client = createEnvelopeIpcRpcClient(ipcRenderer, { createId: () => 'request-1' })
     const error = new Error('too slow') as Error & { code: string }
@@ -93,7 +121,7 @@ describe('createEnvelopeIpcRpcClient', () => {
       })
   })
 
-  it('wraps legacy session events as event envelopes and expands payloads to listeners', () => {
+  it('expands session event envelopes to listeners', () => {
     const { ipcRenderer, on, off } = createIpcRendererFixture()
     const client = createEnvelopeIpcRpcClient(ipcRenderer, { createId: () => 'event-1' })
     const listener = vi.fn()
@@ -127,7 +155,33 @@ describe('createEnvelopeIpcRpcClient', () => {
     expect(off).toHaveBeenCalledWith(ipcChannels.rpc.event, handler)
   })
 
-  it('ignores legacy events from other RPC event channels after envelope filtering', () => {
+  it('expands app-shell event envelopes to listeners', () => {
+    const { ipcRenderer, on, off } = createIpcRendererFixture()
+    const client = createEnvelopeIpcRpcClient(ipcRenderer, { createId: () => 'event-1' })
+    const listener = vi.fn()
+    const settings = { appearance: { theme: 'dark' } }
+
+    const unsubscribe = client.on(RPC_CHANNELS.settings.onChange, listener)
+    const handler = on.mock.calls.find(([channel]) => channel === ipcChannels.rpc.event)?.[1]
+
+    expect(handler).toBeTypeOf('function')
+
+    handler?.(
+      {},
+      {
+        id: 'event-1',
+        type: 'event',
+        channel: RPC_CHANNELS.settings.onChange,
+        args: [settings]
+      }
+    )
+    unsubscribe()
+
+    expect(listener).toHaveBeenCalledWith(settings)
+    expect(off).toHaveBeenCalledWith(ipcChannels.rpc.event, handler)
+  })
+
+  it('ignores events from other RPC event channels after envelope filtering', () => {
     const { ipcRenderer, on } = createIpcRendererFixture()
     const client = createEnvelopeIpcRpcClient(ipcRenderer, { createId: () => 'event-1' })
     const listener = vi.fn()

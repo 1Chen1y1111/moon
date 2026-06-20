@@ -22,10 +22,10 @@ import type { DeleteProjectInput, SetActiveProjectInput } from '@moon/shared/dom
 import { RPC_CHANNELS } from '@moon/shared/protocol'
 import type { ProjectsService } from '../services/projects-service'
 import type { SettingsService } from '../services/settings-service'
-import type { AppShellRpcRequestContext } from './app-shell-ipc-adapter'
+import type { ElectronEnvelopeRpcRequestContext } from './electron-envelope-ipc-rpc-server'
 import { bindLegacyWebContentsClientWorkspace } from './legacy-webcontents-client-registry'
 
-type AppShellRpcServer = RpcServerPort<AppShellRpcRequestContext> & RpcPushPort
+type AppShellRpcServer = RpcServerPort<ElectronEnvelopeRpcRequestContext> & RpcPushPort
 
 /**
  * 注册 app-shell RPC handlers 所需的 Electron main 依赖。
@@ -73,7 +73,7 @@ async function broadcastProjectsChange(
  * 将当前 IPC sender 绑定到对应 workspace；null 表示普通未绑定聊天空间。
  */
 function bindSenderWorkspace(
-  context: AppShellRpcRequestContext,
+  context: ElectronEnvelopeRpcRequestContext,
   project: Pick<ProjectRecord, 'id'> | null
 ): void {
   bindLegacyWebContentsClientWorkspace(context.event.sender, project?.id ?? null)
@@ -195,7 +195,7 @@ function registerProjectsHandlers(
  * 注册 window controls 相关 RPC handlers，操作当前 IPC 调用来源窗口。
  */
 function registerWindowHandlers(
-  server: RpcServerPort<AppShellRpcRequestContext>,
+  server: RpcServerPort<ElectronEnvelopeRpcRequestContext>,
   openSettingsWindow: (input?: { section?: 'providers' }) => BrowserWindow
 ): void {
   server.handle(RPC_CHANNELS.window.close, (context) => {
