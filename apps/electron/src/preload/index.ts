@@ -8,11 +8,16 @@ import { contextBridge, ipcRenderer } from 'electron'
 import type { MoonApi } from '@ipc/contracts'
 import { buildClientApi } from './build-client-api'
 import { MOON_API_CHANNEL_MAP } from './channel-map'
+import { createEnvelopeIpcRpcClient } from './envelope-ipc-rpc-client'
 import { createIpcRpcClient } from './ipc-rpc-client'
 import { RoutedClient } from './routed-client'
 
 const localClient = createIpcRpcClient(ipcRenderer)
-const api: MoonApi = buildClientApi(new RoutedClient(localClient, localClient), MOON_API_CHANNEL_MAP)
+const workspaceClient = createEnvelopeIpcRpcClient(ipcRenderer)
+const api: MoonApi = buildClientApi(
+  new RoutedClient(localClient, workspaceClient),
+  MOON_API_CHANNEL_MAP
+)
 
 if (process.contextIsolated) {
   try {
