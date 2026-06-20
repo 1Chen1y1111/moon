@@ -7,9 +7,9 @@ import { randomUUID } from 'node:crypto'
 import { ipcMain, type IpcMainInvokeEvent } from 'electron'
 
 import type { RpcRequestHandler, RpcServerPort } from '@moon/server-core/handlers'
-import { EnvelopeRpcServer, type RpcPushPort } from '@moon/server-core/transport'
-import type { BroadcastEventChannel, MessageEnvelope, WireError } from '@moon/shared/protocol'
-import { emitLegacyRpcEvent } from './legacy-rpc-event-bridge'
+import { EnvelopePushPort, EnvelopeRpcServer, type RpcPushPort } from '@moon/server-core/transport'
+import type { MessageEnvelope, WireError } from '@moon/shared/protocol'
+import { emitLegacyRpcEventEnvelope } from './legacy-rpc-event-bridge'
 
 /**
  * 创建 legacy IPC RPC server 时需要的 transport 映射和上下文工厂。
@@ -27,6 +27,9 @@ export function createLegacyIpcRpcServer<TContext, TChannel extends string = str
   createContext
 }: LegacyIpcRpcServerOptions<TContext, TChannel>): RpcServerPort<TContext> & RpcPushPort {
   const envelopeServer = new EnvelopeRpcServer<TContext>()
+  const envelopePushPort = new EnvelopePushPort({
+    send: emitLegacyRpcEventEnvelope
+  })
 
   return {
     handle: <TArgs extends readonly unknown[], TResult>(
@@ -50,7 +53,7 @@ export function createLegacyIpcRpcServer<TContext, TChannel extends string = str
       })
     },
     push: (channel, target, ...args) => {
-      emitLegacyRpcEvent(channel as BroadcastEventChannel, target, ...(args as never))
+      envelopePushPort.push(channel, target, ...args)
     }
   }
 }

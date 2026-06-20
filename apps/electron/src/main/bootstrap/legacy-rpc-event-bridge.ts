@@ -10,6 +10,7 @@ import {
   RPC_CHANNELS,
   type BroadcastEventArgs,
   type BroadcastEventChannel,
+  type MessageEnvelope,
   type PushTarget
 } from '@moon/shared/protocol'
 import {
@@ -39,6 +40,36 @@ export function emitLegacyRpcEvent<TChannel extends BroadcastEventChannel>(
   channel: TChannel,
   target: LegacyRpcEventTarget,
   ...args: BroadcastEventArgs<TChannel>
+): void {
+  emitLegacyRpcEventArgs(channel, target, args)
+}
+
+/**
+ * 通过 event envelope 发送本地 legacy IPC 事件。
+ * 该入口用于接入 transport-neutral push 编码路径。
+ */
+export function emitLegacyRpcEventEnvelope(
+  target: LegacyRpcEventTarget,
+  envelope: MessageEnvelope
+): void {
+  if (envelope.type !== 'event') {
+    throw new Error(`Unsupported legacy RPC event envelope type: ${envelope.type}`)
+  }
+
+  if (typeof envelope.channel !== 'string' || envelope.channel.length === 0) {
+    throw new Error('Missing legacy RPC event envelope channel')
+  }
+
+  emitLegacyRpcEventArgs(envelope.channel, target, envelope.args ?? [])
+}
+
+/**
+ * 解析 shared RPC event channel 并执行本地 legacy IPC 分发。
+ */
+function emitLegacyRpcEventArgs(
+  channel: string,
+  target: LegacyRpcEventTarget,
+  args: unknown[]
 ): void {
   const legacyChannel = resolveLegacyIpcEventChannel(channel)
 

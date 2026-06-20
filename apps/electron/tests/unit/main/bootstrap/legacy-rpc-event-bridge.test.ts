@@ -136,6 +136,80 @@ describe('emitLegacyRpcEvent', () => {
     expect(getAllWindowsMock).not.toHaveBeenCalled()
   })
 
+  it('maps RPC event envelopes to legacy IPC events without changing payloads', async () => {
+    const { ipcChannels } = await import('@ipc/channels')
+    const { RPC_CHANNELS } = await import('@moon/shared/protocol')
+    const { createDefaultAppSettings } = await import('@moon/shared/domain/settings')
+    const { emitLegacyRpcEventEnvelope } = await import('@main/bootstrap/legacy-rpc-event-bridge')
+    const firstWebContents = { id: 401, send: vi.fn() }
+    const secondWebContents = { id: 402, send: vi.fn() }
+    const selectedSender = { send: vi.fn() }
+    const settings = createDefaultAppSettings()
+    const projectEvent = { projects: [], activeProject: null }
+    const windowState = { isMaximized: true }
+    const sessionEvent = {
+      type: 'message-delta',
+      operationId: 'operation-1',
+      sessionId: 'session-1',
+      topicId: 'topic-1',
+      threadId: 'thread-1',
+      messageId: 'message-1',
+      delta: 'hello'
+    } as const
+
+    getAllWindowsMock.mockReturnValue([
+      { webContents: firstWebContents },
+      { webContents: secondWebContents }
+    ])
+
+    emitLegacyRpcEventEnvelope(
+      { to: 'all' },
+      {
+        id: 'event-1',
+        type: 'event',
+        channel: RPC_CHANNELS.settings.onChange,
+        args: [settings]
+      }
+    )
+    emitLegacyRpcEventEnvelope(
+      { to: 'all' },
+      {
+        id: 'event-2',
+        type: 'event',
+        channel: RPC_CHANNELS.projects.onChange,
+        args: [projectEvent]
+      }
+    )
+    emitLegacyRpcEventEnvelope(
+      { to: 'webContents', sender: selectedSender },
+      {
+        id: 'event-3',
+        type: 'event',
+        channel: RPC_CHANNELS.window.onStateChange,
+        args: [windowState]
+      }
+    )
+    emitLegacyRpcEventEnvelope(
+      { to: 'webContents', sender: selectedSender },
+      {
+        id: 'event-4',
+        type: 'event',
+        channel: RPC_CHANNELS.sessions.event,
+        args: [sessionEvent]
+      }
+    )
+
+    expect(firstWebContents.send).toHaveBeenCalledWith(ipcChannels.settings.onChange, settings)
+    expect(secondWebContents.send).toHaveBeenCalledWith(ipcChannels.settings.onChange, settings)
+    expect(firstWebContents.send).toHaveBeenCalledWith(ipcChannels.projects.onChange, projectEvent)
+    expect(secondWebContents.send).toHaveBeenCalledWith(
+      ipcChannels.projects.onChange,
+      projectEvent
+    )
+    expect(selectedSender.send).toHaveBeenCalledWith(ipcChannels.window.onStateChange, windowState)
+    expect(selectedSender.send).toHaveBeenCalledWith(ipcChannels.chat.sessionEvent, sessionEvent)
+  })
+
   it('throws a clear error for unsupported RPC event channels', async () => {
     const { emitLegacyRpcEvent } = await import('@main/bootstrap/legacy-rpc-event-bridge')
     const unsafeEmitLegacyRpcEvent = emitLegacyRpcEvent as unknown as (
@@ -147,5 +221,29 @@ describe('emitLegacyRpcEvent', () => {
     expect(() => unsafeEmitLegacyRpcEvent('sessions:listSessions', { to: 'all' })).toThrow(
       'Unsupported legacy RPC event channel: sessions:listSessions'
     )
+  })
+
+  it('throws a clear error for unsupported RPC event envelopes', async () => {
+    const { emitLegacyRpcEventEnvelope } = await import('@main/bootstrap/legacy-rpc-event-bridge')
+
+    expect(() =>
+      emitLegacyRpcEventEnvelope(
+        { to: 'all' },
+        {
+          id: 'response-1',
+          type: 'response',
+          channel: 'session:event'
+        }
+      )
+    ).toThrow('Unsupported legacy RPC event envelope type: response')
+    expect(() =>
+      emitLegacyRpcEventEnvelope(
+        { to: 'all' },
+        {
+          id: 'event-1',
+          type: 'event'
+        }
+      )
+    ).toThrow('Missing legacy RPC event envelope channel')
   })
 })
