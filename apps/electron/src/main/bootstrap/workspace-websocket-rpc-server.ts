@@ -31,10 +31,15 @@ import {
 } from '@moon/shared/protocol'
 
 type WorkspaceSocket = {
-  on: (event: 'message' | 'close' | 'error', listener: (...args: unknown[]) => void) => void
+  on: (
+    event: 'message' | 'close' | 'error' | 'pong',
+    listener: (...args: unknown[]) => void
+  ) => void
+  ping?: () => void
   readyState: number
   send: (data: string) => void
   close?: () => void
+  terminate?: () => void
 }
 
 type WorkspaceSocketServer = {
@@ -55,6 +60,7 @@ type CreateWorkspaceSocketServer = (
 type WorkspaceSocketClient = {
   clientId: string
   handshakeComplete: boolean
+  isAlive: boolean
   socket: WorkspaceSocket
   workspaceId: string | null
 }
@@ -73,6 +79,7 @@ export type WorkspaceWebSocketRpcServer = RpcServerPort<SessionRpcRequestContext
 const LOCALHOST = '127.0.0.1'
 const RANDOM_PORT = 0
 const WEBSOCKET_OPEN = 1
+const HEARTBEAT_INTERVAL_MS = 30_000
 
 /**
  * 创建 workspace WebSocket RPC server；实际端口会在首次查询 transport info 时懒启动。
@@ -90,6 +97,7 @@ export function createWorkspaceWebSocketRpcServer({
   })
   let socketServer: WorkspaceSocketServer | null = null
   let startPromise: Promise<WorkspaceSocketServer> | null = null
+  let heartbeatTimer: ReturnType<typeof setInterval> | null = null
 
   const rpcServer: WorkspaceWebSocketRpcServer = {
     handle: <TArgs extends readonly unknown[], TResult>(
@@ -108,6 +116,7 @@ export function createWorkspaceWebSocketRpcServer({
     close: async () => {
       const server = socketServer
 
+      stopHeartbeat()
       clients.forEach((client) => {
         client.socket.close?.()
       })
@@ -153,6 +162,7 @@ export function createWorkspaceWebSocketRpcServer({
         })
       ).then(async (server) => {
         socketServer = server
+        heartbeatTimer = startHeartbeat(clients)
         server.on('connection', (socket) => {
           acceptSocketClient(
             clients,
@@ -168,6 +178,18 @@ export function createWorkspaceWebSocketRpcServer({
     }
 
     return startPromise
+  }
+
+  /**
+   * 停止 workspace WebSocket heartbeat timer。
+   */
+  function stopHeartbeat(): void {
+    if (heartbeatTimer === null) {
+      return
+    }
+
+    clearInterval(heartbeatTimer)
+    heartbeatTimer = null
   }
 }
 
@@ -203,6 +225,7 @@ function acceptSocketClient(
   const client: WorkspaceSocketClient = {
     clientId,
     handshakeComplete: false,
+    isAlive: false,
     socket,
     workspaceId: null
   }
@@ -216,6 +239,9 @@ function acceptSocketClient(
   })
   socket.on('error', () => {
     clients.delete(client)
+  })
+  socket.on('pong', () => {
+    client.isAlive = true
   })
 }
 
@@ -272,12 +298,61 @@ function handleHandshakeEnvelope(client: WorkspaceSocketClient, envelope: Messag
   }
 
   client.handshakeComplete = true
+  client.isAlive = true
   sendEnvelope(client.socket, {
     id: envelope.id,
     type: 'handshake_ack',
     clientId: client.clientId,
     protocolVersion: PROTOCOL_VERSION
   })
+}
+
+/**
+ * 启动 server-side heartbeat，通过 WebSocket ping/pong 清理半开连接。
+ */
+function startHeartbeat(clients: Set<WorkspaceSocketClient>): ReturnType<typeof setInterval> {
+  const timer = setInterval(() => {
+    runHeartbeat(clients)
+  }, HEARTBEAT_INTERVAL_MS)
+  const unrefTimer = timer as { unref?: () => void }
+
+  unrefTimer.unref?.()
+  return timer
+}
+
+/**
+ * 对已完成握手的 client 执行一次 heartbeat 检测。
+ */
+function runHeartbeat(clients: Set<WorkspaceSocketClient>): void {
+  clients.forEach((client) => {
+    if (!client.handshakeComplete) {
+      return
+    }
+
+    if (!client.isAlive) {
+      terminateSocketClient(clients, client)
+      return
+    }
+
+    client.isAlive = false
+    client.socket.ping?.()
+  })
+}
+
+/**
+ * 从 registry 移除失活 client，并尽量用 terminate 快速释放底层 socket。
+ */
+function terminateSocketClient(
+  clients: Set<WorkspaceSocketClient>,
+  client: WorkspaceSocketClient
+): void {
+  clients.delete(client)
+  if (client.socket.terminate) {
+    client.socket.terminate()
+    return
+  }
+
+  client.socket.close?.()
 }
 
 /**

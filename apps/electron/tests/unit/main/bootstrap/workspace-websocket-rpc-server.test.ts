@@ -5,17 +5,23 @@
  * 测试使用 fake WebSocket，不打开真实网络端口。
  */
 
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { serializeEnvelope } from '@moon/server-core/transport'
 import { PROTOCOL_VERSION, RPC_CHANNELS } from '@moon/shared/protocol'
 import { createWorkspaceWebSocketRpcServer } from '@main/bootstrap/workspace-websocket-rpc-server'
 
-type FakeSocketEvent = 'message' | 'close' | 'error'
+type FakeSocketEvent = 'message' | 'close' | 'error' | 'pong'
 type FakeServerEvent = 'connection' | 'listening' | 'error'
+const HEARTBEAT_INTERVAL_MS = 30_000
 
 class FakeSocket {
   readonly sent: string[] = []
+  readonly ping = vi.fn()
+  readonly terminate = vi.fn(() => {
+    this.readyState = 3
+    this.emit('close')
+  })
   readyState = 1
   private readonly listeners = new Map<FakeSocketEvent, Array<(...args: unknown[]) => void>>()
 
@@ -46,6 +52,13 @@ class FakeSocket {
    */
   emitMessage(data: string): void {
     this.emit('message', data)
+  }
+
+  /**
+   * 模拟 client 回复 WebSocket pong control frame。
+   */
+  emitPong(): void {
+    this.emit('pong')
   }
 
   private emit(event: FakeSocketEvent, ...args: unknown[]): void {
@@ -92,9 +105,8 @@ class FakeSocketServer {
 }
 
 async function flushPromises(): Promise<void> {
-  await new Promise((resolve) => {
-    setTimeout(resolve, 0)
-  })
+  await Promise.resolve()
+  await Promise.resolve()
 }
 
 function parseSentEnvelope(socket: FakeSocket, index: number): unknown {
@@ -113,6 +125,10 @@ async function performHandshake(socket: FakeSocket, id = 'handshake-1'): Promise
 }
 
 describe('createWorkspaceWebSocketRpcServer', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it('requires a protocol handshake before dispatching workspace requests', async () => {
     const fakeServer = new FakeSocketServer()
     const handler = vi.fn()
@@ -328,6 +344,7 @@ describe('createWorkspaceWebSocketRpcServer', () => {
   })
 
   it('closes sockets and the WebSocket server during cleanup', async () => {
+    vi.useFakeTimers()
     const fakeServer = new FakeSocketServer()
     const server = createWorkspaceWebSocketRpcServer({
       createWebSocketServer: () => fakeServer
@@ -336,10 +353,13 @@ describe('createWorkspaceWebSocketRpcServer', () => {
     await server.getTransportInfo()
     const socket = fakeServer.connect()
 
+    expect(vi.getTimerCount()).toBe(1)
+
     await server.close()
 
     expect(socket.readyState).toBe(3)
     expect(fakeServer.close).toHaveBeenCalledOnce()
+    expect(vi.getTimerCount()).toBe(0)
   })
 
   it('pushes event envelopes only to clients that completed handshake', async () => {
@@ -452,5 +472,74 @@ describe('createWorkspaceWebSocketRpcServer', () => {
       channel: RPC_CHANNELS.sessions.listSessions,
       result: [{ id: 'session-2' }]
     })
+  })
+
+  it('pings handshaken clients on each heartbeat tick', async () => {
+    vi.useFakeTimers()
+    const fakeServer = new FakeSocketServer()
+    const server = createWorkspaceWebSocketRpcServer({
+      createWebSocketServer: () => fakeServer
+    })
+
+    await server.getTransportInfo()
+    const socket = fakeServer.connect()
+
+    await performHandshake(socket)
+    vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS)
+
+    expect(socket.ping).toHaveBeenCalledOnce()
+
+    await server.close()
+  })
+
+  it('keeps heartbeat clients alive when pong is received', async () => {
+    vi.useFakeTimers()
+    const fakeServer = new FakeSocketServer()
+    const server = createWorkspaceWebSocketRpcServer({
+      createWebSocketServer: () => fakeServer
+    })
+
+    await server.getTransportInfo()
+    const socket = fakeServer.connect()
+
+    await performHandshake(socket)
+    vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS)
+    socket.emitPong()
+    vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS)
+
+    expect(socket.ping).toHaveBeenCalledTimes(2)
+    expect(socket.terminate).not.toHaveBeenCalled()
+
+    await server.close()
+  })
+
+  it('terminates stale heartbeat clients and removes them from push targets', async () => {
+    vi.useFakeTimers()
+    const fakeServer = new FakeSocketServer()
+    const server = createWorkspaceWebSocketRpcServer({
+      createWebSocketServer: () => fakeServer
+    })
+    const event = {
+      type: 'message-delta',
+      operationId: 'operation-1',
+      sessionId: 'session-1',
+      topicId: 'topic-1',
+      threadId: 'thread-1',
+      messageId: 'message-1',
+      delta: 'hello'
+    } as const
+
+    await server.getTransportInfo()
+    const socket = fakeServer.connect()
+
+    await performHandshake(socket)
+    vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS)
+    vi.advanceTimersByTime(HEARTBEAT_INTERVAL_MS)
+    server.push(RPC_CHANNELS.sessions.event, { to: 'all' }, event)
+
+    expect(socket.terminate).toHaveBeenCalledOnce()
+    expect(socket.sent).toHaveLength(1)
+
+    await server.close()
   })
 })
