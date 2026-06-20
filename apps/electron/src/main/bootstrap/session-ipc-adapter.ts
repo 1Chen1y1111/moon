@@ -9,7 +9,7 @@ import { ipcChannels } from '@ipc/channels'
 import type { RpcServerPort, SessionRpcRequestContext } from '@moon/server-core/handlers'
 import { pushTyped, type RpcPushPort } from '@moon/server-core/transport'
 import type { ChatOperationEvent } from '@moon/shared/domain/chat'
-import { RPC_CHANNELS, type SessionRpcChannel } from '@moon/shared/protocol'
+import { RPC_CHANNELS, type PushTarget, type SessionRpcChannel } from '@moon/shared/protocol'
 import { createLegacyIpcRpcServer } from './legacy-ipc-rpc-server'
 import { getLegacyWebContentsClientId } from './legacy-webcontents-client-registry'
 
@@ -63,7 +63,7 @@ function createSessionIpcRequestContext(
 }
 
 /**
- * 把内部 `session:event` 发送到当前调用窗口。
+ * 把内部 `session:event` 按事件自身携带的 workspace 线索发送到目标窗口。
  */
 function emitSessionEvent(
   rpcServer: RpcPushPort,
@@ -75,5 +75,25 @@ function emitSessionEvent(
     return
   }
 
-  pushTyped(rpcServer, eventChannel, { to: 'client', clientId }, operationEvent)
+  pushTyped(
+    rpcServer,
+    eventChannel,
+    resolveSessionEventPushTarget(operationEvent, clientId),
+    operationEvent
+  )
+}
+
+/**
+ * 优先使用事件 payload 中明确携带的 projectId 做 workspace 定向。
+ * 缺失时保持当前 client 范围。
+ */
+function resolveSessionEventPushTarget(
+  operationEvent: ChatOperationEvent,
+  fallbackClientId: string
+): PushTarget {
+  if ('session' in operationEvent && operationEvent.session.projectId !== null) {
+    return { to: 'workspace', workspaceId: operationEvent.session.projectId }
+  }
+
+  return { to: 'client', clientId: fallbackClientId }
 }

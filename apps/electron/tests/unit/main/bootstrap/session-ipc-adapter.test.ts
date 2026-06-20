@@ -9,6 +9,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import type { ChatOperationEvent } from '@moon/shared/domain/chat'
 
+type MessageCreatedEvent = Extract<ChatOperationEvent, { type: 'message-created' }>
+type OperationDoneEvent = Extract<ChatOperationEvent, { type: 'operation-done' }>
+type MessageDeltaEvent = Extract<ChatOperationEvent, { type: 'message-delta' }>
+
 const handleMock = vi.fn()
 const getAllWindowsMock = vi.fn()
 
@@ -25,24 +29,24 @@ function getRegisteredHandler(channel: string): ((...args: unknown[]) => unknown
   return handleMock.mock.calls.find(([registeredChannel]) => registeredChannel === channel)?.[1]
 }
 
-function createOperationEvent(): ChatOperationEvent {
+function createMessageCreatedEvent(projectId: string | null = null): MessageCreatedEvent {
   const timestamp = '2026-05-09T00:00:00.000Z'
   const session = {
     id: 'session-1',
-    projectId: null,
+    projectId,
     provider: 'claude',
     title: 'Moon',
     status: 'active',
     createdAt: timestamp,
     updatedAt: timestamp
-  } satisfies ChatOperationEvent['session']
+  } satisfies MessageCreatedEvent['session']
   const topic = {
     id: 'topic-1',
     sessionId: 'session-1',
     title: 'Moon',
     createdAt: timestamp,
     updatedAt: timestamp
-  } satisfies ChatOperationEvent['topic']
+  } satisfies MessageCreatedEvent['topic']
   const thread = {
     id: 'thread-1',
     topicId: 'topic-1',
@@ -50,7 +54,7 @@ function createOperationEvent(): ChatOperationEvent {
     type: 'standalone',
     createdAt: timestamp,
     updatedAt: timestamp
-  } satisfies ChatOperationEvent['thread']
+  } satisfies MessageCreatedEvent['thread']
   const message = {
     id: 'message-1',
     sessionId: 'session-1',
@@ -62,7 +66,7 @@ function createOperationEvent(): ChatOperationEvent {
     status: 'complete',
     createdAt: timestamp,
     updatedAt: timestamp
-  } satisfies ChatOperationEvent['message']
+  } satisfies MessageCreatedEvent['message']
 
   return {
     type: 'message-created',
@@ -71,6 +75,40 @@ function createOperationEvent(): ChatOperationEvent {
     topic,
     thread,
     message
+  }
+}
+
+function createOperationDoneEvent(projectId: string): OperationDoneEvent {
+  const timestamp = '2026-05-09T00:00:00.000Z'
+  const event = createMessageCreatedEvent(projectId)
+
+  return {
+    type: 'operation-done',
+    operationId: 'operation-1',
+    session: event.session,
+    topic: event.topic,
+    thread: event.thread,
+    operation: {
+      id: 'operation-1',
+      topicId: 'topic-1',
+      threadId: 'thread-1',
+      status: 'done',
+      createdAt: timestamp,
+      updatedAt: timestamp
+    },
+    messages: [event.message]
+  }
+}
+
+function createMessageDeltaEvent(): MessageDeltaEvent {
+  return {
+    type: 'message-delta',
+    operationId: 'operation-1',
+    sessionId: 'session-1',
+    topicId: 'topic-1',
+    threadId: 'thread-1',
+    messageId: 'message-1',
+    delta: 'hello'
   }
 }
 
@@ -96,23 +134,33 @@ describe('createSessionIpcRpcServer', () => {
     ])
   })
 
-  it('maps runOperation session:event emissions to the unified event channel', async () => {
+  it('routes session events with direct projectId to workspace clients', async () => {
     const { createSessionIpcRpcServer } = await import('@main/bootstrap/session-ipc-adapter')
     const { ipcChannels } = await import('@ipc/channels')
     const { RPC_CHANNELS } = await import('@moon/shared/protocol')
-    const operationEvent = createOperationEvent()
-    const sender = { id: 2, send: vi.fn() }
-    const otherWebContents = { id: 1, send: vi.fn() }
-    const senderWebContents = { id: 2, send: vi.fn() }
+    const { bindLegacyWebContentsClientWorkspace } = await import(
+      '@main/bootstrap/legacy-webcontents-client-registry'
+    )
+    const messageCreatedEvent = createMessageCreatedEvent('project-1')
+    const operationDoneEvent = createOperationDoneEvent('project-1')
+    const sender = { id: 302, send: vi.fn() }
+    const sameWorkspaceWebContents = { id: 301, send: vi.fn() }
+    const senderWebContents = { id: 302, send: vi.fn() }
+    const otherWorkspaceWebContents = { id: 303, send: vi.fn() }
     const rpcServer = createSessionIpcRpcServer()
 
     getAllWindowsMock.mockReturnValue([
-      { webContents: otherWebContents },
-      { webContents: senderWebContents }
+      { webContents: sameWorkspaceWebContents },
+      { webContents: senderWebContents },
+      { webContents: otherWorkspaceWebContents }
     ])
+    bindLegacyWebContentsClientWorkspace(sameWorkspaceWebContents, 'project-1')
+    bindLegacyWebContentsClientWorkspace(senderWebContents, 'project-1')
+    bindLegacyWebContentsClientWorkspace(otherWorkspaceWebContents, 'project-2')
 
     rpcServer.handle(RPC_CHANNELS.sessions.runOperation, (context, input) => {
-      context.emitSessionEvent?.(RPC_CHANNELS.sessions.event, operationEvent)
+      context.emitSessionEvent?.(RPC_CHANNELS.sessions.event, messageCreatedEvent)
+      context.emitSessionEvent?.(RPC_CHANNELS.sessions.event, operationDoneEvent)
 
       return input
     })
@@ -124,16 +172,30 @@ describe('createSessionIpcRpcServer', () => {
       operationId: 'op-1'
     })
     expect(sender.send).not.toHaveBeenCalled()
-    expect(otherWebContents.send).not.toHaveBeenCalled()
-    expect(senderWebContents.send).toHaveBeenCalledWith(ipcChannels.chat.sessionEvent, operationEvent)
-    expect(senderWebContents.send).toHaveBeenCalledTimes(1)
+    expect(sameWorkspaceWebContents.send).toHaveBeenCalledWith(
+      ipcChannels.chat.sessionEvent,
+      messageCreatedEvent
+    )
+    expect(sameWorkspaceWebContents.send).toHaveBeenCalledWith(
+      ipcChannels.chat.sessionEvent,
+      operationDoneEvent
+    )
+    expect(senderWebContents.send).toHaveBeenCalledWith(
+      ipcChannels.chat.sessionEvent,
+      messageCreatedEvent
+    )
+    expect(senderWebContents.send).toHaveBeenCalledWith(
+      ipcChannels.chat.sessionEvent,
+      operationDoneEvent
+    )
+    expect(otherWorkspaceWebContents.send).not.toHaveBeenCalled()
   })
 
-  it('maps sendMessage session:event emissions to the unified event channel', async () => {
+  it('keeps null-project session events scoped to the current client', async () => {
     const { createSessionIpcRpcServer } = await import('@main/bootstrap/session-ipc-adapter')
     const { ipcChannels } = await import('@ipc/channels')
     const { RPC_CHANNELS } = await import('@moon/shared/protocol')
-    const operationEvent = createOperationEvent()
+    const operationEvent = createMessageCreatedEvent(null)
     const sender = { id: 2, send: vi.fn() }
     const otherWebContents = { id: 1, send: vi.fn() }
     const senderWebContents = { id: 2, send: vi.fn() }
@@ -158,7 +220,46 @@ describe('createSessionIpcRpcServer', () => {
     })
     expect(sender.send).not.toHaveBeenCalled()
     expect(otherWebContents.send).not.toHaveBeenCalled()
-    expect(senderWebContents.send).toHaveBeenCalledWith(ipcChannels.chat.sessionEvent, operationEvent)
+    expect(senderWebContents.send).toHaveBeenCalledWith(
+      ipcChannels.chat.sessionEvent,
+      operationEvent
+    )
+    expect(senderWebContents.send).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps payloads without direct session scoped to the current client', async () => {
+    const { createSessionIpcRpcServer } = await import('@main/bootstrap/session-ipc-adapter')
+    const { ipcChannels } = await import('@ipc/channels')
+    const { RPC_CHANNELS } = await import('@moon/shared/protocol')
+    const operationEvent = createMessageDeltaEvent()
+    const sender = { id: 402, send: vi.fn() }
+    const otherWebContents = { id: 401, send: vi.fn() }
+    const senderWebContents = { id: 402, send: vi.fn() }
+    const rpcServer = createSessionIpcRpcServer()
+
+    getAllWindowsMock.mockReturnValue([
+      { webContents: otherWebContents },
+      { webContents: senderWebContents }
+    ])
+
+    rpcServer.handle(RPC_CHANNELS.sessions.runOperation, (context, input) => {
+      context.emitSessionEvent?.(RPC_CHANNELS.sessions.event, operationEvent)
+
+      return input
+    })
+
+    const registeredHandler = getRegisteredHandler(ipcChannels.chat.runOperation)
+
+    expect(registeredHandler).toBeTypeOf('function')
+    await expect(registeredHandler?.({ sender }, { operationId: 'op-1' })).resolves.toEqual({
+      operationId: 'op-1'
+    })
+    expect(sender.send).not.toHaveBeenCalled()
+    expect(otherWebContents.send).not.toHaveBeenCalled()
+    expect(senderWebContents.send).toHaveBeenCalledWith(
+      ipcChannels.chat.sessionEvent,
+      operationEvent
+    )
     expect(senderWebContents.send).toHaveBeenCalledTimes(1)
   })
 
