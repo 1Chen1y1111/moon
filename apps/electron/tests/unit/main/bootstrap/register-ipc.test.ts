@@ -268,7 +268,15 @@ describe('registerIpcHandlers', () => {
         attachmentInput
       )
     ).toBe(attachment)
-    const sender = { send: vi.fn() }
+    const sender = { id: 2, send: vi.fn() }
+    const otherWebContents = { id: 1, send: vi.fn() }
+    const senderWebContents = { id: 2, send: vi.fn() }
+
+    getAllWindowsMock.mockReturnValue([
+      { webContents: otherWebContents },
+      { webContents: senderWebContents }
+    ])
+
     expect(
       await getRegisteredHandler(ipcChannels.chat.createMessageTurn)?.(
         { sender: {} },
@@ -340,7 +348,9 @@ describe('registerIpcHandlers', () => {
       message
     })
 
-    expect(sender.send).toHaveBeenCalledWith(ipcChannels.chat.sessionEvent, {
+    expect(sender.send).not.toHaveBeenCalled()
+    expect(otherWebContents.send).not.toHaveBeenCalled()
+    expect(senderWebContents.send).toHaveBeenCalledWith(ipcChannels.chat.sessionEvent, {
       type: 'message-created',
       operationId: 'operation-1',
       session,
@@ -359,7 +369,9 @@ describe('registerIpcHandlers', () => {
       message
     })
 
-    expect(sender.send).toHaveBeenCalledWith(ipcChannels.chat.sessionEvent, {
+    expect(sender.send).not.toHaveBeenCalled()
+    expect(otherWebContents.send).not.toHaveBeenCalled()
+    expect(senderWebContents.send).toHaveBeenCalledWith(ipcChannels.chat.sessionEvent, {
       type: 'message-created',
       operationId: 'operation-1',
       session,

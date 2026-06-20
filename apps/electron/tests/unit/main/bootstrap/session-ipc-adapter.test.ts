@@ -10,8 +10,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ChatOperationEvent } from '@moon/shared/domain/chat'
 
 const handleMock = vi.fn()
+const getAllWindowsMock = vi.fn()
 
 vi.mock('electron', () => ({
+  BrowserWindow: {
+    getAllWindows: getAllWindowsMock
+  },
   ipcMain: {
     handle: handleMock
   }
@@ -73,6 +77,7 @@ function createOperationEvent(): ChatOperationEvent {
 describe('createSessionIpcRpcServer', () => {
   beforeEach(() => {
     handleMock.mockReset()
+    getAllWindowsMock.mockReset()
   })
 
   it('returns legacy IPC results through the envelope dispatcher', async () => {
@@ -86,7 +91,7 @@ describe('createSessionIpcRpcServer', () => {
     const registeredHandler = getRegisteredHandler(ipcChannels.chat.listSessions)
 
     expect(registeredHandler).toBeTypeOf('function')
-    await expect(registeredHandler?.({ sender: { send: vi.fn() } })).resolves.toEqual([
+    await expect(registeredHandler?.({ sender: { id: 1, send: vi.fn() } })).resolves.toEqual([
       { id: 'session-1' }
     ])
   })
@@ -96,8 +101,15 @@ describe('createSessionIpcRpcServer', () => {
     const { ipcChannels } = await import('@ipc/channels')
     const { RPC_CHANNELS } = await import('@moon/shared/protocol')
     const operationEvent = createOperationEvent()
-    const sender = { send: vi.fn() }
+    const sender = { id: 2, send: vi.fn() }
+    const otherWebContents = { id: 1, send: vi.fn() }
+    const senderWebContents = { id: 2, send: vi.fn() }
     const rpcServer = createSessionIpcRpcServer()
+
+    getAllWindowsMock.mockReturnValue([
+      { webContents: otherWebContents },
+      { webContents: senderWebContents }
+    ])
 
     rpcServer.handle(RPC_CHANNELS.sessions.runOperation, (context, input) => {
       context.emitSessionEvent?.(RPC_CHANNELS.sessions.event, operationEvent)
@@ -111,8 +123,10 @@ describe('createSessionIpcRpcServer', () => {
     await expect(registeredHandler?.({ sender }, { operationId: 'op-1' })).resolves.toEqual({
       operationId: 'op-1'
     })
-    expect(sender.send).toHaveBeenCalledWith(ipcChannels.chat.sessionEvent, operationEvent)
-    expect(sender.send).toHaveBeenCalledTimes(1)
+    expect(sender.send).not.toHaveBeenCalled()
+    expect(otherWebContents.send).not.toHaveBeenCalled()
+    expect(senderWebContents.send).toHaveBeenCalledWith(ipcChannels.chat.sessionEvent, operationEvent)
+    expect(senderWebContents.send).toHaveBeenCalledTimes(1)
   })
 
   it('maps sendMessage session:event emissions to the unified event channel', async () => {
@@ -120,8 +134,15 @@ describe('createSessionIpcRpcServer', () => {
     const { ipcChannels } = await import('@ipc/channels')
     const { RPC_CHANNELS } = await import('@moon/shared/protocol')
     const operationEvent = createOperationEvent()
-    const sender = { send: vi.fn() }
+    const sender = { id: 2, send: vi.fn() }
+    const otherWebContents = { id: 1, send: vi.fn() }
+    const senderWebContents = { id: 2, send: vi.fn() }
     const rpcServer = createSessionIpcRpcServer()
+
+    getAllWindowsMock.mockReturnValue([
+      { webContents: otherWebContents },
+      { webContents: senderWebContents }
+    ])
 
     rpcServer.handle(RPC_CHANNELS.sessions.sendMessage, (context, input) => {
       context.emitSessionEvent?.(RPC_CHANNELS.sessions.event, operationEvent)
@@ -135,8 +156,10 @@ describe('createSessionIpcRpcServer', () => {
     await expect(registeredHandler?.({ sender }, { content: 'hello' })).resolves.toEqual({
       content: 'hello'
     })
-    expect(sender.send).toHaveBeenCalledWith(ipcChannels.chat.sessionEvent, operationEvent)
-    expect(sender.send).toHaveBeenCalledTimes(1)
+    expect(sender.send).not.toHaveBeenCalled()
+    expect(otherWebContents.send).not.toHaveBeenCalled()
+    expect(senderWebContents.send).toHaveBeenCalledWith(ipcChannels.chat.sessionEvent, operationEvent)
+    expect(senderWebContents.send).toHaveBeenCalledTimes(1)
   })
 
   it('rejects legacy IPC calls with HANDLER_ERROR for ordinary handler errors', async () => {
@@ -154,7 +177,7 @@ describe('createSessionIpcRpcServer', () => {
     expect(registeredHandler).toBeTypeOf('function')
 
     try {
-      await registeredHandler?.({ sender: { send: vi.fn() } }, { sessionId: 'session-1' })
+      await registeredHandler?.({ sender: { id: 1, send: vi.fn() } }, { sessionId: 'session-1' })
       throw new Error('expected handler to reject')
     } catch (error) {
       expect(error).toBeInstanceOf(Error)
@@ -178,7 +201,7 @@ describe('createSessionIpcRpcServer', () => {
     expect(registeredHandler).toBeTypeOf('function')
 
     try {
-      await registeredHandler?.({ sender: { send: vi.fn() } }, { operationId: 'operation-1' })
+      await registeredHandler?.({ sender: { id: 1, send: vi.fn() } }, { operationId: 'operation-1' })
       throw new Error('expected handler to reject')
     } catch (error) {
       expect(error).toBeInstanceOf(Error)
