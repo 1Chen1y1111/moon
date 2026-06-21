@@ -13,6 +13,7 @@ import type {
   AgentPermissionDecision,
   MessageAttachment
 } from './backend/types'
+import { SourceManager } from './runtime/source-manager'
 import type { ThinkingLevel } from '../config'
 import type { AgentPermissionMode } from './runtime/types'
 
@@ -80,6 +81,7 @@ class AgentEventQueue implements AgentEventQueuePort {
  */
 export abstract class BaseAgent implements AgentBackend {
   protected readonly permissionMode?: AgentPermissionMode
+  protected readonly sourceManager = new SourceManager()
   protected readonly thinkingLevel?: ThinkingLevel
   protected readonly workspace?: AgentBackendWorkspace
   private readonly pendingPermissions = new Map<string, PendingAgentPermission>()
