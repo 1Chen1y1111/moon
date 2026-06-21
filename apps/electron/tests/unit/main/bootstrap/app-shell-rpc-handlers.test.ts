@@ -13,11 +13,15 @@ import type { ElectronEnvelopeRpcRequestContext } from '@main/bootstrap/electron
 
 const fromWebContentsMock = vi.fn()
 const getAllWindowsMock = vi.fn()
+const openExternalMock = vi.fn()
 
 vi.mock('electron', () => ({
   BrowserWindow: {
     fromWebContents: fromWebContentsMock,
     getAllWindows: getAllWindowsMock
+  },
+  shell: {
+    openExternal: openExternalMock
   }
 }))
 
@@ -68,6 +72,8 @@ describe('registerAppShellHandlers', () => {
     fromWebContentsMock.mockReset()
     getAllWindowsMock.mockReset()
     getAllWindowsMock.mockReturnValue([])
+    openExternalMock.mockReset()
+    openExternalMock.mockResolvedValue(undefined)
     openSettingsWindow.mockReset()
     Object.values(settingsService).forEach((mock) => mock.mockReset())
     Object.values(projectsService).forEach((mock) => mock.mockReset())
@@ -286,6 +292,10 @@ describe('registerAppShellHandlers', () => {
       { event: { sender } as never },
       { section: 'providers' }
     )
+    await getHandler(RPC_CHANNELS.window.openExternal)?.(
+      { event: { sender } as never },
+      { url: 'https://moon.local/auth' }
+    )
 
     expect(fromWebContentsMock).toHaveBeenCalledWith(sender)
     expect(browserWindow.close).toHaveBeenCalledTimes(1)
@@ -293,6 +303,7 @@ describe('registerAppShellHandlers', () => {
     expect(browserWindow.maximize).toHaveBeenCalledTimes(1)
     expect(browserWindow.unmaximize).not.toHaveBeenCalled()
     expect(openSettingsWindow).toHaveBeenCalledWith({ section: 'providers' })
+    expect(openExternalMock).toHaveBeenCalledWith('https://moon.local/auth')
   })
 
   it('rejects unsupported settings-window sections before opening a window', async () => {
@@ -313,5 +324,25 @@ describe('registerAppShellHandlers', () => {
       )
     ).toThrow()
     expect(openSettingsWindow).not.toHaveBeenCalled()
+  })
+
+  it('rejects unsupported external URLs before calling shell.openExternal', async () => {
+    const { RPC_CHANNELS } = await import('@moon/shared/protocol')
+    const { registerAppShellHandlers } = await import('@main/bootstrap/app-shell-rpc-handlers')
+    const { server, getHandler } = createRpcServerFixture()
+
+    registerAppShellHandlers(server, {
+      openSettingsWindow,
+      projectsService: projectsService as never,
+      settingsService: settingsService as never
+    })
+
+    await expect(
+      getHandler(RPC_CHANNELS.window.openExternal)?.(
+        { event: { sender: {} } as never },
+        { url: 'file:///tmp/secret.txt' }
+      )
+    ).rejects.toThrow('Unsupported external URL protocol')
+    expect(openExternalMock).not.toHaveBeenCalled()
   })
 })

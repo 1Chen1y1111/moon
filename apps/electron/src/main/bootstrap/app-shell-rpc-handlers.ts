@@ -3,9 +3,9 @@
  * 本层只编排 settings/projects/window 本地能力，不依赖 renderer 或远程 transport。
  */
 
-import { BrowserWindow } from 'electron'
+import { BrowserWindow, shell } from 'electron'
 
-import { openSettingsInputSchema } from '@ipc/window-contracts'
+import { openExternalInputSchema, openSettingsInputSchema } from '@ipc/window-contracts'
 import type { RpcServerPort } from '@moon/server-core/handlers'
 import { pushTyped, type RpcPushPort } from '@moon/server-core/transport'
 import type {
@@ -221,6 +221,11 @@ function registerWindowHandlers(
   server.handle(RPC_CHANNELS.window.openSettings, (_context, input: unknown) => {
     openSettingsWindow(openSettingsInputSchema.parse(input))
   })
+  server.handle(RPC_CHANNELS.window.openExternal, async (_context, input: unknown) => {
+    const { url } = openExternalInputSchema.parse(input)
+
+    await shell.openExternal(normalizeExternalCapabilityUrl(url))
+  })
   server.handle(RPC_CHANNELS.window.getState, (context) => {
     const senderWindow = BrowserWindow.fromWebContents(context.event.sender)
 
@@ -228,4 +233,35 @@ function registerWindowHandlers(
       isMaximized: senderWindow?.isMaximized() ?? false
     }
   })
+}
+
+/**
+ * 将 capability 传入的 URL 规整为 shell 可打开的外链，禁止本地文件和脚本协议。
+ */
+function normalizeExternalCapabilityUrl(url: string): string {
+  const parsedUrl = parseExternalCapabilityUrl(url)
+
+  if (parsedUrl === null || !isAllowedExternalCapabilityProtocol(parsedUrl.protocol)) {
+    throw new Error('Unsupported external URL protocol')
+  }
+
+  return parsedUrl.href
+}
+
+/**
+ * 解析 capability 外链 URL，失败时返回 null 交给调用方统一报错。
+ */
+function parseExternalCapabilityUrl(url: string): URL | null {
+  try {
+    return new URL(url)
+  } catch {
+    return null
+  }
+}
+
+/**
+ * 限制 server-to-client 外链能力只覆盖普通网页协议。
+ */
+function isAllowedExternalCapabilityProtocol(protocol: string): boolean {
+  return protocol === 'https:' || protocol === 'http:'
 }

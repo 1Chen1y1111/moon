@@ -6,6 +6,7 @@ const removeHandlerMock = vi.fn()
 const handleMock = vi.fn()
 const fromWebContentsMock = vi.fn()
 const getAllWindowsMock = vi.fn()
+const openExternalMock = vi.fn()
 
 vi.mock('electron', () => ({
   BrowserWindow: {
@@ -15,6 +16,9 @@ vi.mock('electron', () => ({
   ipcMain: {
     removeHandler: removeHandlerMock,
     handle: handleMock
+  },
+  shell: {
+    openExternal: openExternalMock
   }
 }))
 
@@ -114,6 +118,8 @@ describe('registerIpcHandlers', () => {
     fromWebContentsMock.mockReset()
     getAllWindowsMock.mockReset()
     getAllWindowsMock.mockReturnValue([])
+    openExternalMock.mockReset()
+    openExternalMock.mockResolvedValue(undefined)
     chatService.approveToolCall.mockReset()
     chatService.cancelOperation.mockReset()
     chatService.createMessageTurn.mockReset()
@@ -636,6 +642,62 @@ describe('registerIpcHandlers', () => {
     expect(openSettingsWindow).toHaveBeenCalledTimes(2)
     expect(openSettingsWindow).toHaveBeenCalledWith(undefined)
     expect(openSettingsWindow).toHaveBeenCalledWith({ section: 'providers' })
+  })
+
+  it('registers a handler that opens safe external URLs', async () => {
+    const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
+    const { ipcChannels } = await import('@ipc/channels')
+    const { RPC_CHANNELS } = await import('@moon/shared/protocol')
+
+    registerIpcHandlers({
+      chatService: chatService as never,
+      projectsService: projectsService as never,
+      settingsService: settingsService as never,
+      openSettingsWindow
+    })
+
+    await dispatchRpcRequest(
+      ipcChannels.rpc.request,
+      { sender: {} },
+      RPC_CHANNELS.window.openExternal,
+      [{ url: 'https://moon.local/auth' }]
+    )
+
+    expect(openExternalMock).toHaveBeenCalledWith('https://moon.local/auth')
+  })
+
+  it('rejects unsafe external URLs through the unified rpc handler', async () => {
+    const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
+    const { ipcChannels } = await import('@ipc/channels')
+    const { RPC_CHANNELS } = await import('@moon/shared/protocol')
+
+    registerIpcHandlers({
+      chatService: chatService as never,
+      projectsService: projectsService as never,
+      settingsService: settingsService as never,
+      openSettingsWindow
+    })
+
+    const handler = getRegisteredHandler(ipcChannels.rpc.request)
+
+    await expect(
+      handler?.(
+        { sender: {} },
+        {
+          id: 'request-1',
+          type: 'request',
+          channel: RPC_CHANNELS.window.openExternal,
+          args: [{ url: 'javascript:alert(1)' }]
+        }
+      )
+    ).resolves.toMatchObject({
+      type: 'response',
+      channel: RPC_CHANNELS.window.openExternal,
+      error: {
+        code: 'HANDLER_ERROR'
+      }
+    })
+    expect(openExternalMock).not.toHaveBeenCalled()
   })
 
   it('rejects unsupported settings-window sections before opening a window', async () => {

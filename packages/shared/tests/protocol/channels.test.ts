@@ -69,6 +69,7 @@ describe('RPC_CHANNELS app-shell channels', () => {
       minimize: 'window:minimize',
       toggleMaximize: 'window:toggleMaximize',
       openSettings: 'window:openSettings',
+      openExternal: 'window:openExternal',
       getState: 'window:getState',
       onStateChange: 'window:onStateChange'
     })

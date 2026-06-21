@@ -8,8 +8,10 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
+  CLIENT_OPEN_EXTERNAL,
   CLIENT_TEST_ECHO,
   findWorkspaceClientWithCapability,
+  requestClientOpenExternal,
   requestClientTestEcho
 } from '@moon/server-core/transport'
 
@@ -21,6 +23,19 @@ describe('client capability helpers', () => {
       'echo:hi'
     )
     expect(invokeClient).toHaveBeenCalledWith('client-1', CLIENT_TEST_ECHO, 'hi')
+  })
+
+  it('requests the open external capability through invokeClient', async () => {
+    const invokeClient = vi.fn(async () => undefined)
+
+    await expect(
+      requestClientOpenExternal({ invokeClient }, 'client-1', 'https://moon.local/auth')
+    ).resolves.toBeUndefined()
+    expect(invokeClient).toHaveBeenCalledWith(
+      'client-1',
+      CLIENT_OPEN_EXTERNAL,
+      'https://moon.local/auth'
+    )
   })
 
   it('finds the first matching workspace client for a capability', () => {

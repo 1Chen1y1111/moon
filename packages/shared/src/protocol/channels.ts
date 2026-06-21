@@ -47,6 +47,7 @@ export const RPC_CHANNELS = {
     minimize: 'window:minimize',
     toggleMaximize: 'window:toggleMaximize',
     openSettings: 'window:openSettings',
+    openExternal: 'window:openExternal',
     getState: 'window:getState',
     onStateChange: 'window:onStateChange'
   }

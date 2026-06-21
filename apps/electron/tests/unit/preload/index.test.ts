@@ -10,6 +10,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ipcChannels } from '@ipc/channels'
 import type { MoonApi } from '@ipc/contracts'
 import { workspaceWebSocketTransportInfoChannel } from '@ipc/workspace-transport-contract'
+import { CLIENT_OPEN_EXTERNAL } from '@moon/server-core/transport'
 import { PROTOCOL_VERSION, RPC_CHANNELS } from '@moon/shared/protocol'
 
 const exposeInMainWorldMock = vi.fn()
@@ -92,16 +93,18 @@ class FakeWebSocket {
       return
     }
 
-    queueMicrotask(() => {
-      this.emit('message', {
-        data: JSON.stringify({
-          id: request.id,
-          type: 'response',
-          channel: request.channel,
-          result: undefined
+    if (request.type === 'request') {
+      queueMicrotask(() => {
+        this.emit('message', {
+          data: JSON.stringify({
+            id: request.id,
+            type: 'response',
+            channel: request.channel,
+            result: undefined
+          })
         })
       })
-    })
+    }
   }
 
   /**
@@ -288,7 +291,8 @@ describe('preload api', () => {
 
     expect(workspaceHandshake).toMatchObject({
       type: 'handshake',
-      authToken: 'workspace-secret'
+      authToken: 'workspace-secret',
+      clientCapabilities: [CLIENT_OPEN_EXTERNAL]
     })
     expect(workspaceRequestChannels).toEqual([
       RPC_CHANNELS.sessions.listSessions,
@@ -305,6 +309,45 @@ describe('preload api', () => {
       RPC_CHANNELS.sessions.approveToolCall,
       RPC_CHANNELS.sessions.rejectToolCall
     ])
+    expect((api.windowControls as unknown as Record<string, unknown>).openExternal).toBeUndefined()
+  })
+
+  it('bridges openExternal capability requests to local envelope IPC', async () => {
+    mockEnvelopeIpcInvoke()
+    await import('@preload/index')
+
+    const api = getExposedApi()
+
+    await api.chat.listSessions()
+    await flushPromises()
+
+    const socket = FakeWebSocket.instances[0]
+
+    socket.emit('message', {
+      data: JSON.stringify({
+        id: 'capability-request-1',
+        type: 'request',
+        channel: CLIENT_OPEN_EXTERNAL,
+        args: ['https://moon.local/auth']
+      })
+    })
+    await flushPromises()
+
+    expect(ipcInvokeMock).toHaveBeenCalledWith(
+      ipcChannels.rpc.request,
+      expect.objectContaining({
+        type: 'request',
+        channel: RPC_CHANNELS.window.openExternal,
+        args: [{ url: 'https://moon.local/auth' }]
+      })
+    )
+    expect(socket.sent.map((raw) => JSON.parse(raw))).toContainEqual(
+      expect.objectContaining({
+        id: 'capability-request-1',
+        type: 'response',
+        channel: CLIENT_OPEN_EXTERNAL
+      })
+    )
   })
 
   it('cleans up the window state event subscription', async () => {

@@ -14,9 +14,11 @@ import WebSocket from 'ws'
 
 import { startMoonWorkspaceServer, type MoonWorkspaceServer } from '@moon/server'
 import {
+  CLIENT_OPEN_EXTERNAL,
   CLIENT_TEST_ECHO,
   createWorkspaceWebSocketRpcClient,
   findWorkspaceClientWithCapability,
+  requestClientOpenExternal,
   requestClientTestEcho,
   type WorkspaceWebSocketConstructor,
   type WorkspaceWebSocketEvent
@@ -155,6 +157,7 @@ describe('workspace remote smoke', () => {
         WebSocketCtor: NodeWebSocketAdapter as WorkspaceWebSocketConstructor
       })
       const listener = vi.fn()
+      const openExternal = vi.fn()
       const event = {
         type: 'message-delta',
         operationId: 'operation-1',
@@ -166,6 +169,9 @@ describe('workspace remote smoke', () => {
       } as const
 
       client.handleCapability(CLIENT_TEST_ECHO, (value) => `echo:${value}`)
+      client.handleCapability(CLIENT_OPEN_EXTERNAL, (url) => {
+        openExternal(url)
+      })
       client.on(RPC_CHANNELS.sessions.event, listener)
 
       await expect(rejectedClient.invoke(RPC_CHANNELS.sessions.listSessions)).rejects.toMatchObject(
@@ -181,9 +187,24 @@ describe('workspace remote smoke', () => {
       )
 
       expect(clientId).toBe('client-1')
+      expect(
+        findWorkspaceClientWithCapability(
+          workspaceServer.workspaceRpcServer,
+          CLIENT_OPEN_EXTERNAL,
+          'workspace-1'
+        )
+      ).toBe('client-1')
       await expect(
         requestClientTestEcho(workspaceServer.workspaceRpcServer, clientId ?? '', 'hi')
       ).resolves.toBe('echo:hi')
+      await expect(
+        requestClientOpenExternal(
+          workspaceServer.workspaceRpcServer,
+          clientId ?? '',
+          'https://moon.local/auth'
+        )
+      ).resolves.toBeUndefined()
+      expect(openExternal).toHaveBeenCalledWith('https://moon.local/auth')
 
       workspaceServer.workspaceRpcServer.push(RPC_CHANNELS.sessions.event, { to: 'all' }, event)
 
