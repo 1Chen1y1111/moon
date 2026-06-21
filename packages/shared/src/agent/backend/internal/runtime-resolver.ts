@@ -8,11 +8,11 @@ import type { AgentPermissionDecision, AgentPermissionRequest } from '@moon/core
 import { existsSync, mkdirSync, readdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
-import { dirname, isAbsolute, join, parse, resolve } from 'node:path'
+import { dirname, join, parse, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import type { ThinkingLevel } from '../../../config'
-import { isPathInsideWorkspace, resolveWorkspacePath } from '../../runtime'
+import { PermissionManager, type AgentToolPermissionCheckResult } from '../../runtime'
 import type { AgentPermissionMode } from '../../runtime/types'
 import type { AgentBackendWorkspace } from '../types'
 
@@ -39,8 +39,6 @@ export type ClaudeQueryOptionsInput = ClaudeRuntimeEnvInput & {
   workspace?: AgentBackendWorkspace
 }
 
-const claudeReadOnlyTools = new Set(['Read', 'Glob', 'Grep', 'LS'])
-const claudeWritableTools = new Set(['Write', 'Edit', 'MultiEdit'])
 const claudeCodeUnsupportedTools = ['EnterPlanMode', 'ExitPlanMode', 'AskUserQuestion', 'Skill']
 const claudeCodeExecutableEnvKeys = [
   'MOON_CLAUDE_CODE_EXECUTABLE',
@@ -68,10 +66,7 @@ const claudeManagedEnvKeys = [
   'CLAUDE_CONFIG_DIR'
 ] as const
 
-type ClaudePreToolUseCheckResult =
-  | { type: 'allow' }
-  | { type: 'block'; reason: string }
-  | { type: 'prompt'; request: AgentPermissionRequest }
+type ClaudePreToolUseCheckResult = AgentToolPermissionCheckResult
 
 /**
  * 负责把 Claude SDK 工具权限请求交给 Moon UI，并等待用户决策。
@@ -82,48 +77,6 @@ export type ClaudeToolPermissionRequester = (
 
 function readRecord(value: unknown): Record<string, unknown> {
   return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
-}
-
-function readStringField(value: Record<string, unknown>, key: string): string | undefined {
-  const field = value[key]
-
-  return typeof field === 'string' && field.trim().length > 0 ? field : undefined
-}
-
-function resolveToolInputPath(input: Record<string, unknown>): string | undefined {
-  return (
-    readStringField(input, 'file_path') ??
-    readStringField(input, 'path') ??
-    readStringField(input, 'directory')
-  )
-}
-
-function resolveBashCommand(input: Record<string, unknown>): string | undefined {
-  return readStringField(input, 'command')
-}
-
-function resolveWritableToolPath(input: Record<string, unknown>): string | undefined {
-  return readStringField(input, 'file_path')
-}
-
-/**
- * 把 Claude Code 写文件工具输入转换成 Moon 统一权限请求，隐藏 SDK 私有字段差异。
- */
-function createWritableToolPermissionRequest(
-  toolName: string,
-  toolUseId: string,
-  input: Record<string, unknown>
-): AgentPermissionRequest {
-  const path = resolveWritableToolPath(input)
-
-  return {
-    requestId: `perm-${toolUseId}`,
-    toolName,
-    description: `需要修改项目文件：${path ?? ''}`,
-    ...(path === undefined ? {} : { path }),
-    type: 'file_write',
-    impact: '写操作会改变当前项目工作区文件。'
-  }
 }
 
 function pathExists(path: string | undefined): path is string {
@@ -401,26 +354,6 @@ export function resolveClaudeCodeExecutablePath(
 }
 
 /**
- * 判断 Claude Code SDK 工具输入是否仍位于当前 Moon workspace 内。
- */
-export function isClaudeToolInputInsideWorkspace(
-  workspace: AgentBackendWorkspace,
-  input: Record<string, unknown>
-): boolean {
-  const inputPath = resolveToolInputPath(input)
-
-  if (inputPath === undefined) {
-    return true
-  }
-
-  const targetPath = isAbsolute(inputPath)
-    ? resolve(inputPath)
-    : resolveWorkspacePath(workspace.path, inputPath)
-
-  return isPathInsideWorkspace(workspace.path, targetPath)
-}
-
-/**
  * 构造追加到 Claude Code preset system prompt 的 Moon workspace 说明。
  */
 export function buildClaudeWorkspaceSystemPrompt(workspace: AgentBackendWorkspace): string {
@@ -440,63 +373,11 @@ export function runClaudePreToolUseChecks(
   input: Extract<HookInput, { hook_event_name: 'PreToolUse' }>,
   permissionMode: AgentPermissionMode = 'ask'
 ): ClaudePreToolUseCheckResult {
-  const toolInput = readRecord(input.tool_input)
-
-  if (input.tool_name === 'Bash') {
-    const command = resolveBashCommand(toolInput)
-
-    return {
-      type: 'prompt',
-      request: {
-        requestId: `perm-${input.tool_use_id}`,
-        toolName: input.tool_name,
-        description: `需要在项目目录执行命令：${command ?? ''}`,
-        ...(command === undefined ? {} : { command }),
-        type: 'bash'
-      }
-    }
-  }
-
-  if (claudeWritableTools.has(input.tool_name)) {
-    if (!isClaudeToolInputInsideWorkspace(workspace, toolInput)) {
-      return {
-        type: 'block',
-        reason: '工具路径超出当前项目 workspace，已被 Moon 阻止。'
-      }
-    }
-
-    if (permissionMode === 'allow-all') {
-      return { type: 'allow' }
-    }
-
-    if (permissionMode === 'safe') {
-      return {
-        type: 'block',
-        reason: '安全模式禁止 Claude Code SDK 修改项目文件。'
-      }
-    }
-
-    return {
-      type: 'prompt',
-      request: createWritableToolPermissionRequest(input.tool_name, input.tool_use_id, toolInput)
-    }
-  }
-
-  if (!claudeReadOnlyTools.has(input.tool_name)) {
-    return {
-      type: 'block',
-      reason: `Moon 当前阶段只允许 Claude Code SDK 只读工具、Bash 和文件写入审批，已阻止 ${input.tool_name}。`
-    }
-  }
-
-  if (!isClaudeToolInputInsideWorkspace(workspace, toolInput)) {
-    return {
-      type: 'block',
-      reason: '工具路径超出当前项目 workspace，已被 Moon 阻止。'
-    }
-  }
-
-  return { type: 'allow' }
+  return new PermissionManager({ permissionMode, workspace }).checkClaudeToolUse({
+    toolName: input.tool_name,
+    toolUseId: input.tool_use_id,
+    toolInput: readRecord(input.tool_input)
+  })
 }
 
 /**
