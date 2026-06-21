@@ -350,6 +350,61 @@ describe('preload api', () => {
     )
   })
 
+  it('returns capability error responses when local openExternal RPC fails', async () => {
+    ipcInvokeMock.mockImplementation((channel, envelope) => {
+      if (channel === ipcChannels.rpc.request) {
+        if (envelope.channel === workspaceWebSocketTransportInfoChannel) {
+          return Promise.resolve({
+            id: envelope.id,
+            type: 'response',
+            channel: envelope.channel,
+            result: {
+              authToken: 'workspace-secret',
+              mode: 'local',
+              url: 'ws://127.0.0.1:48123'
+            }
+          })
+        }
+
+        if (envelope.channel === RPC_CHANNELS.window.openExternal) {
+          return Promise.reject(new Error('shell failed'))
+        }
+      }
+
+      return Promise.resolve(undefined)
+    })
+    await import('@preload/index')
+
+    const api = getExposedApi()
+
+    await api.chat.listSessions()
+    await flushPromises()
+
+    const socket = FakeWebSocket.instances[0]
+
+    socket.emit('message', {
+      data: JSON.stringify({
+        id: 'capability-request-1',
+        type: 'request',
+        channel: CLIENT_OPEN_EXTERNAL,
+        args: ['https://moon.local/auth']
+      })
+    })
+    await flushPromises()
+
+    expect(socket.sent.map((raw) => JSON.parse(raw))).toContainEqual(
+      expect.objectContaining({
+        id: 'capability-request-1',
+        type: 'response',
+        channel: CLIENT_OPEN_EXTERNAL,
+        error: {
+          code: 'HANDLER_ERROR',
+          message: 'shell failed'
+        }
+      })
+    )
+  })
+
   it('cleans up the window state event subscription', async () => {
     await import('@preload/index')
 

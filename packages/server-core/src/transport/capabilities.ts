@@ -19,6 +19,49 @@ export const CLIENT_OPEN_EXTERNAL = 'client:openExternal' as const
 export type ClientCapabilityChannel = typeof CLIENT_TEST_ECHO | typeof CLIENT_OPEN_EXTERNAL
 
 /**
+ * client capability 的治理分类；test-only 不能被产品 preload 默认注册。
+ */
+export type ClientCapabilityAvailability = 'test-only' | 'product'
+
+/**
+ * client capability 的治理元信息，server 和 preload 都从这里读取能力边界。
+ */
+export type ClientCapabilityDefinition<TChannel extends ClientCapabilityChannel> = {
+  channel: TChannel
+  availability: ClientCapabilityAvailability
+}
+
+/**
+ * capability channel 到请求参数和返回值的类型映射。
+ */
+export type ClientCapabilityRequestMap = {
+  [CLIENT_TEST_ECHO]: {
+    args: [value: unknown]
+    result: unknown
+  }
+  [CLIENT_OPEN_EXTERNAL]: {
+    args: [url: string]
+    result: void
+  }
+}
+
+/**
+ * Moon 当前已登记的 client capability；新增能力必须先进入这里再被 host 注册。
+ */
+export const CLIENT_CAPABILITY_DEFINITIONS = {
+  [CLIENT_TEST_ECHO]: {
+    channel: CLIENT_TEST_ECHO,
+    availability: 'test-only'
+  },
+  [CLIENT_OPEN_EXTERNAL]: {
+    channel: CLIENT_OPEN_EXTERNAL,
+    availability: 'product'
+  }
+} as const satisfies {
+  [TChannel in ClientCapabilityChannel]: ClientCapabilityDefinition<TChannel>
+}
+
+/**
  * capability helper 所需的最小 server 端口。
  */
 export type ClientCapabilityServer = {
@@ -37,6 +80,13 @@ export type ClientCapabilityServer = {
 }
 
 /**
+ * 判断字符串是否是 registry 中登记过的 client capability channel。
+ */
+export function isClientCapabilityChannel(channel: string): channel is ClientCapabilityChannel {
+  return Object.prototype.hasOwnProperty.call(CLIENT_CAPABILITY_DEFINITIONS, channel)
+}
+
+/**
  * 在指定 workspace 中查找第一个声明了目标 capability 的在线 client。
  */
 export function findWorkspaceClientWithCapability(
@@ -50,6 +100,22 @@ export function findWorkspaceClientWithCapability(
 }
 
 /**
+ * 按 registry 中的 capability channel 发起一次 typed server-to-client 调用。
+ */
+export async function requestClientCapability<TChannel extends ClientCapabilityChannel>(
+  server: Pick<ClientCapabilityServer, 'invokeClient'>,
+  clientId: string,
+  channel: TChannel,
+  ...args: ClientCapabilityRequestMap[TChannel]['args']
+): Promise<ClientCapabilityRequestMap[TChannel]['result']> {
+  return (await server.invokeClient(
+    clientId,
+    channel,
+    ...args
+  )) as ClientCapabilityRequestMap[TChannel]['result']
+}
+
+/**
  * 请求 client 执行安全 echo 能力；仅用于测试和链路 smoke，不代表产品能力。
  */
 export async function requestClientTestEcho<TValue>(
@@ -57,7 +123,7 @@ export async function requestClientTestEcho<TValue>(
   clientId: string,
   value: TValue
 ): Promise<TValue> {
-  return (await server.invokeClient(clientId, CLIENT_TEST_ECHO, value)) as TValue
+  return (await requestClientCapability(server, clientId, CLIENT_TEST_ECHO, value)) as TValue
 }
 
 /**
@@ -68,5 +134,5 @@ export async function requestClientOpenExternal(
   clientId: string,
   url: string
 ): Promise<void> {
-  await server.invokeClient(clientId, CLIENT_OPEN_EXTERNAL, url)
+  await requestClientCapability(server, clientId, CLIENT_OPEN_EXTERNAL, url)
 }

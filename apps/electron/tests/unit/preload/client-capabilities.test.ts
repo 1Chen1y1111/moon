@@ -9,10 +9,14 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   CLIENT_OPEN_EXTERNAL,
+  CLIENT_TEST_ECHO,
   type RpcClientCapabilityHandler
 } from '@moon/server-core/transport'
 import { RPC_CHANNELS } from '@moon/shared/protocol'
-import { registerPreloadClientCapabilities } from '@preload/client-capabilities'
+import {
+  getPreloadClientCapabilityAllowlist,
+  registerPreloadClientCapabilities
+} from '@preload/client-capabilities'
 
 /**
  * 创建可捕获 capability handler 的 fake workspace client。
@@ -33,6 +37,11 @@ function createCapabilityClientFixture(): {
 }
 
 describe('registerPreloadClientCapabilities', () => {
+  it('allows only product preload capabilities', () => {
+    expect(getPreloadClientCapabilityAllowlist()).toEqual([CLIENT_OPEN_EXTERNAL])
+    expect(getPreloadClientCapabilityAllowlist()).not.toContain(CLIENT_TEST_ECHO)
+  })
+
   it('bridges openExternal capability to the local window RPC channel', async () => {
     const capabilityClient = createCapabilityClientFixture()
     const localClient = {
@@ -67,5 +76,20 @@ describe('registerPreloadClientCapabilities', () => {
       'client:openExternal requires a URL string'
     )
     expect(localClient.invoke).not.toHaveBeenCalled()
+  })
+
+  it('propagates local RPC failures to the capability response path', async () => {
+    const capabilityClient = createCapabilityClientFixture()
+    const localClient = {
+      invoke: vi.fn(async () => {
+        throw new Error('shell failed')
+      })
+    }
+
+    registerPreloadClientCapabilities(capabilityClient, localClient)
+
+    const handler = capabilityClient.getHandler(CLIENT_OPEN_EXTERNAL)
+
+    await expect(handler?.('https://moon.local/auth')).rejects.toThrow('shell failed')
   })
 })

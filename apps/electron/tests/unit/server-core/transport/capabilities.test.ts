@@ -8,14 +8,54 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import {
+  CLIENT_CAPABILITY_DEFINITIONS,
   CLIENT_OPEN_EXTERNAL,
   CLIENT_TEST_ECHO,
   findWorkspaceClientWithCapability,
+  isClientCapabilityChannel,
+  requestClientCapability,
   requestClientOpenExternal,
   requestClientTestEcho
 } from '@moon/server-core/transport'
 
 describe('client capability helpers', () => {
+  it('keeps all capabilities registered with governance metadata', () => {
+    expect(CLIENT_CAPABILITY_DEFINITIONS).toEqual({
+      [CLIENT_TEST_ECHO]: {
+        channel: CLIENT_TEST_ECHO,
+        availability: 'test-only'
+      },
+      [CLIENT_OPEN_EXTERNAL]: {
+        channel: CLIENT_OPEN_EXTERNAL,
+        availability: 'product'
+      }
+    })
+  })
+
+  it('identifies only registered client capability channels', () => {
+    expect(isClientCapabilityChannel(CLIENT_TEST_ECHO)).toBe(true)
+    expect(isClientCapabilityChannel(CLIENT_OPEN_EXTERNAL)).toBe(true)
+    expect(isClientCapabilityChannel('client:openPath')).toBe(false)
+  })
+
+  it('requests a typed capability through the shared helper', async () => {
+    const invokeClient = vi.fn(async () => undefined)
+
+    await expect(
+      requestClientCapability(
+        { invokeClient },
+        'client-1',
+        CLIENT_OPEN_EXTERNAL,
+        'https://moon.local/auth'
+      )
+    ).resolves.toBeUndefined()
+    expect(invokeClient).toHaveBeenCalledWith(
+      'client-1',
+      CLIENT_OPEN_EXTERNAL,
+      'https://moon.local/auth'
+    )
+  })
+
   it('requests the safe echo capability through invokeClient', async () => {
     const invokeClient = vi.fn(async () => 'echo:hi')
 
