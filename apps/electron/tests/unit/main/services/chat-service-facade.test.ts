@@ -56,10 +56,14 @@ describe('ChatService facade', () => {
     })
 
     const { ChatService } = await import('@moon/server/services/chat-service')
+    const { WorkspaceSourceProvider } = await import('@moon/server/sources/workspace-source-provider')
 
     const service = new ChatService(dependencies)
 
-    expect(SessionManager).toHaveBeenCalledWith(dependencies)
+    expect(SessionManager).toHaveBeenCalledWith({
+      ...dependencies,
+      sourceProvider: expect.any(WorkspaceSourceProvider)
+    })
     expect(createSessionHandlers).toHaveBeenCalledWith({ sessionManager })
 
     await expect(service.listSessions()).resolves.toBe(sessions)

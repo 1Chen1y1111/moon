@@ -40,6 +40,7 @@ import type {
   RunChatOperationInput,
   SendChatMessageInput
 } from '@moon/shared/domain/chat-validation'
+import { WorkspaceSourceProvider } from '../sources/workspace-source-provider'
 
 export {
   createChatTitle,
@@ -59,7 +60,10 @@ export class ChatService {
   private readonly sessionHandlers: SessionHandlers
 
   constructor(dependencies: ChatServiceDependencies) {
-    const sessionManager = new SessionManager(dependencies)
+    const sessionManager = new SessionManager({
+      ...dependencies,
+      sourceProvider: dependencies.sourceProvider ?? new WorkspaceSourceProvider()
+    })
 
     this.sessionHandlers = createSessionHandlers({ sessionManager })
   }

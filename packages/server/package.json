@@ -10,7 +10,8 @@
     "./bootstrap/*": "./src/bootstrap/*.ts",
     "./db/*": "./src/db/*.ts",
     "./repositories/*": "./src/repositories/*.ts",
-    "./services/*": "./src/services/*.ts"
+    "./services/*": "./src/services/*.ts",
+    "./sources/*": "./src/sources/*.ts"
   },
   "scripts": {
     "start": "tsx src/cli.ts",
