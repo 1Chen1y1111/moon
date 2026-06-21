@@ -213,6 +213,28 @@ describe('ClaudeAgent', () => {
     )
   })
 
+  it('passes serialized history prompt to Claude SDK when no workspace is configured', async () => {
+    const queryClaude = createQueryClaudeMock()
+    const agent = new ClaudeAgent({
+      model: 'claude-sonnet',
+      messages: [
+        { role: 'system', content: 'follow project rules' },
+        { role: 'user', content: 'previous question' }
+      ],
+      queryClaude: queryClaude as never
+    })
+
+    for await (const _event of agent.chat('current question')) {
+      // 消费事件流以触发 SDK query mock。
+    }
+
+    expect(queryClaude).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: 'SYSTEM:\nfollow project rules\n\nUSER:\nprevious question'
+      })
+    )
+  })
+
   it('does not append a fallback complete event after SDK result completion', async () => {
     const queryClaude = createResultQueryClaudeMock()
     const agent = new ClaudeAgent({
@@ -327,7 +349,7 @@ describe('ClaudeAgent', () => {
 
     expect(queryClaude).toHaveBeenCalledWith(
       expect.objectContaining({
-        prompt: expect.not.stringContaining('SYSTEM:\nproject context'),
+        prompt: 'USER:\nprevious question',
         options: expect.objectContaining({
           allowDangerouslySkipPermissions: true,
           cwd: '/workspace/moon',

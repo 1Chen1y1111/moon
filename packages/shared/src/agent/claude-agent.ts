@@ -7,8 +7,8 @@ import { query } from '@anthropic-ai/claude-agent-sdk'
 
 import { BaseAgent } from './base-agent'
 import { adaptClaudeSdkMessage } from './backend/claude/event-adapter'
-import { buildClaudePrompt } from './backend/claude/prompt'
 import { createClaudeQueryOptions } from './backend/internal/runtime-resolver'
+import { AgentPromptBuilder } from './runtime/prompt-builder'
 import type { ThinkingLevel } from '../config'
 import type {
   AgentBackendMessage,
@@ -144,6 +144,7 @@ export class ClaudeAgent extends BaseAgent {
   private readonly apiKey?: string
   private readonly baseUrl?: string
   private readonly messages: AgentBackendMessage[]
+  private readonly promptBuilder = new AgentPromptBuilder()
   private readonly queryClaude: typeof query
 
   /**
@@ -183,11 +184,11 @@ export class ClaudeAgent extends BaseAgent {
     let runtimeSummary: string | undefined
 
     try {
-      const promptMessages =
-        this.workspace === undefined
-          ? this.messages
-          : this.messages.filter((candidate) => candidate.role !== 'system')
-      const prompt = buildClaudePrompt(promptMessages, message)
+      const prompt = this.promptBuilder.build({
+        fallbackMessage: message,
+        messages: this.messages,
+        workspace: this.workspace
+      })
       const queryOptions = createClaudeQueryOptions({
         abortController,
         apiKey: this.apiKey,
