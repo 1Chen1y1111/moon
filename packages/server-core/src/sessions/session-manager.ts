@@ -21,7 +21,8 @@ import {
   type AgentBackendMessage,
   type AgentEvent,
   type AgentPermissionMode,
-  type AgentPermissionDecision
+  type AgentPermissionDecision,
+  type AgentSourceRecord
 } from '@moon/shared/agent'
 import type { NormalizedLlmConnection } from '@moon/shared/config'
 import type {
@@ -129,6 +130,23 @@ export type TopicsRepositoryPort = {
   save: (topic: TopicRecord) => Promise<TopicRecord>
 }
 
+/**
+ * Source provider 解析 sources 时可见的会话作用域，保持在 server-core 纯 runtime 边界内。
+ */
+export type SessionSourceProviderScope = {
+  project: ProjectRecord | null
+  session: SessionRecord
+  topic: TopicRecord
+  thread: ThreadRecord
+}
+
+/**
+ * 为当前会话 turn 提供 agent sources 的外部端口，具体来源由 Electron main 或未来 runtime 注入。
+ */
+export type SessionSourceProviderPort = {
+  resolveSources: (scope: SessionSourceProviderScope) => Promise<AgentSourceRecord[]>
+}
+
 export type SessionManagerDependencies = {
   agentOperationsRepository: AgentOperationsRepositoryPort
   agentBackend?: AgentBackend
@@ -138,6 +156,7 @@ export type SessionManagerDependencies = {
   projectsRepository?: ProjectsRepositoryPort
   sessionsRepository: SessionsRepositoryPort
   settingsRepository: SettingsRepositoryPort
+  sourceProvider?: SessionSourceProviderPort
   threadsRepository: ThreadsRepositoryPort
   toolInvocationsRepository: ToolInvocationsRepositoryPort
   topicsRepository: TopicsRepositoryPort
@@ -174,12 +193,7 @@ type ResolvedAgentTarget = {
   session: SessionRecord | null
 }
 
-type ConversationScope = {
-  project: ProjectRecord | null
-  session: SessionRecord
-  topic: TopicRecord
-  thread: ThreadRecord
-}
+type ConversationScope = SessionSourceProviderScope
 
 export type AgentBackendFactory = (config: AgentBackendConfig) => AgentBackend
 
@@ -468,6 +482,7 @@ export class SessionManager {
   private readonly projectsRepository?: ProjectsRepositoryPort
   private readonly sessionsRepository: SessionsRepositoryPort
   private readonly settingsRepository: SettingsRepositoryPort
+  private readonly sourceProvider?: SessionSourceProviderPort
   private readonly threadsRepository: ThreadsRepositoryPort
   private readonly toolInvocationsRepository: ToolInvocationsRepositoryPort
   private readonly topicsRepository: TopicsRepositoryPort
@@ -484,6 +499,7 @@ export class SessionManager {
     projectsRepository,
     sessionsRepository,
     settingsRepository,
+    sourceProvider,
     threadsRepository,
     toolInvocationsRepository,
     topicsRepository
@@ -496,6 +512,7 @@ export class SessionManager {
     this.projectsRepository = projectsRepository
     this.sessionsRepository = sessionsRepository
     this.settingsRepository = settingsRepository
+    this.sourceProvider = sourceProvider
     this.threadsRepository = threadsRepository
     this.toolInvocationsRepository = toolInvocationsRepository
     this.topicsRepository = topicsRepository
@@ -1020,12 +1037,14 @@ export class SessionManager {
             name: scope.project.name,
             path: scope.project.path
           }
+    const sources = await this.resolveSourcesForScope(scope)
     const agentBackend = this.createAgentBackend(
       createConnectionAgentBackendConfig(
         connection,
         backendMessages,
         workspace,
-        defaultAgentPermissionMode
+        defaultAgentPermissionMode,
+        sources
       )
     )
 
@@ -1415,6 +1434,21 @@ export class SessionManager {
     }
 
     return { message, operation }
+  }
+
+  /**
+   * 从可选 source provider 读取当前会话可见的 sources；空列表不写入 backend config。
+   */
+  private async resolveSourcesForScope(
+    scope: ConversationScope
+  ): Promise<AgentSourceRecord[] | undefined> {
+    if (this.sourceProvider === undefined) {
+      return undefined
+    }
+
+    const sources = await this.sourceProvider.resolveSources(scope)
+
+    return sources.length === 0 ? undefined : sources
   }
 
   /**

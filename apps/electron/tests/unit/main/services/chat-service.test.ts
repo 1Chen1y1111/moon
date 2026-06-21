@@ -11,7 +11,7 @@ import { join } from 'node:path'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { SessionManager } from '@moon/server-core/sessions'
+import { SessionManager, type SessionSourceProviderPort } from '@moon/server-core/sessions'
 import type {
   AgentOperationRecord,
   MessageRecord,
@@ -33,6 +33,7 @@ import type {
   AgentChatOptions,
   AgentEvent,
   AgentPermissionDecision,
+  AgentSourceRecord,
   MessageAttachment
 } from '@moon/shared/agent'
 import {
@@ -466,6 +467,7 @@ function createService(input: {
   messages?: MessageRecord[]
   projects?: ProjectRecord[]
   sessions?: SessionRecord[]
+  sourceProvider?: SessionSourceProviderPort
   settings: AppSettings
 }): CreateServiceResult {
   const sessionsRepository = new SessionsRepositoryMock(input.sessions)
@@ -534,6 +536,7 @@ function createService(input: {
       projectsRepository: projectsRepository as never,
       sessionsRepository: sessionsRepository as never,
       settingsRepository: settingsRepository as never,
+      sourceProvider: input.sourceProvider,
       threadsRepository: threadsRepository as never,
       toolInvocationsRepository: toolInvocationsRepository as never,
       topicsRepository: topicsRepository as never
@@ -700,6 +703,52 @@ describe('SessionManager.sendMessage', () => {
           path: project.path
         },
         permissionMode: 'ask'
+      })
+    )
+  })
+
+  it('passes sources resolved for the session scope to backend config', async () => {
+    const project = {
+      id: 'project-1',
+      name: 'moon',
+      path: '/workspace/moon',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:00.000Z'
+    }
+    const sources: AgentSourceRecord[] = [
+      {
+        slug: 'github',
+        name: 'GitHub',
+        description: 'GitHub repository context',
+        status: 'active'
+      }
+    ]
+    const sourceProvider: SessionSourceProviderPort = {
+      resolveSources: vi.fn(async (scope) => {
+        expect(scope.project).toMatchObject({ id: project.id, path: project.path })
+        expect(scope.session.projectId).toBe(project.id)
+
+        return sources
+      })
+    }
+    const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
+      void config
+      return createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
+    })
+    const { service } = createService({
+      activeProjectId: project.id,
+      createAgentBackend,
+      projects: [project],
+      sourceProvider,
+      settings: createClaudeSettings()
+    })
+
+    await service.sendMessage({ content: 'hello' })
+
+    expect(sourceProvider.resolveSources).toHaveBeenCalledTimes(1)
+    expect(createAgentBackend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sources
       })
     )
   })
