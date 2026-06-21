@@ -15,6 +15,8 @@ import {
   type WireError
 } from '@moon/shared/protocol'
 
+const testClientCapability = 'client:testEcho'
+
 describe('protocol wire types', () => {
   it('keeps the protocol version stable', () => {
     expect(PROTOCOL_VERSION).toBe('1.0')
@@ -53,7 +55,7 @@ describe('protocol wire types', () => {
       type: 'handshake',
       protocolVersion: PROTOCOL_VERSION,
       authToken: 'workspace-secret',
-      clientCapabilities: ['client:testEcho'],
+      clientCapabilities: [testClientCapability],
       clientId: 'client-1',
       workspaceId: 'workspace-1'
     } satisfies MessageEnvelope
@@ -64,7 +66,7 @@ describe('protocol wire types', () => {
     expect(error.error?.code).toBe('HANDLER_ERROR')
     expect(handshake.protocolVersion).toBe(PROTOCOL_VERSION)
     expect(handshake.authToken).toBe('workspace-secret')
-    expect(handshake.clientCapabilities).toEqual(['client:testEcho'])
+    expect(handshake.clientCapabilities).toEqual([testClientCapability])
   })
 
   it('recognizes supported error codes only', () => {

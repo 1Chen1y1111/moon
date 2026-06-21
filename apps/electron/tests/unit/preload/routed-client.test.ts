@@ -7,7 +7,11 @@
 
 import { describe, expect, it, vi } from 'vitest'
 
-import type { RpcClientCapabilityHandler, RpcClientPort } from '@moon/server-core/transport'
+import {
+  CLIENT_TEST_ECHO,
+  type RpcClientCapabilityHandler,
+  type RpcClientPort
+} from '@moon/server-core/transport'
 import { RPC_CHANNELS } from '@moon/shared/protocol'
 import { RoutedClient } from '@preload/routed-client'
 
@@ -123,9 +127,9 @@ describe('RoutedClient', () => {
     const client = new RoutedClient(local.client, workspace.client)
     const handler = vi.fn()
 
-    client.handleCapability('client:testEcho', handler)
+    client.handleCapability(CLIENT_TEST_ECHO, handler)
 
-    expect(workspace.handleCapability).toHaveBeenCalledWith('client:testEcho', handler)
+    expect(workspace.handleCapability).toHaveBeenCalledWith(CLIENT_TEST_ECHO, handler)
     expect(local.handleCapability).not.toHaveBeenCalled()
   })
 
@@ -135,7 +139,7 @@ describe('RoutedClient', () => {
     const client = new RoutedClient(local.client, workspace.client)
 
     expect(() => {
-      client.handleCapability('client:testEcho', vi.fn())
+      client.handleCapability(CLIENT_TEST_ECHO, vi.fn())
     }).not.toThrow()
   })
 })

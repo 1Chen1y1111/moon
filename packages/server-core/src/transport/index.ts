@@ -4,6 +4,7 @@
  */
 
 export * from './codec'
+export * from './capabilities'
 export * from './envelope-push-port'
 export * from './envelope-rpc-client'
 export * from './envelope-rpc-server'

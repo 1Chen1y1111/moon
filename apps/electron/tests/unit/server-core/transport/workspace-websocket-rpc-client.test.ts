@@ -8,6 +8,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  CLIENT_TEST_ECHO,
   createWorkspaceWebSocketRpcClient,
   serializeEnvelope,
   type WorkspaceWebSocketConnectionState
@@ -200,7 +201,7 @@ describe('createWorkspaceWebSocketRpcClient', () => {
     const client = createClient()
     const resultPromise = client.invoke(RPC_CHANNELS.sessions.listSessions)
 
-    client.handleCapability('client:testEcho', (value) => value)
+    client.handleCapability(CLIENT_TEST_ECHO, (value) => value)
 
     await flushPromises()
     const socket = FakeWebSocket.instances[0]
@@ -212,7 +213,7 @@ describe('createWorkspaceWebSocketRpcClient', () => {
       id: 'workspace-handshake',
       type: 'handshake',
       protocolVersion: PROTOCOL_VERSION,
-      clientCapabilities: ['client:testEcho']
+      clientCapabilities: [CLIENT_TEST_ECHO]
     })
 
     acknowledgeHandshake(socket)
@@ -413,7 +414,7 @@ describe('createWorkspaceWebSocketRpcClient', () => {
     const client = createClient()
     const listener = vi.fn()
 
-    client.handleCapability('client:testEcho', (value) => `echo:${value}`)
+    client.handleCapability(CLIENT_TEST_ECHO, (value) => `echo:${value}`)
     client.on(RPC_CHANNELS.sessions.event, listener)
     await flushPromises()
     const socket = FakeWebSocket.instances[0]
@@ -425,7 +426,7 @@ describe('createWorkspaceWebSocketRpcClient', () => {
       data: serializeEnvelope({
         id: 'server-request-1',
         type: 'request',
-        channel: 'client:testEcho',
+        channel: CLIENT_TEST_ECHO,
         args: ['hi']
       })
     })
@@ -434,7 +435,7 @@ describe('createWorkspaceWebSocketRpcClient', () => {
     expect(parseSentEnvelope(socket, 1)).toEqual({
       id: 'server-request-1',
       type: 'response',
-      channel: 'client:testEcho',
+      channel: CLIENT_TEST_ECHO,
       result: 'echo:hi'
     })
     expect(listener).not.toHaveBeenCalled()

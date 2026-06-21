@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  CLIENT_TEST_ECHO,
   deserializeEnvelope,
   serializeEnvelope,
   validateEnvelopeShape
@@ -30,7 +31,7 @@ describe('transport codec', () => {
     const envelope = {
       id: 'handshake-1',
       type: 'handshake',
-      clientCapabilities: ['client:testEcho']
+      clientCapabilities: [CLIENT_TEST_ECHO]
     } satisfies MessageEnvelope
 
     expect(validateEnvelopeShape(envelope)).toBe(true)
@@ -66,7 +67,7 @@ describe('transport codec', () => {
       validateEnvelopeShape({
         id: 'handshake-1',
         type: 'handshake',
-        clientCapabilities: ['client:testEcho', 42]
+        clientCapabilities: [CLIENT_TEST_ECHO, 42]
       })
     ).toBe(false)
   })

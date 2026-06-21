@@ -7,7 +7,7 @@
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { serializeEnvelope } from '@moon/server-core/transport'
+import { CLIENT_TEST_ECHO, serializeEnvelope } from '@moon/server-core/transport'
 import { PROTOCOL_VERSION, RPC_CHANNELS } from '@moon/shared/protocol'
 import { createWorkspaceWebSocketRpcClient } from '@preload/websocket-rpc-client'
 
@@ -154,7 +154,7 @@ describe('createWorkspaceWebSocketRpcClient preload wrapper', () => {
     })
     const resultPromise = client.invoke(RPC_CHANNELS.sessions.listSessions)
 
-    client.handleCapability('client:testEcho', (value) => value)
+    client.handleCapability(CLIENT_TEST_ECHO, (value) => value)
 
     await flushPromises()
     const socket = FakeWebSocket.instances[0]
@@ -167,7 +167,7 @@ describe('createWorkspaceWebSocketRpcClient preload wrapper', () => {
       type: 'handshake',
       protocolVersion: PROTOCOL_VERSION,
       authToken: 'workspace-secret',
-      clientCapabilities: ['client:testEcho']
+      clientCapabilities: [CLIENT_TEST_ECHO]
     })
 
     acknowledgeHandshake(socket)

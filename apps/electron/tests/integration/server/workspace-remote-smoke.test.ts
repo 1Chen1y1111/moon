@@ -14,7 +14,10 @@ import WebSocket from 'ws'
 
 import { startMoonWorkspaceServer, type MoonWorkspaceServer } from '@moon/server'
 import {
+  CLIENT_TEST_ECHO,
   createWorkspaceWebSocketRpcClient,
+  findWorkspaceClientWithCapability,
+  requestClientTestEcho,
   type WorkspaceWebSocketConstructor,
   type WorkspaceWebSocketEvent
 } from '@moon/server-core/transport'
@@ -162,7 +165,7 @@ describe('workspace remote smoke', () => {
         delta: 'hello from headless'
       } as const
 
-      client.handleCapability('client:testEcho', (value) => `echo:${value}`)
+      client.handleCapability(CLIENT_TEST_ECHO, (value) => `echo:${value}`)
       client.on(RPC_CHANNELS.sessions.event, listener)
 
       await expect(rejectedClient.invoke(RPC_CHANNELS.sessions.listSessions)).rejects.toMatchObject(
@@ -171,13 +174,15 @@ describe('workspace remote smoke', () => {
         }
       )
       await expect(client.invoke(RPC_CHANNELS.sessions.listSessions)).resolves.toEqual([])
-      expect(
-        workspaceServer.workspaceRpcServer.findClientsWithCapability('client:testEcho', {
-          workspaceId: 'workspace-1'
-        })
-      ).toEqual(['client-1'])
+      const clientId = findWorkspaceClientWithCapability(
+        workspaceServer.workspaceRpcServer,
+        CLIENT_TEST_ECHO,
+        'workspace-1'
+      )
+
+      expect(clientId).toBe('client-1')
       await expect(
-        workspaceServer.workspaceRpcServer.invokeClient('client-1', 'client:testEcho', 'hi')
+        requestClientTestEcho(workspaceServer.workspaceRpcServer, clientId ?? '', 'hi')
       ).resolves.toBe('echo:hi')
 
       workspaceServer.workspaceRpcServer.push(RPC_CHANNELS.sessions.event, { to: 'all' }, event)

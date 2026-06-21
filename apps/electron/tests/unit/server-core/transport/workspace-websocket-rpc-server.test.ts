@@ -8,6 +8,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  CLIENT_TEST_ECHO,
   createWorkspaceWebSocketRpcServer,
   serializeEnvelope
 } from '@moon/server-core/transport'
@@ -184,7 +185,7 @@ describe('createWorkspaceWebSocketRpcServer', () => {
     await server.getTransportUrl()
     const socket = fakeServer.connect()
 
-    await performHandshake(socket, 'handshake-1', undefined, ['client:testEcho'])
+    await performHandshake(socket, 'handshake-1', undefined, [CLIENT_TEST_ECHO])
 
     expect(parseSentEnvelope(socket, 0)).toEqual({
       id: 'handshake-1',
@@ -204,17 +205,17 @@ describe('createWorkspaceWebSocketRpcServer', () => {
     await server.getTransportUrl()
     const socket = fakeServer.connect()
 
-    await performHandshake(socket, 'handshake-1', undefined, ['client:testEcho'])
+    await performHandshake(socket, 'handshake-1', undefined, [CLIENT_TEST_ECHO])
 
-    expect(server.hasClientCapability('client-1', 'client:testEcho')).toBe(true)
+    expect(server.hasClientCapability('client-1', CLIENT_TEST_ECHO)).toBe(true)
     expect(server.hasClientCapability('client-1', 'client:missing')).toBe(false)
 
-    const resultPromise = server.invokeClient('client-1', 'client:testEcho', 'hi')
+    const resultPromise = server.invokeClient('client-1', CLIENT_TEST_ECHO, 'hi')
     const request = parseSentEnvelope(socket, 1) as { id: string }
 
     expect(request).toMatchObject({
       type: 'request',
-      channel: 'client:testEcho',
+      channel: CLIENT_TEST_ECHO,
       args: ['hi']
     })
 
@@ -222,7 +223,7 @@ describe('createWorkspaceWebSocketRpcServer', () => {
       serializeEnvelope({
         id: request.id,
         type: 'response',
-        channel: 'client:testEcho',
+        channel: CLIENT_TEST_ECHO,
         result: 'echo:hi'
       })
     )
@@ -244,22 +245,22 @@ describe('createWorkspaceWebSocketRpcServer', () => {
     const secondSocket = fakeServer.connect()
     const thirdSocket = fakeServer.connect()
 
-    await performHandshake(firstSocket, 'handshake-1', undefined, ['client:testEcho'], 'workspace-1')
+    await performHandshake(firstSocket, 'handshake-1', undefined, [CLIENT_TEST_ECHO], 'workspace-1')
     await performHandshake(
       secondSocket,
       'handshake-2',
       undefined,
-      ['client:testEcho'],
+      [CLIENT_TEST_ECHO],
       'workspace-2'
     )
     await performHandshake(thirdSocket, 'handshake-3', undefined, ['client:other'], 'workspace-1')
 
-    expect(server.findClientsWithCapability('client:testEcho')).toEqual(['client-1', 'client-2'])
+    expect(server.findClientsWithCapability(CLIENT_TEST_ECHO)).toEqual(['client-1', 'client-2'])
     expect(
-      server.findClientsWithCapability('client:testEcho', { workspaceId: 'workspace-1' })
+      server.findClientsWithCapability(CLIENT_TEST_ECHO, { workspaceId: 'workspace-1' })
     ).toEqual(['client-1'])
     expect(
-      server.findClientsWithCapability('client:testEcho', { workspaceId: 'workspace-2' })
+      server.findClientsWithCapability(CLIENT_TEST_ECHO, { workspaceId: 'workspace-2' })
     ).toEqual(['client-2'])
     expect(
       server.findClientsWithCapability('client:other', { workspaceId: 'workspace-1' })
@@ -276,16 +277,16 @@ describe('createWorkspaceWebSocketRpcServer', () => {
     await server.getTransportUrl()
     const socket = fakeServer.connect()
 
-    await performHandshake(socket, 'handshake-1', undefined, ['client:testEcho'], 'workspace-1')
+    await performHandshake(socket, 'handshake-1', undefined, [CLIENT_TEST_ECHO], 'workspace-1')
 
     expect(
-      server.findClientsWithCapability('client:testEcho', { workspaceId: 'workspace-1' })
+      server.findClientsWithCapability(CLIENT_TEST_ECHO, { workspaceId: 'workspace-1' })
     ).toEqual(['client-1'])
 
     socket.close()
 
     expect(
-      server.findClientsWithCapability('client:testEcho', { workspaceId: 'workspace-1' })
+      server.findClientsWithCapability(CLIENT_TEST_ECHO, { workspaceId: 'workspace-1' })
     ).toEqual([])
   })
 
@@ -317,13 +318,13 @@ describe('createWorkspaceWebSocketRpcServer', () => {
     await server.getTransportUrl()
     const socket = fakeServer.connect()
 
-    await performHandshake(socket, 'handshake-1', undefined, ['client:testEcho'])
+    await performHandshake(socket, 'handshake-1', undefined, [CLIENT_TEST_ECHO])
     socket.close()
 
-    await expect(server.invokeClient('client-1', 'client:testEcho')).rejects.toMatchObject({
+    await expect(server.invokeClient('client-1', CLIENT_TEST_ECHO)).rejects.toMatchObject({
       code: 'CLIENT_DISCONNECTED'
     })
-    expect(server.hasClientCapability('client-1', 'client:testEcho')).toBe(false)
+    expect(server.hasClientCapability('client-1', CLIENT_TEST_ECHO)).toBe(false)
   })
 
   it('rejects pending server-to-client invokes when a client disconnects mid-flight', async () => {
@@ -481,7 +482,7 @@ describe('createWorkspaceWebSocketRpcServer', () => {
 
     const socket = fakeServer.connect()
 
-    await performHandshake(socket, 'handshake-1', undefined, ['client:testEcho'])
+    await performHandshake(socket, 'handshake-1', undefined, [CLIENT_TEST_ECHO])
     socket.emitMessage(
       serializeEnvelope({
         id: 'request-1',
@@ -527,7 +528,7 @@ describe('createWorkspaceWebSocketRpcServer', () => {
     await server.getTransportUrl()
     const socket = fakeServer.connect()
 
-    await performHandshake(socket, 'handshake-1', undefined, ['client:testEcho'])
+    await performHandshake(socket, 'handshake-1', undefined, [CLIENT_TEST_ECHO])
     socket.emitMessage(
       serializeEnvelope({
         id: 'request-1',
@@ -547,7 +548,7 @@ describe('createWorkspaceWebSocketRpcServer', () => {
       })
     )
     expect(
-      server.findClientsWithCapability('client:testEcho', { workspaceId: 'project-1' })
+      server.findClientsWithCapability(CLIENT_TEST_ECHO, { workspaceId: 'project-1' })
     ).toEqual(['client-1'])
   })
 

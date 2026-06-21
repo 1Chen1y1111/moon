@@ -8,6 +8,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { createWorkspaceWebSocketRpcServer } from '@main/bootstrap/workspace-websocket-rpc-server'
+import { CLIENT_TEST_ECHO } from '@moon/server-core/transport'
 
 type FakeServerEvent = 'connection' | 'listening' | 'error'
 
@@ -75,11 +76,11 @@ describe('createWorkspaceWebSocketRpcServer', () => {
 
     await server.getTransportInfo()
 
-    expect(server.hasClientCapability('client-1', 'client:testEcho')).toBe(false)
-    expect(server.findClientsWithCapability('client:testEcho', { workspaceId: 'workspace-1' })).toEqual(
-      []
-    )
-    await expect(server.invokeClient('client-1', 'client:testEcho', 'hi')).rejects.toMatchObject({
+    expect(server.hasClientCapability('client-1', CLIENT_TEST_ECHO)).toBe(false)
+    expect(
+      server.findClientsWithCapability(CLIENT_TEST_ECHO, { workspaceId: 'workspace-1' })
+    ).toEqual([])
+    await expect(server.invokeClient('client-1', CLIENT_TEST_ECHO, 'hi')).rejects.toMatchObject({
       code: 'CLIENT_DISCONNECTED'
     })
   })
