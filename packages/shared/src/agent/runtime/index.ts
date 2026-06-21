@@ -4,4 +4,5 @@
  */
 
 export * from './permission-manager'
+export * from './prompt-builder'
 export * from './types'
