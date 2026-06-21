@@ -80,6 +80,10 @@ export type WorkspaceWebSocketRpcServerOptions = {
 export type WorkspaceWebSocketRpcServer = RpcServerPort<SessionRpcRequestContext> &
   RpcPushPort & {
     close: () => Promise<void>
+    findClientsWithCapability: (
+      channel: string,
+      options?: { workspaceId?: string }
+    ) => string[]
     getTransportUrl: () => Promise<string>
     hasClientCapability: (clientId: string, channel: string) => boolean
     invokeClient: (clientId: string, channel: string, ...args: unknown[]) => Promise<unknown>
@@ -130,6 +134,8 @@ export function createWorkspaceWebSocketRpcServer({
 
       return client !== undefined && client.capabilities.has(channel)
     },
+    findClientsWithCapability: (channel, options) =>
+      findClientsWithCapability(clients, channel, options),
     invokeClient: (clientId, channel, ...args) => {
       const client = findClientById(clients, clientId)
 
@@ -343,6 +349,10 @@ function handleHandshakeEnvelope(
   client.handshakeComplete = true
   client.isAlive = true
   client.capabilities = new Set(envelope.clientCapabilities ?? [])
+  client.workspaceId =
+    typeof envelope.workspaceId === 'string' && envelope.workspaceId.length > 0
+      ? envelope.workspaceId
+      : null
   sendEnvelope(client.socket, {
     id: envelope.id,
     type: 'handshake_ack',
@@ -483,6 +493,25 @@ function findClientById(
   clientId: string
 ): WorkspaceSocketClient | undefined {
   return [...clients].find((client) => client.clientId === clientId)
+}
+
+/**
+ * 查找当前在线且声明了指定 capability 的 client；可按 workspaceId 进一步收窄。
+ */
+function findClientsWithCapability(
+  clients: Set<WorkspaceSocketClient>,
+  channel: string,
+  options?: { workspaceId?: string }
+): string[] {
+  return [...clients]
+    .filter((client) => {
+      if (!isClientReady(client) || !client.capabilities.has(channel)) {
+        return false
+      }
+
+      return options?.workspaceId === undefined || client.workspaceId === options.workspaceId
+    })
+    .map((client) => client.clientId)
 }
 
 /**

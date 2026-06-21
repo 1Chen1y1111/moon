@@ -106,6 +106,7 @@ describe('registerIpcHandlers', () => {
   const openSettingsWindow = vi.fn()
 
   beforeEach(() => {
+    delete process.env.MOON_WORKSPACE_ID
     delete process.env.MOON_WORKSPACE_WS_URL
     delete process.env.MOON_WORKSPACE_WS_TOKEN
     removeHandlerMock.mockReset()
@@ -139,6 +140,7 @@ describe('registerIpcHandlers', () => {
   })
 
   afterEach(() => {
+    delete process.env.MOON_WORKSPACE_ID
     delete process.env.MOON_WORKSPACE_WS_URL
     delete process.env.MOON_WORKSPACE_WS_TOKEN
   })
@@ -183,6 +185,15 @@ describe('registerIpcHandlers', () => {
       '@ipc/workspace-transport-contract'
     )
     const workspace = createWorkspaceRpcServerFixture()
+    const project = {
+      id: 'project-1',
+      name: 'moon',
+      path: '/workspace/moon',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:00.000Z'
+    }
+
+    projectsService.getActiveProject.mockResolvedValue(project)
 
     registerIpcHandlers({
       chatService: chatService as never,
@@ -202,9 +213,11 @@ describe('registerIpcHandlers', () => {
     ).resolves.toEqual({
       authToken: 'local-workspace-secret',
       mode: 'local',
-      url: 'ws://127.0.0.1:48123'
+      url: 'ws://127.0.0.1:48123',
+      workspaceId: 'project-1'
     })
     expect(workspace.getTransportInfo).toHaveBeenCalledOnce()
+    expect(projectsService.getActiveProject).toHaveBeenCalledOnce()
   })
 
   it('returns remote workspace transport info without creating the local workspace server', async () => {
@@ -237,6 +250,40 @@ describe('registerIpcHandlers', () => {
       url: 'ws://remote-workspace.local:48123'
     })
     await expect(registeredHandlers.close()).resolves.toBeUndefined()
+    expect(createWorkspaceRpcServer).not.toHaveBeenCalled()
+  })
+
+  it('returns configured remote workspace id through transport discovery', async () => {
+    process.env.MOON_WORKSPACE_WS_URL = ' ws://remote-workspace.local:48123 '
+    process.env.MOON_WORKSPACE_WS_TOKEN = ' remote-workspace-secret '
+    process.env.MOON_WORKSPACE_ID = ' remote-workspace-1 '
+    const { registerIpcHandlers } = await import('@main/bootstrap/register-ipc')
+    const { ipcChannels } = await import('@ipc/channels')
+    const { workspaceWebSocketTransportInfoChannel } = await import(
+      '@ipc/workspace-transport-contract'
+    )
+    const createWorkspaceRpcServer = vi.fn()
+
+    registerIpcHandlers({
+      chatService: chatService as never,
+      createWorkspaceRpcServer,
+      openSettingsWindow,
+      projectsService: projectsService as never,
+      settingsService: settingsService as never
+    })
+
+    await expect(
+      dispatchRpcRequest(
+        ipcChannels.rpc.request,
+        { sender: {} },
+        workspaceWebSocketTransportInfoChannel
+      )
+    ).resolves.toEqual({
+      authToken: 'remote-workspace-secret',
+      mode: 'remote',
+      url: 'ws://remote-workspace.local:48123',
+      workspaceId: 'remote-workspace-1'
+    })
     expect(createWorkspaceRpcServer).not.toHaveBeenCalled()
   })
 

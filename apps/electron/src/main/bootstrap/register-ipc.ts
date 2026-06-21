@@ -41,6 +41,7 @@ type WorkspaceTransportRegistration =
 
 const WORKSPACE_WS_URL_ENV = 'MOON_WORKSPACE_WS_URL'
 const WORKSPACE_WS_TOKEN_ENV = 'MOON_WORKSPACE_WS_TOKEN'
+const WORKSPACE_ID_ENV = 'MOON_WORKSPACE_ID'
 
 /**
  * 主进程注册 IPC 后需要在应用退出时释放的资源。
@@ -64,7 +65,7 @@ export function registerIpcHandlers({
   const localRpcServer = createElectronEnvelopeIpcRpcServer()
   const workspaceTransport = createWorkspaceTransportRegistration(createWorkspaceRpcServer)
 
-  registerWorkspaceTransportHandlers(localRpcServer, workspaceTransport)
+  registerWorkspaceTransportHandlers(localRpcServer, workspaceTransport, projectsService)
   if (workspaceTransport.mode === 'local') {
     registerSessionHandlers(workspaceTransport.workspaceRpcServer, { sessionHandlers: chatService })
   }
@@ -92,11 +93,13 @@ function createWorkspaceTransportRegistration(
 
   if (remoteUrl) {
     const authToken = readOptionalEnv(WORKSPACE_WS_TOKEN_ENV)
+    const workspaceId = readOptionalEnv(WORKSPACE_ID_ENV)
 
     return {
       mode: 'remote',
       transportInfo: {
         ...(authToken === undefined ? {} : { authToken }),
+        ...(workspaceId === undefined ? {} : { workspaceId }),
         mode: 'remote',
         url: remoteUrl
       }
@@ -123,7 +126,8 @@ function readOptionalEnv(name: string): string | undefined {
  */
 function registerWorkspaceTransportHandlers(
   localRpcServer: ReturnType<typeof createElectronEnvelopeIpcRpcServer>,
-  workspaceTransport: WorkspaceTransportRegistration
+  workspaceTransport: WorkspaceTransportRegistration,
+  projectsService: ProjectsService
 ): void {
   localRpcServer.handle(workspaceWebSocketTransportInfoChannel, async () => {
     if (workspaceTransport.mode === 'remote') {
@@ -131,9 +135,11 @@ function registerWorkspaceTransportHandlers(
     }
 
     const transportInfo = await workspaceTransport.workspaceRpcServer.getTransportInfo()
+    const activeProject = await projectsService.getActiveProject()
 
     return {
       ...transportInfo,
+      ...(activeProject?.id === undefined ? {} : { workspaceId: activeProject.id }),
       mode: 'local' as const
     }
   })

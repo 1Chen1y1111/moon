@@ -31,19 +31,26 @@ export function createWorkspaceWebSocketRpcClient({
   reconnectDelayMs,
   WebSocketCtor = getDefaultWebSocketConstructor()
 }: WorkspaceWebSocketRpcClientOptions): WorkspaceWebSocketRpcClient {
-  const readTransportInfo = createTransportInfoReader(getTransportInfo)
+  const transportInfoReader = createTransportInfoReader(getTransportInfo)
 
   return createServerCoreWorkspaceWebSocketRpcClient({
     createId,
     getAuthToken: async () => {
-      const transportInfo = await readTransportInfo()
+      const transportInfo = await transportInfoReader.read()
 
       return transportInfo.authToken
     },
     getTransportUrl: async () => {
-      const transportInfo = await readTransportInfo()
+      const transportInfo = await transportInfoReader.read()
 
       return transportInfo.url
+    },
+    getWorkspaceId: async () => {
+      const transportInfo = await transportInfoReader.read()
+
+      transportInfoReader.reset()
+
+      return transportInfo.workspaceId
     },
     onConnectionStateChange,
     reconnectDelayMs,
@@ -52,22 +59,31 @@ export function createWorkspaceWebSocketRpcClient({
 }
 
 /**
- * 缓存一次 preload discovery，确保同次连接的 URL 和 auth token 来自同一份 main 响应。
+ * 缓存一次 preload discovery，确保同次连接的 URL、auth token 和 workspaceId 来自同一份 main 响应。
+ * 握手读取 workspaceId 后释放缓存，让下一次重连重新发现当前 workspace 绑定。
  */
 function createTransportInfoReader(
   getTransportInfo: () => Promise<WorkspaceWebSocketTransportInfo>
-): () => Promise<WorkspaceWebSocketTransportInfo> {
+): {
+  read: () => Promise<WorkspaceWebSocketTransportInfo>
+  reset: () => void
+} {
   let transportInfoPromise: Promise<WorkspaceWebSocketTransportInfo> | null = null
 
-  return () => {
-    if (transportInfoPromise === null) {
-      transportInfoPromise = getTransportInfo().catch((error) => {
-        transportInfoPromise = null
-        throw error
-      })
-    }
+  return {
+    read: () => {
+      if (transportInfoPromise === null) {
+        transportInfoPromise = getTransportInfo().catch((error) => {
+          transportInfoPromise = null
+          throw error
+        })
+      }
 
-    return transportInfoPromise
+      return transportInfoPromise
+    },
+    reset: () => {
+      transportInfoPromise = null
+    }
   }
 }
 

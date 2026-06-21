@@ -49,6 +49,8 @@ export function createWorkspaceWebSocketRpcServer({
       mode: 'local',
       url: await runtime.getTransportUrl()
     }),
+    findClientsWithCapability: (channel, options) =>
+      runtime.findClientsWithCapability(channel, options),
     handle: (channel, handler) => {
       runtime.handle(channel, handler)
     },

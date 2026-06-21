@@ -15,4 +15,5 @@ export type WorkspaceWebSocketTransportInfo = {
   authToken?: string
   mode: 'local' | 'remote'
   url: string
+  workspaceId?: string
 }

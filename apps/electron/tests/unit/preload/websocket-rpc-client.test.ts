@@ -184,6 +184,47 @@ describe('createWorkspaceWebSocketRpcClient preload wrapper', () => {
     await expect(resultPromise).resolves.toEqual([])
   })
 
+  it('passes workspace id from Electron discovery into the handshake', async () => {
+    const client = createWorkspaceWebSocketRpcClient({
+      createId: () => 'request-1',
+      getTransportInfo: async () => ({
+        authToken: 'workspace-secret',
+        mode: 'remote',
+        url: 'ws://remote-workspace.local:48123',
+        workspaceId: 'workspace-1'
+      }),
+      WebSocketCtor: FakeWebSocket
+    })
+    const resultPromise = client.invoke(RPC_CHANNELS.sessions.listSessions)
+
+    await flushPromises()
+    const socket = FakeWebSocket.instances[0]
+
+    socket.emit('open')
+    await flushPromises()
+
+    expect(JSON.parse(socket.sent[0])).toEqual({
+      id: 'workspace-handshake',
+      type: 'handshake',
+      protocolVersion: PROTOCOL_VERSION,
+      authToken: 'workspace-secret',
+      workspaceId: 'workspace-1'
+    })
+
+    acknowledgeHandshake(socket)
+    await flushPromises()
+    socket.emit('message', {
+      data: serializeEnvelope({
+        id: 'request-1',
+        type: 'response',
+        channel: RPC_CHANNELS.sessions.listSessions,
+        result: []
+      })
+    })
+
+    await expect(resultPromise).resolves.toEqual([])
+  })
+
   it('keeps session event payload shape unchanged', async () => {
     const client = createWorkspaceWebSocketRpcClient({
       getTransportInfo: async () => ({

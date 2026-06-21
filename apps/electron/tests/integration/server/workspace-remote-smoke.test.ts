@@ -148,6 +148,7 @@ describe('workspace remote smoke', () => {
         createId: () => 'request-1',
         getAuthToken: async () => 'workspace-secret',
         getTransportUrl: async () => workspaceServer?.url ?? '',
+        getWorkspaceId: async () => 'workspace-1',
         WebSocketCtor: NodeWebSocketAdapter as WorkspaceWebSocketConstructor
       })
       const listener = vi.fn()
@@ -170,6 +171,11 @@ describe('workspace remote smoke', () => {
         }
       )
       await expect(client.invoke(RPC_CHANNELS.sessions.listSessions)).resolves.toEqual([])
+      expect(
+        workspaceServer.workspaceRpcServer.findClientsWithCapability('client:testEcho', {
+          workspaceId: 'workspace-1'
+        })
+      ).toEqual(['client-1'])
       await expect(
         workspaceServer.workspaceRpcServer.invokeClient('client-1', 'client:testEcho', 'hi')
       ).resolves.toBe('echo:hi')

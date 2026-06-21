@@ -76,6 +76,9 @@ describe('createWorkspaceWebSocketRpcServer', () => {
     await server.getTransportInfo()
 
     expect(server.hasClientCapability('client-1', 'client:testEcho')).toBe(false)
+    expect(server.findClientsWithCapability('client:testEcho', { workspaceId: 'workspace-1' })).toEqual(
+      []
+    )
     await expect(server.invokeClient('client-1', 'client:testEcho', 'hi')).rejects.toMatchObject({
       code: 'CLIENT_DISCONNECTED'
     })

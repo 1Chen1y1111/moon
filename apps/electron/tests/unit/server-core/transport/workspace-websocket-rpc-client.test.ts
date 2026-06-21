@@ -84,6 +84,7 @@ async function flushPromises(): Promise<void> {
 function createClient(options: {
   getAuthToken?: () => Promise<string | undefined>
   getTransportUrl?: () => Promise<string>
+  getWorkspaceId?: () => Promise<string | null | undefined>
   onConnectionStateChange?: (state: WorkspaceWebSocketConnectionState) => void
   reconnectDelayMs?: number
 } = {}) {
@@ -91,6 +92,7 @@ function createClient(options: {
     createId: () => 'request-1',
     getAuthToken: options.getAuthToken,
     getTransportUrl: options.getTransportUrl ?? (async () => 'ws://127.0.0.1:48123'),
+    getWorkspaceId: options.getWorkspaceId,
     onConnectionStateChange: options.onConnectionStateChange,
     reconnectDelayMs: options.reconnectDelayMs,
     WebSocketCtor: FakeWebSocket
@@ -211,6 +213,40 @@ describe('createWorkspaceWebSocketRpcClient', () => {
       type: 'handshake',
       protocolVersion: PROTOCOL_VERSION,
       clientCapabilities: ['client:testEcho']
+    })
+
+    acknowledgeHandshake(socket)
+    await flushPromises()
+    socket.emit('message', {
+      data: serializeEnvelope({
+        id: 'request-1',
+        type: 'response',
+        channel: RPC_CHANNELS.sessions.listSessions,
+        result: []
+      })
+    })
+
+    await expect(resultPromise).resolves.toEqual([])
+  })
+
+  it('includes the optional workspace id in handshake envelopes', async () => {
+    FakeWebSocket.instances = []
+    const client = createClient({
+      getWorkspaceId: async () => 'workspace-1'
+    })
+    const resultPromise = client.invoke(RPC_CHANNELS.sessions.listSessions)
+
+    await flushPromises()
+    const socket = FakeWebSocket.instances[0]
+
+    socket.emit('open')
+    await flushPromises()
+
+    expect(parseSentEnvelope(socket, 0)).toEqual({
+      id: 'workspace-handshake',
+      type: 'handshake',
+      protocolVersion: PROTOCOL_VERSION,
+      workspaceId: 'workspace-1'
     })
 
     acknowledgeHandshake(socket)
@@ -559,6 +595,57 @@ describe('createWorkspaceWebSocketRpcClient', () => {
     })
 
     await expect(secondResultPromise).resolves.toEqual([{ id: 'session-2' }])
+  })
+
+  it('re-reads workspace id when reconnecting', async () => {
+    FakeWebSocket.instances = []
+    let workspaceId: string | null = 'workspace-1'
+    const getWorkspaceId = vi.fn(async () => workspaceId)
+    const client = createClient({ getWorkspaceId })
+    const firstResultPromise = client.invoke(RPC_CHANNELS.sessions.listSessions)
+
+    await flushPromises()
+    const firstSocket = FakeWebSocket.instances[0]
+
+    firstSocket.emit('open')
+    await flushPromises()
+
+    expect(parseSentEnvelope(firstSocket, 0)).toMatchObject({
+      workspaceId: 'workspace-1'
+    })
+
+    acknowledgeHandshake(firstSocket)
+    await flushPromises()
+    firstSocket.close()
+
+    await expect(firstResultPromise).rejects.toThrow('Workspace WebSocket closed')
+
+    workspaceId = 'workspace-2'
+    const secondResultPromise = client.invoke(RPC_CHANNELS.sessions.listSessions)
+
+    await flushPromises()
+    const secondSocket = FakeWebSocket.instances[1]
+
+    secondSocket.emit('open')
+    await flushPromises()
+
+    expect(parseSentEnvelope(secondSocket, 0)).toMatchObject({
+      workspaceId: 'workspace-2'
+    })
+    expect(getWorkspaceId).toHaveBeenCalledTimes(2)
+
+    acknowledgeHandshake(secondSocket, 'client-2')
+    await flushPromises()
+    secondSocket.emit('message', {
+      data: serializeEnvelope({
+        id: 'request-1',
+        type: 'response',
+        channel: RPC_CHANNELS.sessions.listSessions,
+        result: []
+      })
+    })
+
+    await expect(secondResultPromise).resolves.toEqual([])
   })
 
   it('recovers when the WebSocket closes before handshake completes', async () => {

@@ -119,7 +119,8 @@ async function performHandshake(
   socket: FakeSocket,
   id = 'handshake-1',
   authToken?: string,
-  clientCapabilities?: string[]
+  clientCapabilities?: string[],
+  workspaceId?: string
 ): Promise<void> {
   socket.emitMessage(
     serializeEnvelope({
@@ -127,7 +128,8 @@ async function performHandshake(
       clientCapabilities,
       id,
       type: 'handshake',
-      protocolVersion: PROTOCOL_VERSION
+      protocolVersion: PROTOCOL_VERSION,
+      workspaceId
     })
   )
   await flushPromises()
@@ -182,7 +184,7 @@ describe('createWorkspaceWebSocketRpcServer', () => {
     await server.getTransportUrl()
     const socket = fakeServer.connect()
 
-    await performHandshake(socket)
+    await performHandshake(socket, 'handshake-1', undefined, ['client:testEcho'])
 
     expect(parseSentEnvelope(socket, 0)).toEqual({
       id: 'handshake-1',
@@ -227,6 +229,64 @@ describe('createWorkspaceWebSocketRpcServer', () => {
     await flushPromises()
 
     await expect(resultPromise).resolves.toBe('echo:hi')
+  })
+
+  it('discovers handshaken client capabilities by workspace id', async () => {
+    const fakeServer = new FakeSocketServer()
+    let nextClientNumber = 1
+    const server = createWorkspaceWebSocketRpcServer({
+      createClientId: () => `client-${nextClientNumber++}`,
+      createWebSocketServer: () => fakeServer
+    })
+
+    await server.getTransportUrl()
+    const firstSocket = fakeServer.connect()
+    const secondSocket = fakeServer.connect()
+    const thirdSocket = fakeServer.connect()
+
+    await performHandshake(firstSocket, 'handshake-1', undefined, ['client:testEcho'], 'workspace-1')
+    await performHandshake(
+      secondSocket,
+      'handshake-2',
+      undefined,
+      ['client:testEcho'],
+      'workspace-2'
+    )
+    await performHandshake(thirdSocket, 'handshake-3', undefined, ['client:other'], 'workspace-1')
+
+    expect(server.findClientsWithCapability('client:testEcho')).toEqual(['client-1', 'client-2'])
+    expect(
+      server.findClientsWithCapability('client:testEcho', { workspaceId: 'workspace-1' })
+    ).toEqual(['client-1'])
+    expect(
+      server.findClientsWithCapability('client:testEcho', { workspaceId: 'workspace-2' })
+    ).toEqual(['client-2'])
+    expect(
+      server.findClientsWithCapability('client:other', { workspaceId: 'workspace-1' })
+    ).toEqual(['client-3'])
+  })
+
+  it('removes disconnected clients from capability discovery', async () => {
+    const fakeServer = new FakeSocketServer()
+    const server = createWorkspaceWebSocketRpcServer({
+      createClientId: () => 'client-1',
+      createWebSocketServer: () => fakeServer
+    })
+
+    await server.getTransportUrl()
+    const socket = fakeServer.connect()
+
+    await performHandshake(socket, 'handshake-1', undefined, ['client:testEcho'], 'workspace-1')
+
+    expect(
+      server.findClientsWithCapability('client:testEcho', { workspaceId: 'workspace-1' })
+    ).toEqual(['client-1'])
+
+    socket.close()
+
+    expect(
+      server.findClientsWithCapability('client:testEcho', { workspaceId: 'workspace-1' })
+    ).toEqual([])
   })
 
   it('rejects server-to-client invokes for missing capabilities', async () => {
@@ -421,7 +481,7 @@ describe('createWorkspaceWebSocketRpcServer', () => {
 
     const socket = fakeServer.connect()
 
-    await performHandshake(socket)
+    await performHandshake(socket, 'handshake-1', undefined, ['client:testEcho'])
     socket.emitMessage(
       serializeEnvelope({
         id: 'request-1',
@@ -467,7 +527,7 @@ describe('createWorkspaceWebSocketRpcServer', () => {
     await server.getTransportUrl()
     const socket = fakeServer.connect()
 
-    await performHandshake(socket)
+    await performHandshake(socket, 'handshake-1', undefined, ['client:testEcho'])
     socket.emitMessage(
       serializeEnvelope({
         id: 'request-1',
@@ -486,6 +546,9 @@ describe('createWorkspaceWebSocketRpcServer', () => {
         workspaceId: 'project-1'
       })
     )
+    expect(
+      server.findClientsWithCapability('client:testEcho', { workspaceId: 'project-1' })
+    ).toEqual(['client-1'])
   })
 
   it('returns error response envelopes for unknown channels and handler errors', async () => {

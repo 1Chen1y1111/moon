@@ -51,6 +51,7 @@ export type WorkspaceWebSocketRpcClientOptions = {
   createId?: () => string
   getAuthToken?: () => Promise<string | undefined>
   getTransportUrl: () => Promise<string>
+  getWorkspaceId?: () => Promise<string | null | undefined>
   onConnectionStateChange?: (state: WorkspaceWebSocketConnectionState) => void
   reconnectDelayMs?: number
   WebSocketCtor: WorkspaceWebSocketConstructor
@@ -69,6 +70,7 @@ export function createWorkspaceWebSocketRpcClient({
   createId,
   getAuthToken,
   getTransportUrl,
+  getWorkspaceId,
   onConnectionStateChange,
   reconnectDelayMs = DEFAULT_RECONNECT_DELAY_MS,
   WebSocketCtor
@@ -76,6 +78,7 @@ export function createWorkspaceWebSocketRpcClient({
   const transport = createWorkspaceWebSocketTransport({
     getAuthToken,
     getTransportUrl,
+    getWorkspaceId,
     onConnectionStateChange,
     reconnectDelayMs,
     WebSocketCtor
@@ -100,6 +103,7 @@ export function createWorkspaceWebSocketRpcClient({
 function createWorkspaceWebSocketTransport({
   getAuthToken,
   getTransportUrl,
+  getWorkspaceId,
   onConnectionStateChange,
   reconnectDelayMs,
   WebSocketCtor
@@ -107,6 +111,7 @@ function createWorkspaceWebSocketTransport({
   WorkspaceWebSocketRpcClientOptions,
   | 'getAuthToken'
   | 'getTransportUrl'
+  | 'getWorkspaceId'
   | 'onConnectionStateChange'
   | 'reconnectDelayMs'
   | 'WebSocketCtor'
@@ -230,13 +235,16 @@ function createWorkspaceWebSocketTransport({
    * WebSocket 打开后先发送协议握手 envelope。
    */
   function sendHandshake(activeSocket: WorkspaceWebSocketLike): Promise<void> {
-    if (getAuthToken === undefined) {
+    if (getAuthToken === undefined && getWorkspaceId === undefined) {
       writeHandshakeEnvelope(activeSocket)
       return Promise.resolve()
     }
 
-    return getAuthToken().then((authToken) => {
-      writeHandshakeEnvelope(activeSocket, authToken)
+    return Promise.all([
+      getAuthToken?.() ?? Promise.resolve(undefined),
+      getWorkspaceId?.() ?? Promise.resolve(undefined)
+    ]).then(([authToken, workspaceId]) => {
+      writeHandshakeEnvelope(activeSocket, authToken, workspaceId)
     })
   }
 
@@ -245,7 +253,8 @@ function createWorkspaceWebSocketTransport({
    */
   function writeHandshakeEnvelope(
     activeSocket: WorkspaceWebSocketLike,
-    authToken?: string
+    authToken?: string,
+    workspaceId?: string | null
   ): void {
     const envelope: MessageEnvelope = {
       id: WORKSPACE_HANDSHAKE_ID,
@@ -255,6 +264,10 @@ function createWorkspaceWebSocketTransport({
 
     if (authToken !== undefined) {
       envelope.authToken = authToken
+    }
+
+    if (typeof workspaceId === 'string' && workspaceId.length > 0) {
+      envelope.workspaceId = workspaceId
     }
 
     const clientCapabilities = [...capabilityHandlers.keys()]
