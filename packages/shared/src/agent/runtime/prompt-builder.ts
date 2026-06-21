@@ -8,6 +8,7 @@ import type { AgentBackendMessage, AgentBackendWorkspace } from '../backend/type
 export type AgentPromptBuilderInput = {
   fallbackMessage: string
   messages: AgentBackendMessage[]
+  sourceContextBlock?: string
   workspace?: AgentBackendWorkspace
 }
 
@@ -44,9 +45,22 @@ function serializePromptMessages(
  */
 export class AgentPromptBuilder {
   /**
-   * 返回 provider 调用需要的 prompt 文本；当可用历史为空时使用当前用户输入兜底。
+   * 返回 provider 调用需要的 prompt 文本；当 source context 存在时放在消息正文前。
    */
-  build({ fallbackMessage, messages, workspace }: AgentPromptBuilderInput): string {
-    return serializePromptMessages(selectPromptMessages(messages, workspace), fallbackMessage)
+  build({
+    fallbackMessage,
+    messages,
+    sourceContextBlock,
+    workspace
+  }: AgentPromptBuilderInput): string {
+    const serializedMessages = serializePromptMessages(
+      selectPromptMessages(messages, workspace),
+      fallbackMessage
+    )
+    const normalizedSourceContextBlock = sourceContextBlock?.trim()
+
+    return normalizedSourceContextBlock === undefined || normalizedSourceContextBlock.length === 0
+      ? serializedMessages
+      : `${normalizedSourceContextBlock}\n\n${serializedMessages}`
   }
 }

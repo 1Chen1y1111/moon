@@ -9,6 +9,7 @@ import { BaseAgent } from './base-agent'
 import { adaptClaudeSdkMessage } from './backend/claude/event-adapter'
 import { createClaudeQueryOptions } from './backend/internal/runtime-resolver'
 import { AgentPromptBuilder } from './runtime/prompt-builder'
+import { SourceManager } from './runtime/source-manager'
 import type { ThinkingLevel } from '../config'
 import type {
   AgentBackendMessage,
@@ -146,6 +147,7 @@ export class ClaudeAgent extends BaseAgent {
   private readonly messages: AgentBackendMessage[]
   private readonly promptBuilder = new AgentPromptBuilder()
   private readonly queryClaude: typeof query
+  private readonly sourceManager = new SourceManager()
 
   /**
    * 保存 Claude SDK 调用所需的模型、凭据和本轮上下文。
@@ -187,6 +189,7 @@ export class ClaudeAgent extends BaseAgent {
       const prompt = this.promptBuilder.build({
         fallbackMessage: message,
         messages: this.messages,
+        sourceContextBlock: this.sourceManager.buildContextBlock(),
         workspace: this.workspace
       })
       const queryOptions = createClaudeQueryOptions({

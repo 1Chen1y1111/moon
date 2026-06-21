@@ -62,4 +62,28 @@ describe('AgentPromptBuilder', () => {
       })
     ).toBe('inspect project')
   })
+
+  it('prepends source context before serialized history when source context is available', () => {
+    const promptBuilder = new AgentPromptBuilder()
+
+    expect(
+      promptBuilder.build({
+        fallbackMessage: 'fallback',
+        messages: [{ role: 'user', content: 'inspect sources' }],
+        sourceContextBlock: '<sources>\nActive:\n- github (GitHub)\n</sources>'
+      })
+    ).toBe('<sources>\nActive:\n- github (GitHub)\n</sources>\n\nUSER:\ninspect sources')
+  })
+
+  it('ignores blank source context so fallback behavior stays unchanged', () => {
+    const promptBuilder = new AgentPromptBuilder()
+
+    expect(
+      promptBuilder.build({
+        fallbackMessage: 'hello',
+        messages: [],
+        sourceContextBlock: '   '
+      })
+    ).toBe('hello')
+  })
 })
