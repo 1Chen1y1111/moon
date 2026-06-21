@@ -4,14 +4,13 @@
  */
 
 import { query } from '@anthropic-ai/claude-agent-sdk'
-import type { AgentPermissionDecision, AgentPermissionRequest } from '@moon/core/types'
 
+import { BaseAgent } from './base-agent'
 import { adaptClaudeSdkMessage } from './backend/claude/event-adapter'
 import { buildClaudePrompt } from './backend/claude/prompt'
 import { createClaudeQueryOptions } from './backend/internal/runtime-resolver'
 import type { ThinkingLevel } from '../config'
 import type {
-  AgentBackend,
   AgentBackendMessage,
   AgentBackendWorkspace,
   AgentChatOptions,
@@ -120,47 +119,6 @@ function createClaudeSdkErrorMessage(
   return `Claude SDK failed: ${sanitizedStderr}${diagnosticSuffix}`
 }
 
-type PendingClaudePermission = {
-  resolve: (decision: AgentPermissionDecision) => void
-}
-
-/**
- * 在 Claude SDK hook 等待用户审批时，把 Moon 权限事件插入同一个 agent 事件流。
- */
-class AgentEventQueue {
-  private readonly events: AgentEvent[] = []
-  private readonly waiters: Array<(event: AgentEvent) => void> = []
-
-  /**
-   * 推入一个需要优先交给会话编排层处理的 Moon agent 事件。
-   */
-  push(event: AgentEvent): void {
-    const waiter = this.waiters.shift()
-
-    if (waiter !== undefined) {
-      waiter(event)
-      return
-    }
-
-    this.events.push(event)
-  }
-
-  /**
-   * 读取下一条已排队事件；没有事件时等待后续 hook 推入。
-   */
-  next(): Promise<AgentEvent> {
-    const event = this.events.shift()
-
-    if (event !== undefined) {
-      return Promise.resolve(event)
-    }
-
-    return new Promise((resolve) => {
-      this.waiters.push(resolve)
-    })
-  }
-}
-
 /**
  * 收集 Claude Code 子进程 stderr 的短缓冲，用于补全 SDK 返回的 unknown 错误。
  */
@@ -182,19 +140,11 @@ class ClaudeStderrBuffer {
   }
 }
 
-export class ClaudeAgent implements AgentBackend {
+export class ClaudeAgent extends BaseAgent {
   private readonly apiKey?: string
   private readonly baseUrl?: string
   private readonly messages: AgentBackendMessage[]
-  private readonly permissionMode?: AgentPermissionMode
   private readonly queryClaude: typeof query
-  private readonly thinkingLevel?: ThinkingLevel
-  private readonly workspace?: AgentBackendWorkspace
-  private readonly pendingPermissions = new Map<string, PendingClaudePermission>()
-  private eventQueue: AgentEventQueue | null = null
-  private abortController: AbortController | null = null
-  private model: string
-  private processing = false
 
   /**
    * 保存 Claude SDK 调用所需的模型、凭据和本轮上下文。
@@ -209,14 +159,12 @@ export class ClaudeAgent implements AgentBackend {
     thinkingLevel,
     workspace
   }: ClaudeAgentInput) {
+    super({ model, permissionMode, thinkingLevel, workspace })
+
     this.apiKey = apiKey
     this.baseUrl = baseUrl
     this.messages = messages
-    this.model = model
-    this.permissionMode = permissionMode
     this.queryClaude = queryClaude
-    this.thinkingLevel = thinkingLevel
-    this.workspace = workspace
   }
 
   /**
@@ -229,18 +177,8 @@ export class ClaudeAgent implements AgentBackend {
   ): AsyncGenerator<AgentEvent, void, void> {
     void attachments
 
-    this.processing = true
-    this.abortController = new AbortController()
-
-    const abortController = this.abortController
-    const relayAbort = (): void => abortController.abort(options.abortSignal?.reason)
-
-    if (options.abortSignal?.aborted) {
-      relayAbort()
-    } else {
-      options.abortSignal?.addEventListener('abort', relayAbort, { once: true })
-    }
-
+    const turn = this.beginTurn(options)
+    const { abortController, eventQueue } = turn
     const stderrBuffer = new ClaudeStderrBuffer()
     let runtimeSummary: string | undefined
 
@@ -254,7 +192,7 @@ export class ClaudeAgent implements AgentBackend {
         abortController,
         apiKey: this.apiKey,
         baseUrl: this.baseUrl,
-        model: this.model,
+        model: this.getModel(),
         permissionMode: this.permissionMode,
         requestPermission: (request) => this.requestPermission(request),
         stderr: (data) => stderrBuffer.append(data),
@@ -263,8 +201,6 @@ export class ClaudeAgent implements AgentBackend {
       })
       runtimeSummary = createClaudeRuntimeSummary(queryOptions)
       let hasCompleteEvent = false
-      const eventQueue = new AgentEventQueue()
-      this.eventQueue = eventQueue
       const sdkEvents = this.queryClaude({ prompt, options: queryOptions })
       let sdkEventResultPromise = sdkEvents.next()
       let queuedEventPromise = eventQueue.next()
@@ -325,89 +261,7 @@ export class ClaudeAgent implements AgentBackend {
         )
       }
     } finally {
-      options.abortSignal?.removeEventListener('abort', relayAbort)
-      this.abortController = null
-      this.eventQueue = null
-      this.pendingPermissions.clear()
-      this.processing = false
+      this.endTurn(turn)
     }
-  }
-
-  /**
-   * 响应 Claude SDK PreToolUse 暂停等待中的工具权限请求。
-   */
-  respondToPermission(requestId: string, allowed: boolean, alwaysAllow?: boolean): void {
-    const pendingPermission = this.pendingPermissions.get(requestId)
-
-    if (pendingPermission === undefined) {
-      return
-    }
-
-    this.pendingPermissions.delete(requestId)
-    pendingPermission.resolve(
-      allowed
-        ? { requestId, approved: true, ...(alwaysAllow ? { alwaysAllow } : {}) }
-        : { requestId, approved: false }
-    )
-  }
-
-  /**
-   * 请求中止当前 Claude SDK 查询。
-   */
-  async abort(reason?: string): Promise<void> {
-    this.abortController?.abort(reason)
-  }
-
-  /**
-   * 释放 agent 持有的运行时状态。
-   */
-  destroy(): void {
-    this.abortController?.abort('destroyed')
-    this.abortController = null
-    this.processing = false
-  }
-
-  /**
-   * 返回当前 agent 是否正在消费 Claude SDK 消息流。
-   */
-  isProcessing(): boolean {
-    return this.processing
-  }
-
-  /**
-   * 返回当前 Claude 模型 ID。
-   */
-  getModel(): string {
-    return this.model
-  }
-
-  /**
-   * 更新后续查询使用的 Claude 模型 ID。
-   */
-  setModel(model: string): void {
-    this.model = model
-  }
-
-  /**
-   * 把 Claude SDK PreToolUse 的 Bash 请求转成 Moon 统一权限事件并等待 UI 决策。
-   */
-  private requestPermission(request: AgentPermissionRequest): Promise<AgentPermissionDecision> {
-    const eventQueue = this.eventQueue
-
-    if (eventQueue === null) {
-      return Promise.resolve({
-        requestId: request.requestId,
-        approved: false,
-        reason: 'No active agent event queue.'
-      })
-    }
-
-    const decisionPromise = new Promise<AgentPermissionDecision>((resolve) => {
-      this.pendingPermissions.set(request.requestId, { resolve })
-    })
-
-    eventQueue.push({ type: 'permission_request', request })
-
-    return decisionPromise
   }
 }

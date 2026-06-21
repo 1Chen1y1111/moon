@@ -4,6 +4,7 @@
  */
 
 export * from './backend'
+export * from './base-agent'
 export * from './claude-agent'
 export * from './connection-adapter'
 export * from './message-adapter'
