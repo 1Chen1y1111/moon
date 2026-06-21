@@ -13,13 +13,14 @@ import type {
   AgentPermissionDecision,
   MessageAttachment
 } from './backend/types'
-import { SourceManager } from './runtime/source-manager'
+import { SourceManager, type AgentSourceRecord } from './runtime/source-manager'
 import type { ThinkingLevel } from '../config'
 import type { AgentPermissionMode } from './runtime/types'
 
 export type BaseAgentInput = {
   model: string
   permissionMode?: AgentPermissionMode
+  sources?: AgentSourceRecord[]
   thinkingLevel?: ThinkingLevel
   workspace?: AgentBackendWorkspace
 }
@@ -81,7 +82,7 @@ class AgentEventQueue implements AgentEventQueuePort {
  */
 export abstract class BaseAgent implements AgentBackend {
   protected readonly permissionMode?: AgentPermissionMode
-  protected readonly sourceManager = new SourceManager()
+  protected readonly sourceManager: SourceManager
   protected readonly thinkingLevel?: ThinkingLevel
   protected readonly workspace?: AgentBackendWorkspace
   private readonly pendingPermissions = new Map<string, PendingAgentPermission>()
@@ -93,9 +94,10 @@ export abstract class BaseAgent implements AgentBackend {
   /**
    * 保存所有 backend 通用的运行时配置。
    */
-  constructor({ model, permissionMode, thinkingLevel, workspace }: BaseAgentInput) {
+  constructor({ model, permissionMode, sources, thinkingLevel, workspace }: BaseAgentInput) {
     this.model = model
     this.permissionMode = permissionMode
+    this.sourceManager = new SourceManager({ sources })
     this.thinkingLevel = thinkingLevel
     this.workspace = workspace
   }

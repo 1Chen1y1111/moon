@@ -9,6 +9,7 @@ import type {
   AgentBackendMessage,
   AgentBackendWorkspace
 } from './backend/types'
+import type { AgentSourceRecord } from './runtime/source-manager'
 import type { AgentPermissionMode } from './runtime/types'
 
 export const piBackendNotWiredMessage =
@@ -51,7 +52,8 @@ export function createConnectionAgentBackendConfig(
   connection: NormalizedLlmConnection,
   messages: AgentBackendMessage[],
   workspace?: AgentBackendWorkspace,
-  permissionMode?: AgentPermissionMode
+  permissionMode?: AgentPermissionMode,
+  sources?: AgentSourceRecord[]
 ): AgentBackendConfig {
   const apiKey = connection.apiKey?.trim()
   const provider = resolveConnectionAgentBackendProvider(connection)
@@ -67,6 +69,7 @@ export function createConnectionAgentBackendConfig(
     ...(apiKey === undefined ? {} : { apiKey }),
     ...(connection.baseUrl === undefined ? {} : { baseUrl: connection.baseUrl }),
     ...(permissionMode === undefined ? {} : { permissionMode }),
+    ...(sources === undefined ? {} : { sources }),
     ...(workspace === undefined ? {} : { workspace })
   }
 }

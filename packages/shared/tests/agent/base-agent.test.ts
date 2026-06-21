@@ -6,7 +6,12 @@
 import { describe, expect, it } from 'vitest'
 
 import { BaseAgent } from '../../src/agent'
-import type { AgentChatOptions, AgentEvent, MessageAttachment } from '../../src/agent'
+import type {
+  AgentChatOptions,
+  AgentEvent,
+  AgentSourceRecord,
+  MessageAttachment
+} from '../../src/agent'
 
 class TestAgent extends BaseAgent {
   lastAbortSignal: AbortSignal | null = null
@@ -22,6 +27,13 @@ class TestAgent extends BaseAgent {
       status: 'active'
     })
 
+    return this.sourceManager.buildContextBlock()
+  }
+
+  /**
+   * 读取基类初始化出的 source context，避免测试直接访问 protected 字段。
+   */
+  readSourceContextBlock(): string {
     return this.sourceManager.buildContextBlock()
   }
 
@@ -66,6 +78,24 @@ class TestAgent extends BaseAgent {
 }
 
 describe('BaseAgent', () => {
+  const sources: AgentSourceRecord[] = [
+    {
+      slug: 'github',
+      name: 'GitHub',
+      description: 'GitHub repository context',
+      status: 'active'
+    }
+  ]
+
+  it('hydrates shared source manager from constructor sources', () => {
+    const agent = new TestAgent({ model: 'claude-sonnet', sources })
+
+    expect(agent.readSourceContextBlock()).toBe(`<sources>
+Active:
+- github (GitHub): GitHub repository context
+</sources>`)
+  })
+
   it('owns shared source manager state for concrete backends', () => {
     const agent = new TestAgent({ model: 'claude-sonnet' })
 

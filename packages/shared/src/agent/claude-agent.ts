@@ -9,6 +9,7 @@ import { BaseAgent } from './base-agent'
 import { adaptClaudeSdkMessage } from './backend/claude/event-adapter'
 import { createClaudeQueryOptions } from './backend/internal/runtime-resolver'
 import { AgentPromptBuilder } from './runtime/prompt-builder'
+import type { AgentSourceRecord } from './runtime/source-manager'
 import type { ThinkingLevel } from '../config'
 import type {
   AgentBackendMessage,
@@ -26,6 +27,7 @@ export type ClaudeAgentInput = {
   model: string
   permissionMode?: AgentPermissionMode
   queryClaude?: typeof query
+  sources?: AgentSourceRecord[]
   thinkingLevel?: ThinkingLevel
   workspace?: AgentBackendWorkspace
 }
@@ -157,10 +159,11 @@ export class ClaudeAgent extends BaseAgent {
     model,
     permissionMode,
     queryClaude = query,
+    sources,
     thinkingLevel,
     workspace
   }: ClaudeAgentInput) {
-    super({ model, permissionMode, thinkingLevel, workspace })
+    super({ model, permissionMode, sources, thinkingLevel, workspace })
 
     this.apiKey = apiKey
     this.baseUrl = baseUrl

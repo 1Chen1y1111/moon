@@ -11,6 +11,7 @@ import {
   resolveConnectionAgentBackendProvider
 } from '../../src/agent'
 import { llmConnectionSchema } from '../../src/config'
+import type { AgentSourceRecord } from '../../src/agent'
 
 describe('createConnectionAgentBackendConfig', () => {
   it('maps Anthropic connection fields to backend config', () => {
@@ -132,6 +133,30 @@ describe('createConnectionAgentBackendConfig', () => {
 
     expect(createConnectionAgentBackendConfig(connection, [], undefined, 'ask')).toMatchObject({
       permissionMode: 'ask'
+    })
+  })
+
+  it('adds source records when provided by the session scope', () => {
+    const connection = llmConnectionSchema.parse({
+      id: 'anthropic-main',
+      name: 'Claude Main',
+      backend: 'anthropic',
+      model: 'claude-sonnet-4-5',
+      apiKey: 'stored-key'
+    })
+    const sources: AgentSourceRecord[] = [
+      {
+        slug: 'github',
+        name: 'GitHub',
+        description: 'GitHub repository context',
+        status: 'active'
+      }
+    ]
+
+    expect(
+      createConnectionAgentBackendConfig(connection, [], undefined, undefined, sources)
+    ).toMatchObject({
+      sources
     })
   })
 })

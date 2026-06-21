@@ -19,6 +19,7 @@ export const anthropicDriver: AgentBackendDriver = {
       messages: config.messages ?? [],
       model: config.model,
       permissionMode: config.permissionMode,
+      sources: config.sources,
       thinkingLevel: config.thinkingLevel,
       workspace: config.workspace
     })

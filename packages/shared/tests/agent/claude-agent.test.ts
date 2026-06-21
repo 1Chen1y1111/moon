@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Options } from '@anthropic-ai/claude-agent-sdk'
 
 import { ClaudeAgent } from '../../src/agent'
-import type { AgentEvent } from '../../src/agent'
+import type { AgentEvent, AgentSourceRecord } from '../../src/agent'
 
 /**
  * 创建返回单条 assistant 消息的 Claude SDK query mock。
@@ -169,6 +169,15 @@ function createAuthenticationFailedQueryClaudeMock() {
 }
 
 describe('ClaudeAgent', () => {
+  const sources: AgentSourceRecord[] = [
+    {
+      slug: 'github',
+      name: 'GitHub',
+      description: 'GitHub repository context',
+      status: 'active'
+    }
+  ]
+
   it('passes configured thinking level to Claude SDK options', async () => {
     const queryClaude = createQueryClaudeMock()
     const agent = new ClaudeAgent({
@@ -231,6 +240,31 @@ describe('ClaudeAgent', () => {
     expect(queryClaude).toHaveBeenCalledWith(
       expect.objectContaining({
         prompt: 'SYSTEM:\nfollow project rules\n\nUSER:\nprevious question'
+      })
+    )
+  })
+
+  it('prepends configured sources to the Claude SDK prompt', async () => {
+    const queryClaude = createQueryClaudeMock()
+    const agent = new ClaudeAgent({
+      model: 'claude-sonnet',
+      messages: [],
+      queryClaude: queryClaude as never,
+      sources
+    })
+
+    for await (const _event of agent.chat('inspect repo')) {
+      // 消费事件流以触发 SDK query mock。
+    }
+
+    expect(queryClaude).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: `<sources>
+Active:
+- github (GitHub): GitHub repository context
+</sources>
+
+inspect repo`
       })
     )
   })

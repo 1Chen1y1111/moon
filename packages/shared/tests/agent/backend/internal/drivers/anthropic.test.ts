@@ -7,8 +7,18 @@ import { describe, expect, it } from 'vitest'
 
 import { ClaudeAgent } from '../../../../../src/agent'
 import { anthropicDriver } from '../../../../../src/agent/backend/internal/drivers/anthropic'
+import type { AgentSourceRecord } from '../../../../../src/agent'
 
 describe('anthropicDriver', () => {
+  const sources: AgentSourceRecord[] = [
+    {
+      slug: 'github',
+      name: 'GitHub',
+      description: 'GitHub repository context',
+      status: 'active'
+    }
+  ]
+
   it('creates a ClaudeAgent with the configured model', () => {
     const agent = anthropicDriver.createAgent({
       provider: 'anthropic',
@@ -20,5 +30,20 @@ describe('anthropicDriver', () => {
     expect(anthropicDriver.provider).toBe('anthropic')
     expect(agent).toBeInstanceOf(ClaudeAgent)
     expect(agent.getModel()).toBe('claude-sonnet-4-5')
+  })
+
+  it('passes configured sources into the ClaudeAgent runtime', () => {
+    const agent = anthropicDriver.createAgent({
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-5',
+      apiKey: 'test-key',
+      messages: [],
+      sources
+    }) as unknown as { sourceManager: { buildContextBlock: () => string } }
+
+    expect(agent.sourceManager.buildContextBlock()).toBe(`<sources>
+Active:
+- github (GitHub): GitHub repository context
+</sources>`)
   })
 })
