@@ -11,6 +11,7 @@ export type AgentSourceRecord = {
   status: AgentSourceStatus
   description?: string
   guidePath?: string
+  instructions?: string
   error?: string
 }
 
@@ -42,6 +43,7 @@ function formatSourceLine(source: AgentSourceRecord): string {
   const line = source.description === undefined ? label : `${label}: ${source.description}`
   const details = [
     source.guidePath === undefined ? undefined : `  Guide: ${source.guidePath}`,
+    source.instructions === undefined ? undefined : `  Instructions:\n${source.instructions}`,
     source.error === undefined ? undefined : `  Error: ${source.error}`
   ].filter((detail): detail is string => detail !== undefined)
 

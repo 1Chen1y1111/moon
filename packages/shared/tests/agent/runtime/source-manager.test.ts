@@ -14,7 +14,8 @@ describe('SourceManager', () => {
       name: 'GitHub',
       description: 'GitHub repository context',
       status: 'active',
-      guidePath: 'sources/github/guide.md'
+      guidePath: 'sources/github/guide.md',
+      instructions: 'Use GitHub issues as project planning context.'
     },
     {
       slug: 'slack',
@@ -88,6 +89,8 @@ describe('SourceManager', () => {
 Active:
 - github (GitHub): GitHub repository context
   Guide: sources/github/guide.md
+  Instructions:
+Use GitHub issues as project planning context.
 
 Needs auth:
 - slack (Slack): Slack workspace
