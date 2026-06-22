@@ -3,8 +3,7 @@
  * 它只处理进程环境与 SDK options 的组装，不负责事件转换、会话持久化或 UI 状态。
  */
 
-import type { HookInput, HookJSONOutput, Options } from '@anthropic-ai/claude-agent-sdk'
-import type { AgentPermissionDecision, AgentPermissionRequest } from '@moon/core/types'
+import type { Options } from '@anthropic-ai/claude-agent-sdk'
 import { existsSync, mkdirSync, readdirSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { tmpdir } from 'node:os'
@@ -12,9 +11,12 @@ import { dirname, join, parse, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import type { ThinkingLevel } from '../../../config'
-import { PermissionManager, type AgentToolPermissionCheckResult } from '../../runtime'
 import type { AgentPermissionMode } from '../../runtime/types'
 import type { AgentBackendWorkspace } from '../types'
+import {
+  createClaudePreToolUseHooks,
+  type ClaudeToolPermissionRequester
+} from './tool-permission-hooks'
 
 const thinkingLevelTokenBudgets: Record<ThinkingLevel, number> = {
   low: 1024,
@@ -65,19 +67,6 @@ const claudeManagedEnvKeys = [
   'CLAUDE_CODE_OAUTH_TOKEN',
   'CLAUDE_CONFIG_DIR'
 ] as const
-
-type ClaudePreToolUseCheckResult = AgentToolPermissionCheckResult
-
-/**
- * 负责把 Claude SDK 工具权限请求交给 Moon UI，并等待用户决策。
- */
-export type ClaudeToolPermissionRequester = (
-  request: AgentPermissionRequest
-) => Promise<AgentPermissionDecision>
-
-function readRecord(value: unknown): Record<string, unknown> {
-  return typeof value === 'object' && value !== null ? (value as Record<string, unknown>) : {}
-}
 
 function pathExists(path: string | undefined): path is string {
   return path !== undefined && existsSync(path)
@@ -363,78 +352,6 @@ export function buildClaudeWorkspaceSystemPrompt(workspace: AgentBackendWorkspac
     '你必须把当前工作目录视为项目 workspace 边界。',
     '当前阶段允许使用只读工具理解项目；Bash、Edit、Write、MultiEdit 会等待用户确认。'
   ].join('\n')
-}
-
-/**
- * 运行 Craft 风格的 Claude PreToolUse 检查：只读工具自动允许，命令和写操作按权限模式处理。
- */
-export function runClaudePreToolUseChecks(
-  workspace: AgentBackendWorkspace,
-  input: Extract<HookInput, { hook_event_name: 'PreToolUse' }>,
-  permissionMode: AgentPermissionMode = 'ask'
-): ClaudePreToolUseCheckResult {
-  return new PermissionManager({ permissionMode, workspace }).checkClaudeToolUse({
-    toolName: input.tool_name,
-    toolUseId: input.tool_use_id,
-    toolInput: readRecord(input.tool_input)
-  })
-}
-
-/**
- * 创建 Claude SDK PreToolUse hooks，并把检查结果翻译成 SDK hook 输出。
- */
-export function createClaudePreToolUseHooks(
-  workspace: AgentBackendWorkspace,
-  requestPermission?: ClaudeToolPermissionRequester,
-  permissionMode: AgentPermissionMode = 'ask'
-): Options['hooks'] {
-  return {
-    PreToolUse: [
-      {
-        hooks: [
-          async (input: HookInput): Promise<HookJSONOutput> => {
-            if (input.hook_event_name !== 'PreToolUse') {
-              return { continue: true }
-            }
-
-            const checkResult = runClaudePreToolUseChecks(workspace, input, permissionMode)
-
-            if (checkResult.type === 'prompt') {
-              if (requestPermission === undefined) {
-                return {
-                  continue: false,
-                  decision: 'block',
-                  reason: 'Moon 当前阶段需要 UI 审批后才允许执行该工具。'
-                }
-              }
-
-              const decision = await requestPermission(checkResult.request)
-
-              if (decision.approved) {
-                return { continue: true }
-              }
-
-              return {
-                continue: false,
-                decision: 'block',
-                reason: decision.reason ?? 'User denied permission'
-              }
-            }
-
-            if (checkResult.type === 'block') {
-              return {
-                continue: false,
-                decision: 'block',
-                reason: checkResult.reason
-              }
-            }
-
-            return { continue: true }
-          }
-        ]
-      }
-    ]
-  }
 }
 
 /**
