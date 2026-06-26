@@ -1,27 +1,37 @@
 // @vitest-environment node
 
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { ipcChannels } from '@ipc/channels'
-import { registerWindowStateEvents } from '@main/bootstrap/window-state-events'
+import {
+  registerWindowStateEvents,
+  setWindowStateEventSink
+} from '@main/bootstrap/window-state-events'
 import { RPC_CHANNELS } from '@moon/shared/protocol'
 
 type WindowEventName = 'maximize' | 'unmaximize' | 'restore'
 
 describe('registerWindowStateEvents', () => {
+  afterEach(() => {
+    setWindowStateEventSink(null)
+  })
+
   it('publishes the maximized state when the native window state changes', () => {
     const listeners = new Map<WindowEventName, () => void>()
-    const send = vi.fn()
+    const push = vi.fn()
     const browserWindow = {
       isMaximized: vi.fn(() => true),
       on: vi.fn((event: WindowEventName, listener: () => void) => {
         listeners.set(event, listener)
       }),
       webContents: {
-        send
+        id: 88
       }
     }
 
+    setWindowStateEventSink({
+      findClientByWebContentsId: vi.fn(() => 'client-88'),
+      push
+    })
     registerWindowStateEvents(browserWindow as never)
 
     expect(browserWindow.on).toHaveBeenCalledWith('maximize', expect.any(Function))
@@ -30,13 +40,10 @@ describe('registerWindowStateEvents', () => {
 
     listeners.get('maximize')?.()
 
-    expect(send).toHaveBeenCalledWith(
-      ipcChannels.rpc.event,
-      expect.objectContaining({
-        type: 'event',
-        channel: RPC_CHANNELS.window.onStateChange,
-        args: [{ isMaximized: true }]
-      })
+    expect(push).toHaveBeenCalledWith(
+      RPC_CHANNELS.window.onStateChange,
+      { to: 'client', clientId: 'client-88' },
+      { isMaximized: true }
     )
   })
 })

@@ -102,7 +102,7 @@ describe('WorkspaceSidebar', () => {
     expect(sessionButton).toHaveAttribute('aria-current', 'page')
 
     await user.click(within(rail).getByRole('button', { name: '新建对话' }))
-    expect(api.chat.createSession).not.toHaveBeenCalled()
+    expect(api.sessions.createSession).not.toHaveBeenCalled()
     expect(api.projects.setActive).toHaveBeenCalledWith({ projectId: null })
     expect(window.location.hash).toBe('#/')
     expect(sessionButton).not.toHaveAttribute('aria-current')
@@ -122,7 +122,7 @@ describe('WorkspaceSidebar', () => {
 
     await user.click(within(rail).getByRole('button', { name: '新建对话' }))
     expect(window.location.hash).toBe('#/')
-    expect(api.chat.createSession).not.toHaveBeenCalled()
+    expect(api.sessions.createSession).not.toHaveBeenCalled()
     expect(sessionButton).not.toHaveAttribute('aria-current')
     expect(newChatButton).not.toHaveAttribute('aria-current')
   })
@@ -144,7 +144,7 @@ describe('WorkspaceSidebar', () => {
 
     await user.click(screen.getByRole('button', { name: '新建对话' }))
 
-    expect(api.chat.createSession).not.toHaveBeenCalled()
+    expect(api.sessions.createSession).not.toHaveBeenCalled()
     expect(window.location.hash).toBe('#/')
     expect(screen.getByText('我们该做什么？')).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: '消息内容' })).toHaveValue('')
@@ -162,7 +162,7 @@ describe('WorkspaceSidebar', () => {
     await user.click(within(rail).getByRole('button', { name: '删除会话 计划讨论' }))
 
     await waitFor(() =>
-      expect(api.chat.deleteSession).toHaveBeenCalledWith({ sessionId: 'session-1' })
+      expect(api.sessions.deleteSession).toHaveBeenCalledWith({ sessionId: 'session-1' })
     )
     expect(within(rail).queryByRole('button', { name: '计划讨论' })).not.toBeInTheDocument()
   })
@@ -241,7 +241,7 @@ describe('WorkspaceSidebar', () => {
     await waitFor(() =>
       expect(api.projects.delete).toHaveBeenCalledWith({ projectId: 'project-1' })
     )
-    expect(api.chat.listSessions).toHaveBeenCalled()
+    expect(api.sessions.listSessions).toHaveBeenCalled()
   })
 
   it('keeps the more actions menu open long enough to move into it', () => {

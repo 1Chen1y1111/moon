@@ -51,10 +51,14 @@ export type SessionRpcEventEmitter = (
 ) => void
 
 /**
- * sessions RPC 请求上下文，承载当前调用方可用的协议事件出口。
+ * RPC 请求上下文，承载 Craft 风格 WS client 身份、窗口来源和 session 事件出口。
  */
 export type SessionRpcRequestContext = {
+  clientId?: string
   emitSessionEvent?: SessionRpcEventEmitter
+  setClientWorkspace?: (workspaceId: string | null) => void
+  webContentsId?: number | null
+  workspaceId?: string | null
 }
 
 /**

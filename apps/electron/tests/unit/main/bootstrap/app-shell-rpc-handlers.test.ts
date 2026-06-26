@@ -7,9 +7,12 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import type { RpcRequestHandler, RpcServerPort } from '@moon/server-core/handlers'
+import type {
+  RpcRequestHandler,
+  RpcServerPort,
+  SessionRpcRequestContext
+} from '@moon/server-core/handlers'
 import type { RpcPushPort } from '@moon/server-core/transport'
-import type { ElectronEnvelopeRpcRequestContext } from '@main/bootstrap/electron-envelope-ipc-rpc-server'
 
 const fromWebContentsMock = vi.fn()
 const getAllWindowsMock = vi.fn()
@@ -26,19 +29,17 @@ vi.mock('electron', () => ({
 }))
 
 function createRpcServerFixture(): {
-  server: RpcServerPort<ElectronEnvelopeRpcRequestContext> & RpcPushPort
-  getHandler: (
-    channel: string
-  ) => RpcRequestHandler<ElectronEnvelopeRpcRequestContext> | undefined
+  server: RpcServerPort<SessionRpcRequestContext> & RpcPushPort
+  getHandler: (channel: string) => RpcRequestHandler<SessionRpcRequestContext> | undefined
   push: ReturnType<typeof vi.fn>
 } {
-  const handlers = new Map<string, RpcRequestHandler<ElectronEnvelopeRpcRequestContext>>()
+  const handlers = new Map<string, RpcRequestHandler<SessionRpcRequestContext>>()
   const push = vi.fn()
 
   return {
     server: {
       handle: (channel, handler) => {
-        handlers.set(channel, handler as RpcRequestHandler<ElectronEnvelopeRpcRequestContext>)
+        handlers.set(channel, handler as RpcRequestHandler<SessionRpcRequestContext>)
       },
       push
     },
@@ -108,50 +109,27 @@ describe('registerAppShellHandlers', () => {
       baseUrl: ''
     }
 
-    await expect(getHandler(RPC_CHANNELS.settings.get)?.({ event: { sender: {} } as never })).resolves.toBe(
+    await expect(getHandler(RPC_CHANNELS.settings.get)?.({})).resolves.toBe(settings)
+    await expect(getHandler(RPC_CHANNELS.settings.saveProvider)?.({}, providerInput)).resolves.toBe(
       settings
     )
     await expect(
-      getHandler(RPC_CHANNELS.settings.saveProvider)?.(
-        { event: { sender: {} } as never },
-        providerInput
-      )
+      getHandler(RPC_CHANNELS.settings.createCustomProvider)?.({}, { name: 'Custom OpenAI' })
     ).resolves.toBe(settings)
     await expect(
-      getHandler(RPC_CHANNELS.settings.createCustomProvider)?.(
-        { event: { sender: {} } as never },
-        { name: 'Custom OpenAI' }
-      )
+      getHandler(RPC_CHANNELS.settings.createCustomAcpProvider)?.({}, { name: 'Custom ACP' })
     ).resolves.toBe(settings)
     await expect(
-      getHandler(RPC_CHANNELS.settings.createCustomAcpProvider)?.(
-        { event: { sender: {} } as never },
-        { name: 'Custom ACP' }
-      )
+      getHandler(RPC_CHANNELS.settings.deleteProvider)?.({}, { provider: 'custom-openai' })
     ).resolves.toBe(settings)
     await expect(
-      getHandler(RPC_CHANNELS.settings.deleteProvider)?.(
-        { event: { sender: {} } as never },
-        { provider: 'custom-openai' }
-      )
+      getHandler(RPC_CHANNELS.settings.fetchProviderModels)?.({}, providerInput)
     ).resolves.toBe(settings)
     await expect(
-      getHandler(RPC_CHANNELS.settings.fetchProviderModels)?.(
-        { event: { sender: {} } as never },
-        providerInput
-      )
-    ).resolves.toBe(settings)
-    await expect(
-      getHandler(RPC_CHANNELS.settings.testProvider)?.(
-        { event: { sender: {} } as never },
-        providerInput
-      )
+      getHandler(RPC_CHANNELS.settings.testProvider)?.({}, providerInput)
     ).resolves.toEqual({ ok: true })
     await expect(
-      getHandler(RPC_CHANNELS.settings.saveAppearance)?.(
-        { event: { sender: {} } as never },
-        { theme: 'dark' }
-      )
+      getHandler(RPC_CHANNELS.settings.saveAppearance)?.({}, { theme: 'dark' })
     ).resolves.toBe(settings)
 
     expect(settingsService.saveProvider).toHaveBeenCalledWith(providerInput)
@@ -168,9 +146,6 @@ describe('registerAppShellHandlers', () => {
   it('delegates project handlers and broadcasts project changes', async () => {
     const { RPC_CHANNELS } = await import('@moon/shared/protocol')
     const { registerAppShellHandlers } = await import('@main/bootstrap/app-shell-rpc-handlers')
-    const { findLegacyWebContentsClient } = await import(
-      '@main/bootstrap/legacy-webcontents-client-registry'
-    )
     const project = {
       id: 'project-1',
       name: 'moon',
@@ -183,8 +158,8 @@ describe('registerAppShellHandlers', () => {
       projects: [project]
     }
     const { server, getHandler, push } = createRpcServerFixture()
-    const sender = { id: 501, send: vi.fn() }
-    const context = { event: { sender } as never }
+    const setClientWorkspace = vi.fn()
+    const context = { setClientWorkspace }
 
     projectsService.listProjects.mockResolvedValue([project])
     projectsService.getActiveProject.mockResolvedValue(project)
@@ -192,8 +167,6 @@ describe('registerAppShellHandlers', () => {
     projectsService.setActiveProject.mockResolvedValue(project)
     projectsService.deleteProject.mockResolvedValue(undefined)
     projectsService.createChangeEvent.mockResolvedValue(event)
-    getAllWindowsMock.mockReturnValue([{ webContents: sender }])
-
     registerAppShellHandlers(server, {
       openSettingsWindow,
       projectsService: projectsService as never,
@@ -202,25 +175,19 @@ describe('registerAppShellHandlers', () => {
 
     await expect(getHandler(RPC_CHANNELS.projects.list)?.(context)).resolves.toEqual([project])
     await expect(getHandler(RPC_CHANNELS.projects.getActive)?.(context)).resolves.toBe(project)
-    expect(findLegacyWebContentsClient('501')?.workspaceId).toBe('project-1')
+    expect(setClientWorkspace).toHaveBeenLastCalledWith('project-1')
+    await expect(getHandler(RPC_CHANNELS.projects.useExistingFolder)?.(context)).resolves.toBe(
+      project
+    )
+    expect(setClientWorkspace).toHaveBeenLastCalledWith('project-1')
     await expect(
-      getHandler(RPC_CHANNELS.projects.useExistingFolder)?.(context)
+      getHandler(RPC_CHANNELS.projects.setActive)?.(context, { projectId: 'project-1' })
     ).resolves.toBe(project)
-    expect(findLegacyWebContentsClient('501')?.workspaceId).toBe('project-1')
+    expect(setClientWorkspace).toHaveBeenLastCalledWith('project-1')
     await expect(
-      getHandler(RPC_CHANNELS.projects.setActive)?.(
-        context,
-        { projectId: 'project-1' }
-      )
-    ).resolves.toBe(project)
-    expect(findLegacyWebContentsClient('501')?.workspaceId).toBe('project-1')
-    await expect(
-      getHandler(RPC_CHANNELS.projects.delete)?.(
-        context,
-        { projectId: 'project-1' }
-      )
+      getHandler(RPC_CHANNELS.projects.delete)?.(context, { projectId: 'project-1' })
     ).resolves.toBeUndefined()
-    expect(findLegacyWebContentsClient('501')?.workspaceId).toBe('project-1')
+    expect(setClientWorkspace).toHaveBeenLastCalledWith('project-1')
 
     expect(projectsService.setActiveProject).toHaveBeenCalledWith({ projectId: 'project-1' })
     expect(projectsService.deleteProject).toHaveBeenCalledWith({ projectId: 'project-1' })
@@ -231,12 +198,9 @@ describe('registerAppShellHandlers', () => {
   it('syncs a null active project as an unbound sender workspace', async () => {
     const { RPC_CHANNELS } = await import('@moon/shared/protocol')
     const { registerAppShellHandlers } = await import('@main/bootstrap/app-shell-rpc-handlers')
-    const { findLegacyWebContentsClient } = await import(
-      '@main/bootstrap/legacy-webcontents-client-registry'
-    )
     const { server, getHandler } = createRpcServerFixture()
-    const sender = { id: 502, send: vi.fn() }
-    const context = { event: { sender } as never }
+    const setClientWorkspace = vi.fn()
+    const context = { setClientWorkspace }
 
     projectsService.getActiveProject.mockResolvedValue(null)
     projectsService.setActiveProject.mockResolvedValue(null)
@@ -244,8 +208,6 @@ describe('registerAppShellHandlers', () => {
       activeProject: null,
       projects: []
     })
-    getAllWindowsMock.mockReturnValue([{ webContents: sender }])
-
     registerAppShellHandlers(server, {
       openSettingsWindow,
       projectsService: projectsService as never,
@@ -253,12 +215,12 @@ describe('registerAppShellHandlers', () => {
     })
 
     await expect(getHandler(RPC_CHANNELS.projects.getActive)?.(context)).resolves.toBeNull()
-    expect(findLegacyWebContentsClient('502')?.workspaceId).toBeNull()
+    expect(setClientWorkspace).toHaveBeenLastCalledWith(null)
 
     await expect(
       getHandler(RPC_CHANNELS.projects.setActive)?.(context, { projectId: null })
     ).resolves.toBeNull()
-    expect(findLegacyWebContentsClient('502')?.workspaceId).toBeNull()
+    expect(setClientWorkspace).toHaveBeenLastCalledWith(null)
   })
 
   it('keeps window control behavior on the sender window', async () => {
@@ -269,12 +231,13 @@ describe('registerAppShellHandlers', () => {
       minimize: vi.fn(),
       isMaximized: vi.fn(() => false),
       maximize: vi.fn(),
-      unmaximize: vi.fn()
+      unmaximize: vi.fn(),
+      webContents: { id: 777 }
     }
-    const sender = {}
+    const context = { webContentsId: 777 }
     const { server, getHandler } = createRpcServerFixture()
 
-    fromWebContentsMock.mockReturnValue(browserWindow)
+    getAllWindowsMock.mockReturnValue([browserWindow])
 
     registerAppShellHandlers(server, {
       openSettingsWindow,
@@ -282,22 +245,18 @@ describe('registerAppShellHandlers', () => {
       settingsService: settingsService as never
     })
 
-    await getHandler(RPC_CHANNELS.window.close)?.({ event: { sender } as never })
-    await getHandler(RPC_CHANNELS.window.minimize)?.({ event: { sender } as never })
-    await getHandler(RPC_CHANNELS.window.toggleMaximize)?.({ event: { sender } as never })
-    expect(getHandler(RPC_CHANNELS.window.getState)?.({ event: { sender } as never })).toEqual({
+    await getHandler(RPC_CHANNELS.window.close)?.(context)
+    await getHandler(RPC_CHANNELS.window.minimize)?.(context)
+    await getHandler(RPC_CHANNELS.window.toggleMaximize)?.(context)
+    expect(getHandler(RPC_CHANNELS.window.getState)?.(context)).toEqual({
       isMaximized: false
     })
-    await getHandler(RPC_CHANNELS.window.openSettings)?.(
-      { event: { sender } as never },
-      { section: 'providers' }
-    )
-    await getHandler(RPC_CHANNELS.window.openExternal)?.(
-      { event: { sender } as never },
-      { url: 'https://moon.local/auth' }
-    )
+    await getHandler(RPC_CHANNELS.window.openSettings)?.(context, { section: 'providers' })
+    await getHandler(RPC_CHANNELS.window.openExternal)?.(context, {
+      url: 'https://moon.local/auth'
+    })
 
-    expect(fromWebContentsMock).toHaveBeenCalledWith(sender)
+    expect(fromWebContentsMock).not.toHaveBeenCalled()
     expect(browserWindow.close).toHaveBeenCalledTimes(1)
     expect(browserWindow.minimize).toHaveBeenCalledTimes(1)
     expect(browserWindow.maximize).toHaveBeenCalledTimes(1)
@@ -318,10 +277,7 @@ describe('registerAppShellHandlers', () => {
     })
 
     expect(() =>
-      getHandler(RPC_CHANNELS.window.openSettings)?.(
-        { event: { sender: {} } as never },
-        { section: 'general' }
-      )
+      getHandler(RPC_CHANNELS.window.openSettings)?.({}, { section: 'general' })
     ).toThrow()
     expect(openSettingsWindow).not.toHaveBeenCalled()
   })
@@ -338,10 +294,7 @@ describe('registerAppShellHandlers', () => {
     })
 
     await expect(
-      getHandler(RPC_CHANNELS.window.openExternal)?.(
-        { event: { sender: {} } as never },
-        { url: 'file:///tmp/secret.txt' }
-      )
+      getHandler(RPC_CHANNELS.window.openExternal)?.({}, { url: 'file:///tmp/secret.txt' })
     ).rejects.toThrow('Unsupported external URL protocol')
     expect(openExternalMock).not.toHaveBeenCalled()
   })

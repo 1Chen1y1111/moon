@@ -47,7 +47,7 @@ describe('ToolInvocationList', () => {
     await user.click(screen.getByRole('button', { name: '允许' }))
 
     await waitFor(() =>
-      expect(api.chat.approveToolCall).toHaveBeenCalledWith({
+      expect(api.sessions.approveToolCall).toHaveBeenCalledWith({
         toolInvocationId: 'permission-tool-1'
       })
     )
@@ -61,7 +61,7 @@ describe('ToolInvocationList', () => {
     await user.click(screen.getByRole('button', { name: '拒绝' }))
 
     await waitFor(() =>
-      expect(api.chat.rejectToolCall).toHaveBeenCalledWith({
+      expect(api.sessions.rejectToolCall).toHaveBeenCalledWith({
         toolInvocationId: 'permission-tool-1'
       })
     )

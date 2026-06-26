@@ -1,12 +1,11 @@
 /**
- * 提供可复用的 workspace WebSocket envelope RPC runtime。
+ * 提供可复用的 WebSocket envelope RPC runtime。
  * 本文件只依赖注入的 socket server 端口，不绑定 Electron、IPC 或具体 `ws` 实现。
  */
 
 import type { ChatOperationEvent } from '@moon/shared/domain/chat'
 import {
   PROTOCOL_VERSION,
-  isRemoteEligible,
   RPC_CHANNELS,
   type ErrorCode,
   type MessageEnvelope,
@@ -14,11 +13,7 @@ import {
   type WireError
 } from '@moon/shared/protocol'
 
-import type {
-  RpcRequestHandler,
-  RpcServerPort,
-  SessionRpcRequestContext
-} from '../handlers'
+import type { RpcRequestHandler, RpcServerPort, SessionRpcRequestContext } from '../handlers'
 import type { SessionEventRouteHint } from '../sessions'
 import { deserializeEnvelope, serializeEnvelope } from './codec'
 import { EnvelopePushPort } from './envelope-push-port'
@@ -66,6 +61,7 @@ type WorkspaceSocketClient = {
     }
   >
   socket: WorkspaceSocket
+  webContentsId: number | null
   workspaceId: string | null
 }
 
@@ -80,13 +76,12 @@ export type WorkspaceWebSocketRpcServerOptions = {
 export type WorkspaceWebSocketRpcServer = RpcServerPort<SessionRpcRequestContext> &
   RpcPushPort & {
     close: () => Promise<void>
-    findClientsWithCapability: (
-      channel: string,
-      options?: { workspaceId?: string }
-    ) => string[]
+    findClientsWithCapability: (channel: string, options?: { workspaceId?: string }) => string[]
+    findClientByWebContentsId: (webContentsId: number) => string | null
     getTransportUrl: () => Promise<string>
     hasClientCapability: (clientId: string, channel: string) => boolean
     invokeClient: (clientId: string, channel: string, ...args: unknown[]) => Promise<unknown>
+    updateClientWorkspace: (clientId: string, workspaceId: string | null) => void
   }
 
 const LOCALHOST = '127.0.0.1'
@@ -120,10 +115,6 @@ export function createWorkspaceWebSocketRpcServer({
       channel: string,
       handler: RpcRequestHandler<SessionRpcRequestContext, TArgs, TResult>
     ) => {
-      if (!isRemoteEligible(channel)) {
-        throw new Error(`Workspace WebSocket RPC cannot handle local-only channel: ${channel}`)
-      }
-
       envelopeServer.handle(channel, handler)
     },
     push: (channel, target, ...args) => {
@@ -136,6 +127,8 @@ export function createWorkspaceWebSocketRpcServer({
     },
     findClientsWithCapability: (channel, options) =>
       findClientsWithCapability(clients, channel, options),
+    findClientByWebContentsId: (webContentsId) =>
+      findClientByWebContentsId(clients, webContentsId)?.clientId ?? null,
     invokeClient: (clientId, channel, ...args) => {
       const client = findClientById(clients, clientId)
 
@@ -155,6 +148,13 @@ export function createWorkspaceWebSocketRpcServer({
       }
 
       return invokeSocketClient(client, channel, args)
+    },
+    updateClientWorkspace: (clientId, workspaceId) => {
+      const client = findClientById(clients, clientId)
+
+      if (client !== undefined) {
+        client.workspaceId = workspaceId
+      }
     },
     close: async () => {
       const server = socketServer
@@ -257,6 +257,7 @@ function acceptSocketClient(
     isAlive: false,
     pendingRequests: new Map(),
     socket,
+    webContentsId: null,
     workspaceId: null
   }
 
@@ -349,6 +350,10 @@ function handleHandshakeEnvelope(
   client.handshakeComplete = true
   client.isAlive = true
   client.capabilities = new Set(envelope.clientCapabilities ?? [])
+  client.webContentsId =
+    typeof envelope.webContentsId === 'number' && Number.isFinite(envelope.webContentsId)
+      ? envelope.webContentsId
+      : null
   client.workspaceId =
     typeof envelope.workspaceId === 'string' && envelope.workspaceId.length > 0
       ? envelope.workspaceId
@@ -496,6 +501,16 @@ function findClientById(
 }
 
 /**
+ * 按 Electron webContents.id 查找对应 WS client。
+ */
+function findClientByWebContentsId(
+  clients: Set<WorkspaceSocketClient>,
+  webContentsId: number
+): WorkspaceSocketClient | undefined {
+  return [...clients].find((client) => client.webContentsId === webContentsId)
+}
+
+/**
  * 查找当前在线且声明了指定 capability 的 client；可按 workspaceId 进一步收窄。
  */
 function findClientsWithCapability(
@@ -522,9 +537,15 @@ function createRequestContext(
   client: WorkspaceSocketClient
 ): SessionRpcRequestContext {
   return {
+    clientId: client.clientId,
     emitSessionEvent: (eventChannel, operationEvent, routeHint) => {
       emitSessionEvent(rpcServer, client, eventChannel, operationEvent, routeHint)
-    }
+    },
+    setClientWorkspace: (workspaceId) => {
+      client.workspaceId = workspaceId
+    },
+    webContentsId: client.webContentsId,
+    workspaceId: client.workspaceId
   }
 }
 

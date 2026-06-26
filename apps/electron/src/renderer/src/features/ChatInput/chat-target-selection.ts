@@ -3,10 +3,7 @@
  * 它只做 renderer 侧纯数据选择，不调用 IPC、不修改 provider 或 connection 配置。
  */
 
-import {
-  selectDefaultLlmConnection,
-  type NormalizedLlmConnection
-} from '@moon/shared/config'
+import { selectDefaultLlmConnection, type NormalizedLlmConnection } from '@moon/shared/config'
 import {
   findChatProviderModel,
   getSelectableChatProviderModels,

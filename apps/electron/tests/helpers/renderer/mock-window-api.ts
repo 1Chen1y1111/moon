@@ -55,7 +55,7 @@ import type {
 type MockFn<T extends (...args: never[]) => unknown> = ReturnType<typeof vi.fn<T>>
 
 export type MockMoonApi = {
-  chat: {
+  sessions: {
     listSessions: MockFn<() => Promise<SessionRecord[]>>
     getMessages: MockFn<(input: GetChatMessagesInput) => Promise<MessageRecord[]>>
     listTopics: MockFn<(input: ListChatTopicsInput) => Promise<TopicRecord[]>>
@@ -267,7 +267,7 @@ function createMockWindowApi(options: MockWindowApiOptions = {}): MockMoonApi {
   }
 
   return {
-    chat: {
+    sessions: {
       listSessions: vi.fn<() => Promise<SessionRecord[]>>().mockResolvedValue(chatSessions),
       getMessages: vi
         .fn<(input: GetChatMessagesInput) => Promise<MessageRecord[]>>()

@@ -1,6 +1,6 @@
 /**
  * 负责在 preload 内部按 shared protocol routing 选择 RPC client。
- * 当前 v1 只区分 local/workspace 目标，不处理远程连接、工作区切换或重连状态。
+ * 当前 v1 只区分 local/workspace 目标，不处理工作区切换或重连状态。
  */
 
 import type {
@@ -44,9 +44,17 @@ export class RoutedClient implements RpcClientPort {
   }
 
   /**
-   * 注册 workspace client capability；v1 不把 capability 暴露给 renderer。
+   * 注册 client capability；本机和远程 workspace server 都可能反向调用这些能力。
    */
   handleCapability(channel: string, handler: RpcClientCapabilityHandler): void {
+    const localCapabilityClient = this.localClient as CapabilityAwareRpcClient
+
+    localCapabilityClient.handleCapability?.(channel, handler)
+
+    if (this.workspaceClient === this.localClient) {
+      return
+    }
+
     this.workspaceClient.handleCapability?.(channel, handler)
   }
 

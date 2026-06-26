@@ -262,7 +262,7 @@ export class ChatActionImpl {
     this.internal_dispatchChat({ type: 'loadChatSessionsPending' })
 
     try {
-      const sessions = await window.api.chat.listSessions()
+      const sessions = await window.api.sessions.listSessions()
       this.internal_dispatchChat({ type: 'loadChatSessionsFulfilled', sessions })
       return sessions
     } catch (error) {
@@ -275,7 +275,7 @@ export class ChatActionImpl {
     this.internal_dispatchChat({ type: 'loadChatTopicsPending', sessionId })
 
     try {
-      const topics = await window.api.chat.listTopics({ sessionId })
+      const topics = await window.api.sessions.listTopics({ sessionId })
       this.internal_dispatchChat({ type: 'loadChatTopicsFulfilled', sessionId, topics })
       return topics
     } catch (error) {
@@ -288,7 +288,7 @@ export class ChatActionImpl {
     this.internal_dispatchChat({ type: 'loadChatThreadsPending', topicId })
 
     try {
-      const threads = await window.api.chat.listThreads({ topicId })
+      const threads = await window.api.sessions.listThreads({ topicId })
       this.internal_dispatchChat({ type: 'loadChatThreadsFulfilled', threads, topicId })
       return threads
     } catch (error) {
@@ -304,7 +304,7 @@ export class ChatActionImpl {
     this.internal_dispatchChat({ type: 'loadChatMessagesPending', sessionId, threadId, requestId })
 
     try {
-      const messages = await window.api.chat.getMessages({
+      const messages = await window.api.sessions.getMessages({
         sessionId,
         ...(threadId === undefined ? {} : { threadId })
       })
@@ -332,7 +332,7 @@ export class ChatActionImpl {
     this.internal_dispatchChat({ type: 'createChatSessionPending' })
 
     try {
-      const session = await window.api.chat.createSession()
+      const session = await window.api.sessions.createSession()
       this.internal_dispatchChat({ type: 'createChatSessionFulfilled', session })
       return session
     } catch (error) {
@@ -343,7 +343,7 @@ export class ChatActionImpl {
 
   internal_deleteChatSession = async (sessionId: string): Promise<void> => {
     try {
-      await window.api.chat.deleteSession({ sessionId })
+      await window.api.sessions.deleteSession({ sessionId })
       this.internal_dispatchChat({ type: 'deleteChatSessionFulfilled', sessionId })
     } catch (error) {
       this.internal_dispatchChat({ type: 'deleteChatSessionRejected', error })
@@ -367,7 +367,7 @@ export class ChatActionImpl {
     let turn: CreateMessageTurnResult
 
     try {
-      turn = await window.api.chat.createMessageTurn(input)
+      turn = await window.api.sessions.createMessageTurn(input)
       this.internal_dispatchChat({ type: 'createMessageTurnFulfilled', requestId, result: turn })
     } catch (error) {
       this.internal_dispatchChat({ type: 'sendChatMessageRejected', requestId, error })
@@ -389,7 +389,7 @@ export class ChatActionImpl {
     this.internal_dispatchChat({ type: 'runChatOperationPending', operationId })
 
     try {
-      const result = await window.api.chat.runOperation({ operationId })
+      const result = await window.api.sessions.runOperation({ operationId })
       this.internal_dispatchChat({ type: 'runChatOperationFulfilled', operationId, result })
     } catch (error) {
       this.internal_dispatchChat({ type: 'runChatOperationRejected', operationId, error })
@@ -403,7 +403,7 @@ export class ChatActionImpl {
   internal_cancelChatOperation = async (
     input: CancelAgentOperationInput
   ): Promise<AgentOperationRecord> => {
-    const operation = await window.api.chat.cancelOperation(input)
+    const operation = await window.api.sessions.cancelOperation(input)
     this.internal_dispatchChat({ type: 'cancelChatOperationFulfilled', operation })
     return operation
   }
@@ -411,7 +411,7 @@ export class ChatActionImpl {
   internal_approveChatToolCall = async (
     input: ApproveToolCallInput
   ): Promise<ToolInvocationRecord> => {
-    const toolInvocation = await window.api.chat.approveToolCall(input)
+    const toolInvocation = await window.api.sessions.approveToolCall(input)
     this.internal_dispatchChat({ type: 'updateChatToolInvocation', toolInvocation })
     return toolInvocation
   }
@@ -419,7 +419,7 @@ export class ChatActionImpl {
   internal_rejectChatToolCall = async (
     input: RejectToolCallInput
   ): Promise<ToolInvocationRecord> => {
-    const toolInvocation = await window.api.chat.rejectToolCall(input)
+    const toolInvocation = await window.api.sessions.rejectToolCall(input)
     this.internal_dispatchChat({ type: 'updateChatToolInvocation', toolInvocation })
     return toolInvocation
   }
@@ -441,7 +441,7 @@ export class ChatActionImpl {
 
     try {
       const data = await file.arrayBuffer()
-      const importedAttachment = await window.api.chat.importAttachment({
+      const importedAttachment = await window.api.sessions.importAttachment({
         name: attachment.name,
         mimeType: attachment.mimeType,
         size: file.size,

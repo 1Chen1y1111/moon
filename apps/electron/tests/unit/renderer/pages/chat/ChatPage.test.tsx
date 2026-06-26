@@ -138,12 +138,12 @@ describe('ChatPage', () => {
     await user.type(screen.getByRole('textbox', { name: '消息内容' }), 'hello')
 
     expect(screen.getByRole('button', { name: '发送' })).toBeEnabled()
-    expect(api.chat.getMessages).not.toHaveBeenCalled()
+    expect(api.sessions.getMessages).not.toHaveBeenCalled()
   })
 
   it('shows a skeleton while historical messages load', async () => {
     let resolveMessages!: (messages: MessageRecord[]) => void
-    api.chat.getMessages.mockReturnValue(
+    api.sessions.getMessages.mockReturnValue(
       new Promise((resolve) => {
         resolveMessages = resolve
       })
@@ -167,7 +167,7 @@ describe('ChatPage', () => {
     expect(screen.getByRole('status', { name: '加载聊天消息' })).toBeInTheDocument()
     expect(screen.queryByText('正在加载消息...')).not.toBeInTheDocument()
     await waitFor(() =>
-      expect(api.chat.getMessages).toHaveBeenCalledWith({
+      expect(api.sessions.getMessages).toHaveBeenCalledWith({
         sessionId: 'session-1',
         threadId: 'thread-1'
       })
@@ -243,14 +243,14 @@ describe('ChatPage', () => {
   })
 
   it('sends a new chat message and renders the returned messages', async () => {
-    api.chat.getMessages.mockResolvedValue([userMessage, assistantMessage])
+    api.sessions.getMessages.mockResolvedValue([userMessage, assistantMessage])
     const { user } = renderWithProviders(<ChatPage />)
 
     await user.type(screen.getByRole('textbox', { name: '消息内容' }), '你好')
     await user.click(screen.getByRole('button', { name: '发送' }))
 
     await waitFor(() =>
-      expect(api.chat.createMessageTurn).toHaveBeenCalledWith({ content: '你好', projectId: null })
+      expect(api.sessions.createMessageTurn).toHaveBeenCalledWith({ content: '你好', projectId: null })
     )
     expect(await screen.findByText('你好，我在。')).toBeInTheDocument()
   })
@@ -270,7 +270,7 @@ describe('ChatPage', () => {
     await user.click(screen.getByRole('button', { name: '发送' }))
 
     await waitFor(() =>
-      expect(api.chat.createMessageTurn).toHaveBeenCalledWith({
+      expect(api.sessions.createMessageTurn).toHaveBeenCalledWith({
         content: '项目任务',
         projectId: 'project-1'
       })
@@ -310,13 +310,13 @@ describe('ChatPage', () => {
       }
     })
 
-    await waitFor(() => expect(api.chat.importAttachment).toHaveBeenCalled())
+    await waitFor(() => expect(api.sessions.importAttachment).toHaveBeenCalled())
     expect(await screen.findByText('note.txt')).toBeInTheDocument()
 
     await user.click(screen.getByRole('button', { name: /发送/ }))
 
     await waitFor(() =>
-      expect(api.chat.createMessageTurn).toHaveBeenCalledWith({
+      expect(api.sessions.createMessageTurn).toHaveBeenCalledWith({
         content: '',
         projectId: null,
         attachments: [
@@ -349,7 +349,7 @@ describe('ChatPage', () => {
     })
 
     await waitFor(() =>
-      expect(api.chat.importAttachment).toHaveBeenCalledWith(
+      expect(api.sessions.importAttachment).toHaveBeenCalledWith(
         expect.objectContaining({
           name: 'docs/note.md'
         })
@@ -360,7 +360,7 @@ describe('ChatPage', () => {
     await user.click(screen.getByRole('button', { name: /发送/ }))
 
     await waitFor(() =>
-      expect(api.chat.createMessageTurn).toHaveBeenCalledWith({
+      expect(api.sessions.createMessageTurn).toHaveBeenCalledWith({
         content: '',
         projectId: null,
         attachments: [
@@ -420,7 +420,7 @@ describe('ChatPage', () => {
     await user.click(screen.getByRole('button', { name: '发送' }))
 
     await waitFor(() =>
-      expect(api.chat.createMessageTurn).toHaveBeenCalledWith({
+      expect(api.sessions.createMessageTurn).toHaveBeenCalledWith({
         provider: 'claude',
         projectId: null,
         content: 'hello'
@@ -548,7 +548,7 @@ describe('ChatPage', () => {
     await user.click(screen.getByRole('button', { name: '发送' }))
 
     await waitFor(() =>
-      expect(api.chat.createMessageTurn).toHaveBeenCalledWith({
+      expect(api.sessions.createMessageTurn).toHaveBeenCalledWith({
         llmConnectionId: 'deepseek',
         projectId: null,
         content: 'hello'
@@ -618,7 +618,7 @@ describe('ChatPage', () => {
     await user.click(screen.getByRole('button', { name: '发送' }))
 
     await waitFor(() =>
-      expect(api.chat.createMessageTurn).toHaveBeenCalledWith({
+      expect(api.sessions.createMessageTurn).toHaveBeenCalledWith({
         sessionId: 'session-1',
         threadId: 'thread-1',
         provider: 'claude',
@@ -629,7 +629,7 @@ describe('ChatPage', () => {
   })
 
   it('renders the submitted message and streamed assistant text before send completes', async () => {
-    let resolveRun: (result: Awaited<ReturnType<typeof api.chat.runOperation>>) => void
+    let resolveRun: (result: Awaited<ReturnType<typeof api.sessions.runOperation>>) => void
     const completedMessages = [
       { ...userMessage, content: '流式测试' },
       { ...assistantMessage, id: 'message-streaming', content: '正在回复完成' }
@@ -646,8 +646,8 @@ describe('ChatPage', () => {
         messages: completedMessages
       }
     })
-    api.chat.getMessages.mockResolvedValue([])
-    api.chat.runOperation.mockReturnValue(
+    api.sessions.getMessages.mockResolvedValue([])
+    api.sessions.runOperation.mockReturnValue(
       new Promise((resolve) => {
         resolveRun = resolve
       })
@@ -667,14 +667,14 @@ describe('ChatPage', () => {
       routeState: { activeChatId: 'session-1' }
     })
 
-    await waitFor(() => expect(api.chat.getMessages).toHaveBeenCalled())
+    await waitFor(() => expect(api.sessions.getMessages).toHaveBeenCalled())
 
     await user.type(screen.getByRole('textbox', { name: '消息内容' }), '流式测试')
     await user.click(screen.getByRole('button', { name: '发送' }))
 
     expect(screen.getByText('流式测试')).toBeInTheDocument()
 
-    const streamListener = api.chat.onSessionEvent.mock.calls[0][0]
+    const streamListener = api.sessions.onSessionEvent.mock.calls[0][0]
     act(() => {
       streamListener({
         type: 'message-delta',
@@ -710,7 +710,7 @@ describe('ChatPage', () => {
     })
 
     await waitFor(() =>
-      expect(api.chat.getMessages).toHaveBeenCalledWith({
+      expect(api.sessions.getMessages).toHaveBeenCalledWith({
         sessionId: 'session-1',
         threadId: 'thread-1'
       })
@@ -719,7 +719,7 @@ describe('ChatPage', () => {
     await user.click(screen.getByRole('button', { name: '发送' }))
 
     await waitFor(() =>
-      expect(api.chat.createMessageTurn).toHaveBeenCalledWith({
+      expect(api.sessions.createMessageTurn).toHaveBeenCalledWith({
         content: '继续',
         projectId: null,
         sessionId: 'session-1',
@@ -730,7 +730,7 @@ describe('ChatPage', () => {
   })
 
   it('shows send failures without clearing the draft', async () => {
-    api.chat.createMessageTurn.mockRejectedValueOnce(new Error('model down'))
+    api.sessions.createMessageTurn.mockRejectedValueOnce(new Error('model down'))
     const { user } = renderWithProviders(<ChatPage />, {
       preloadedChat: {
         activeSessionId: 'session-1',

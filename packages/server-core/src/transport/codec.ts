@@ -76,6 +76,10 @@ export function validateEnvelopeShape(value: unknown): value is MessageEnvelope 
     return false
   }
 
+  if (value.webContentsId !== undefined && typeof value.webContentsId !== 'number') {
+    return false
+  }
+
   if (value.workspaceId !== undefined && typeof value.workspaceId !== 'string') {
     return false
   }

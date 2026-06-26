@@ -1019,8 +1019,11 @@ export class SessionManager {
     const eventRouteHint = createSessionEventRouteHint(eventScope.session)
     let assistantMessage = initialAssistantMessage
     let currentOperation = operation
+
+    // 拿出当前 thread 里的历史消息
     const previousMessages = await this.messagesRepository.listByThread(scope.thread.id)
 
+    // 转成 agent backend 格式
     const backendMessages = (
       await Promise.all(
         previousMessages
@@ -1028,8 +1031,12 @@ export class SessionManager {
           .map((message) => toAgentBackendMessage(message, this.attachmentsDirectory))
       )
     ).filter((message): message is AgentBackendMessage => message !== null)
+
+    // 从后往前找最近一条 user 消息，把它作为这次要问 agent 的内容
     const currentUserMessage =
       [...previousMessages].reverse().find((message) => message.role === 'user')?.content ?? ''
+
+    // 如果这次会话绑定了项目，就把项目名和路径交给 agent
     const workspace =
       scope.project === null
         ? undefined
@@ -1037,8 +1044,13 @@ export class SessionManager {
             name: scope.project.name,
             path: scope.project.path
           }
+
+    // 取出这次会话可用的上下文来源 比如项目/技能/上下文材料
     const sources = await this.resolveSourcesForScope(scope)
+
+    // 创建 agentBackend
     const agentBackend = this.createAgentBackend(
+      // 把 connection、历史消息、workspace、权限模式、sources 整理成 agent 配置
       createConnectionAgentBackendConfig(
         connection,
         backendMessages,

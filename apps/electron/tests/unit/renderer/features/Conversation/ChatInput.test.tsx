@@ -48,7 +48,7 @@ describe('Conversation ChatInput', () => {
 
     await user.click(screen.getByRole('button', { name: '发送' }))
 
-    expect(api.chat.createMessageTurn).not.toHaveBeenCalled()
+    expect(api.sessions.createMessageTurn).not.toHaveBeenCalled()
   })
 
   it('blocks sending while a draft attachment is not ready', async () => {
@@ -71,7 +71,7 @@ describe('Conversation ChatInput', () => {
     await user.type(screen.getByRole('textbox', { name: '消息内容' }), 'hello')
 
     expect(screen.getByRole('button', { name: '发送' })).toBeDisabled()
-    expect(api.chat.createMessageTurn).not.toHaveBeenCalled()
+    expect(api.sessions.createMessageTurn).not.toHaveBeenCalled()
   })
 
   it('stops the blocking operation', async () => {
@@ -86,7 +86,7 @@ describe('Conversation ChatInput', () => {
     await user.click(screen.getByRole('button', { name: '停止生成' }))
 
     await waitFor(() =>
-      expect(api.chat.cancelOperation).toHaveBeenCalledWith({ operationId: 'operation-1' })
+      expect(api.sessions.cancelOperation).toHaveBeenCalledWith({ operationId: 'operation-1' })
     )
   })
 })

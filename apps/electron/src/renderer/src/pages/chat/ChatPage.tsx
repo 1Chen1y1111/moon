@@ -122,7 +122,7 @@ export function ChatPage(): React.JSX.Element {
   }, [loadChatSessions, sessionsStatus])
 
   useEffect(() => {
-    return window.api.chat.onSessionEvent((event) => {
+    return window.api.sessions.onSessionEvent((event) => {
       applyChatOperationEvent(event)
     })
   }, [applyChatOperationEvent])

@@ -11,6 +11,17 @@ import { RPC_CHANNELS } from '@moon/shared/protocol'
 import { MOON_API_CHANNEL_MAP } from '@preload/channel-map'
 
 describe('MOON_API_CHANNEL_MAP', () => {
+  it('uses matching sessions API names for session RPC channels', () => {
+    expect(MOON_API_CHANNEL_MAP['sessions.createMessageTurn']).toEqual({
+      type: 'invoke',
+      channel: RPC_CHANNELS.sessions.createMessageTurn
+    })
+    expect(MOON_API_CHANNEL_MAP['sessions.onSessionEvent']).toEqual({
+      type: 'listener',
+      channel: RPC_CHANNELS.sessions.event
+    })
+  })
+
   it('uses shared RPC channels for settings APIs', () => {
     expect(MOON_API_CHANNEL_MAP['settings.saveProvider']).toEqual({
       type: 'invoke',

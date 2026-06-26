@@ -23,8 +23,5 @@
   "[json]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
-  "cSpell.words": [
-    "Aihubmix",
-    "azureai"
-  ]
+  "cSpell.words": ["Aihubmix", "azureai"]
 }

@@ -200,7 +200,7 @@ export class ConversationActionImpl {
         ? [swrFetchMessagesKey, context.sessionId, context.topicId, context.threadId]
         : null,
       async () =>
-        window.api.chat.getMessages({
+        window.api.sessions.getMessages({
           sessionId: context.sessionId as string,
           threadId: context.threadId as string
         }),

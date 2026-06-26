@@ -16,12 +16,12 @@ describe('buildClientApi', () => {
       on: vi.fn()
     }
     const channelMap = {
-      'chat.listSessions': { type: 'invoke', channel: 'sessions:listSessions' },
+      'sessions.listSessions': { type: 'invoke', channel: 'sessions:listSessions' },
       'windowControls.close': { type: 'invoke', channel: 'window:close' }
     } satisfies ChannelMap
     const api = buildClientApi(client, channelMap)
 
-    await expect(api.chat.listSessions()).resolves.toEqual({ ok: true })
+    await expect(api.sessions.listSessions()).resolves.toEqual({ ok: true })
     await api.windowControls.close()
 
     expect(client.invoke).toHaveBeenCalledWith('sessions:listSessions')
@@ -35,12 +35,12 @@ describe('buildClientApi', () => {
       on: vi.fn(() => unsubscribe)
     }
     const channelMap = {
-      'chat.onSessionEvent': { type: 'listener', channel: 'session:event' }
+      'sessions.onSessionEvent': { type: 'listener', channel: 'session:event' }
     } satisfies ChannelMap
     const api = buildClientApi(client, channelMap)
     const listener = vi.fn()
 
-    expect(api.chat.onSessionEvent(listener)).toBe(unsubscribe)
+    expect(api.sessions.onSessionEvent(listener)).toBe(unsubscribe)
     expect(client.on).toHaveBeenCalledWith('session:event', listener)
   })
 })

@@ -47,11 +47,7 @@ function createApiMethod(client: RpcClientPort, entry: ChannelMapEntry): Generat
 /**
  * 按点号 key 把方法写入嵌套 API 对象。
  */
-function setApiMethod(
-  api: Record<string, unknown>,
-  key: string,
-  method: GeneratedApiMethod
-): void {
+function setApiMethod(api: Record<string, unknown>, key: string, method: GeneratedApiMethod): void {
   const path = key.split('.')
   let target = api
 

@@ -15,6 +15,7 @@ export type { WorkspaceWebSocketConnectionState, WorkspaceWebSocketConstructor }
 
 export type WorkspaceWebSocketRpcClientOptions = {
   createId?: () => string
+  getWebContentsId?: () => Promise<number | null | undefined>
   getTransportInfo: () => Promise<WorkspaceWebSocketTransportInfo>
   onConnectionStateChange?: (state: WorkspaceWebSocketConnectionState) => void
   reconnectDelayMs?: number
@@ -26,6 +27,7 @@ export type WorkspaceWebSocketRpcClientOptions = {
  */
 export function createWorkspaceWebSocketRpcClient({
   createId,
+  getWebContentsId,
   getTransportInfo,
   onConnectionStateChange,
   reconnectDelayMs,
@@ -45,6 +47,7 @@ export function createWorkspaceWebSocketRpcClient({
 
       return transportInfo.url
     },
+    getWebContentsId,
     getWorkspaceId: async () => {
       const transportInfo = await transportInfoReader.read()
 

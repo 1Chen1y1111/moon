@@ -1,12 +1,12 @@
 /**
  * 负责注册 Electron app-shell 的 LOCAL_ONLY RPC handlers。
- * 本层只编排 settings/projects/window 本地能力，不依赖 renderer 或远程 transport。
+ * 本层只编排 settings/projects/window 本地能力，入口遵循 Craft 风格 WS request context。
  */
 
 import { BrowserWindow, shell } from 'electron'
 
 import { openExternalInputSchema, openSettingsInputSchema } from '@ipc/window-contracts'
-import type { RpcServerPort } from '@moon/server-core/handlers'
+import type { RpcServerPort, SessionRpcRequestContext } from '@moon/server-core/handlers'
 import { pushTyped, type RpcPushPort } from '@moon/server-core/transport'
 import type {
   CreateCustomAcpProviderInput,
@@ -18,14 +18,15 @@ import type {
 } from '@moon/shared/domain/settings-validation'
 import type { AppSettings } from '@moon/shared/domain/settings'
 import type { ProjectRecord } from '@moon/shared/domain/project'
-import type { DeleteProjectInput, SetActiveProjectInput } from '@moon/shared/domain/project-validation'
+import type {
+  DeleteProjectInput,
+  SetActiveProjectInput
+} from '@moon/shared/domain/project-validation'
 import { RPC_CHANNELS } from '@moon/shared/protocol'
 import type { ProjectsService } from '../services/projects-service'
 import type { SettingsService } from '../services/settings-service'
-import type { ElectronEnvelopeRpcRequestContext } from './electron-envelope-ipc-rpc-server'
-import { bindLegacyWebContentsClientWorkspace } from './legacy-webcontents-client-registry'
 
-type AppShellRpcServer = RpcServerPort<ElectronEnvelopeRpcRequestContext> & RpcPushPort
+type AppShellRpcServer = RpcServerPort<SessionRpcRequestContext> & RpcPushPort
 
 /**
  * 注册 app-shell RPC handlers 所需的 Electron main 依赖。
@@ -70,13 +71,28 @@ async function broadcastProjectsChange(
 }
 
 /**
- * 将当前 IPC sender 绑定到对应 workspace；null 表示普通未绑定聊天空间。
+ * 将当前 WS client 绑定到对应 workspace；null 表示普通未绑定聊天空间。
  */
 function bindSenderWorkspace(
-  context: ElectronEnvelopeRpcRequestContext,
+  context: SessionRpcRequestContext,
   project: Pick<ProjectRecord, 'id'> | null
 ): void {
-  bindLegacyWebContentsClientWorkspace(context.event.sender, project?.id ?? null)
+  context.setClientWorkspace?.(project?.id ?? null)
+}
+
+/**
+ * 按 Craft 风格 request context 的 webContentsId 找到当前 Electron 窗口。
+ */
+function getSenderWindow(context: SessionRpcRequestContext): BrowserWindow | null {
+  if (typeof context.webContentsId !== 'number') {
+    return null
+  }
+
+  return (
+    BrowserWindow.getAllWindows().find(
+      (window) => window.webContents.id === context.webContentsId
+    ) ?? null
+  )
 }
 
 /**
@@ -195,17 +211,17 @@ function registerProjectsHandlers(
  * 注册 window controls 相关 RPC handlers，操作当前 IPC 调用来源窗口。
  */
 function registerWindowHandlers(
-  server: RpcServerPort<ElectronEnvelopeRpcRequestContext>,
+  server: RpcServerPort<SessionRpcRequestContext>,
   openSettingsWindow: (input?: { section?: 'providers' }) => BrowserWindow
 ): void {
   server.handle(RPC_CHANNELS.window.close, (context) => {
-    BrowserWindow.fromWebContents(context.event.sender)?.close()
+    getSenderWindow(context)?.close()
   })
   server.handle(RPC_CHANNELS.window.minimize, (context) => {
-    BrowserWindow.fromWebContents(context.event.sender)?.minimize()
+    getSenderWindow(context)?.minimize()
   })
   server.handle(RPC_CHANNELS.window.toggleMaximize, (context) => {
-    const senderWindow = BrowserWindow.fromWebContents(context.event.sender)
+    const senderWindow = getSenderWindow(context)
 
     if (senderWindow === null) {
       return
@@ -227,7 +243,7 @@ function registerWindowHandlers(
     await shell.openExternal(normalizeExternalCapabilityUrl(url))
   })
   server.handle(RPC_CHANNELS.window.getState, (context) => {
-    const senderWindow = BrowserWindow.fromWebContents(context.event.sender)
+    const senderWindow = getSenderWindow(context)
 
     return {
       isMaximized: senderWindow?.isMaximized() ?? false

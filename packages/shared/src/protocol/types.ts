@@ -6,13 +6,7 @@
 /**
  * RPC wire message 的基础类型，后续 transport codec 会按该字段分派处理流程。
  */
-export type MessageType =
-  | 'handshake'
-  | 'handshake_ack'
-  | 'request'
-  | 'response'
-  | 'event'
-  | 'error'
+export type MessageType = 'handshake' | 'handshake_ack' | 'request' | 'response' | 'event' | 'error'
 
 /**
  * Moon 当前协议层识别的错误码集合。
@@ -59,6 +53,7 @@ export type MessageEnvelope = {
   authToken?: string
   clientCapabilities?: string[]
   clientId?: string
+  webContentsId?: number
   workspaceId?: string
 }
 

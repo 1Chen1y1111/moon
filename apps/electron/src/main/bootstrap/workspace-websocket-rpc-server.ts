@@ -51,6 +51,7 @@ export function createWorkspaceWebSocketRpcServer({
     }),
     findClientsWithCapability: (channel, options) =>
       runtime.findClientsWithCapability(channel, options),
+    findClientByWebContentsId: (webContentsId) => runtime.findClientByWebContentsId(webContentsId),
     handle: (channel, handler) => {
       runtime.handle(channel, handler)
     },
@@ -58,7 +59,9 @@ export function createWorkspaceWebSocketRpcServer({
     invokeClient: (clientId, channel, ...args) => runtime.invokeClient(clientId, channel, ...args),
     push: (channel, target, ...args) => {
       runtime.push(channel, target, ...args)
-    }
+    },
+    updateClientWorkspace: (clientId, workspaceId) =>
+      runtime.updateClientWorkspace(clientId, workspaceId)
   }
 }
 

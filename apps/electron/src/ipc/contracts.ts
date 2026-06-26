@@ -1,6 +1,6 @@
 /**
- * 负责定义 preload 暴露给 renderer 的 typed IPC 合同。
- * 类型只描述跨进程 wire contract，不直接调用 Electron 或主进程服务。
+ * 负责定义 preload 暴露给 renderer 的 typed API 合同。
+ * 类型只描述 renderer 可见能力，不直接绑定 Electron IPC 或 WS transport。
  */
 
 import type {
@@ -43,25 +43,13 @@ import type {
   SaveAppearanceInput,
   SaveProviderInput
 } from '@moon/shared/domain/settings-validation'
-import type { MessageEnvelope } from '@moon/shared/protocol'
-import { ipcChannels } from './channels'
 import type { OpenSettingsInput, WindowState } from './window-contracts'
-
-/**
- * 每个 IPC channel 的请求与响应类型映射，供 main/preload 双侧复用。
- */
-export type AppIpcContractMap = {
-  [ipcChannels.rpc.request]: {
-    request: MessageEnvelope
-    response: MessageEnvelope
-  }
-}
 
 /**
  * preload 注入到 renderer 的最小 API surface，renderer 只能通过该对象跨进程通信。
  */
 export type MoonApi = {
-  chat: {
+  sessions: {
     listSessions: () => Promise<SessionRecord[]>
     getMessages: (input: GetChatMessagesInput) => Promise<MessageRecord[]>
     listTopics: (input: ListChatTopicsInput) => Promise<TopicRecord[]>

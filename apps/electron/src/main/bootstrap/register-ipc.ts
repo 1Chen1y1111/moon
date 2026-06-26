@@ -1,25 +1,25 @@
 /**
- * 负责注册主进程 IPC handler，并把 renderer 请求分发到对应 service。
- * 这里是跨进程 wire contract 的主进程入口，不直接实现业务持久化细节。
+ * 负责启动本机 WS RPC 入口，并注册 preload 初始化所需的 discovery IPC handler。
+ * 业务请求进入 WS server 后再分发到 app-shell 或 session handlers。
  */
 
 import { ipcMain, type BrowserWindow } from 'electron'
 
-import { ipcChannels } from '@ipc/channels'
 import {
-  workspaceWebSocketTransportInfoChannel,
+  localWebSocketTransportInfoChannel,
+  webContentsIdChannel,
   type WorkspaceWebSocketTransportInfo
 } from '@ipc/workspace-transport-contract'
 import { registerSessionHandlers } from '@moon/server-core/handlers/rpc'
 import type { ChatService } from '@moon/server/services/chat-service'
 import type { ProjectsService } from '../services/projects-service'
 import type { SettingsService } from '../services/settings-service'
-import { createElectronEnvelopeIpcRpcServer } from './electron-envelope-ipc-rpc-server'
 import { registerAppShellHandlers } from './app-shell-rpc-handlers'
 import {
   createWorkspaceWebSocketRpcServer,
   type WorkspaceWebSocketRpcServer
 } from './workspace-websocket-rpc-server'
+import { setWindowStateEventSink } from './window-state-events'
 
 type RegisterIpcDependencies = {
   chatService: ChatService
@@ -28,20 +28,6 @@ type RegisterIpcDependencies = {
   openSettingsWindow: (input?: { section?: 'providers' }) => BrowserWindow
   createWorkspaceRpcServer?: () => WorkspaceWebSocketRpcServer
 }
-
-type WorkspaceTransportRegistration =
-  | {
-      mode: 'local'
-      workspaceRpcServer: WorkspaceWebSocketRpcServer
-    }
-  | {
-      mode: 'remote'
-      transportInfo: WorkspaceWebSocketTransportInfo
-    }
-
-const WORKSPACE_WS_URL_ENV = 'MOON_WORKSPACE_WS_URL'
-const WORKSPACE_WS_TOKEN_ENV = 'MOON_WORKSPACE_WS_TOKEN'
-const WORKSPACE_ID_ENV = 'MOON_WORKSPACE_ID'
 
 /**
  * 主进程注册 IPC 后需要在应用退出时释放的资源。
@@ -60,87 +46,44 @@ export function registerIpcHandlers({
   projectsService,
   settingsService
 }: RegisterIpcDependencies): RegisteredIpcHandlers {
-  ipcMain.removeHandler(ipcChannels.rpc.request)
+  ipcMain.removeHandler(localWebSocketTransportInfoChannel)
+  ipcMain.removeHandler(webContentsIdChannel)
 
-  const localRpcServer = createElectronEnvelopeIpcRpcServer()
-  const workspaceTransport = createWorkspaceTransportRegistration(createWorkspaceRpcServer)
+  const localRpcServer = createWorkspaceRpcServer()
 
-  registerWorkspaceTransportHandlers(localRpcServer, workspaceTransport, projectsService)
-  if (workspaceTransport.mode === 'local') {
-    registerSessionHandlers(workspaceTransport.workspaceRpcServer, { sessionHandlers: chatService })
-  }
+  registerSessionHandlers(localRpcServer, { sessionHandlers: chatService })
   registerAppShellHandlers(localRpcServer, {
     openSettingsWindow,
     projectsService,
     settingsService
   })
+  registerLocalTransportDiscoveryHandlers(localRpcServer)
+  setWindowStateEventSink(localRpcServer)
 
   return {
-    close: () =>
-      workspaceTransport.mode === 'local'
-        ? workspaceTransport.workspaceRpcServer.close()
-        : Promise.resolve()
-  }
-}
-
-/**
- * 根据环境变量选择本机 workspace server 或外部 remote endpoint。
- */
-function createWorkspaceTransportRegistration(
-  createWorkspaceRpcServer: () => WorkspaceWebSocketRpcServer
-): WorkspaceTransportRegistration {
-  const remoteUrl = readOptionalEnv(WORKSPACE_WS_URL_ENV)
-
-  if (remoteUrl) {
-    const authToken = readOptionalEnv(WORKSPACE_WS_TOKEN_ENV)
-    const workspaceId = readOptionalEnv(WORKSPACE_ID_ENV)
-
-    return {
-      mode: 'remote',
-      transportInfo: {
-        ...(authToken === undefined ? {} : { authToken }),
-        ...(workspaceId === undefined ? {} : { workspaceId }),
-        mode: 'remote',
-        url: remoteUrl
-      }
+    close: async () => {
+      setWindowStateEventSink(null)
+      await localRpcServer.close()
     }
   }
-
-  return {
-    mode: 'local',
-    workspaceRpcServer: createWorkspaceRpcServer()
-  }
 }
 
 /**
- * 读取可选环境变量，并把空白字符串视为未配置。
+ * 注册 preload 初始化本机 WS RPC client 所需的 discovery IPC handlers。
  */
-function readOptionalEnv(name: string): string | undefined {
-  const value = process.env[name]?.trim()
-
-  return value ? value : undefined
-}
-
-/**
- * 注册 preload 查询 workspace WebSocket 地址所需的内部 RPC handler。
- */
-function registerWorkspaceTransportHandlers(
-  localRpcServer: ReturnType<typeof createElectronEnvelopeIpcRpcServer>,
-  workspaceTransport: WorkspaceTransportRegistration,
-  projectsService: ProjectsService
+function registerLocalTransportDiscoveryHandlers(
+  localRpcServer: WorkspaceWebSocketRpcServer
 ): void {
-  localRpcServer.handle(workspaceWebSocketTransportInfoChannel, async () => {
-    if (workspaceTransport.mode === 'remote') {
-      return workspaceTransport.transportInfo
-    }
-
-    const transportInfo = await workspaceTransport.workspaceRpcServer.getTransportInfo()
-    const activeProject = await projectsService.getActiveProject()
+  ipcMain.handle(localWebSocketTransportInfoChannel, async () => {
+    const transportInfo = await localRpcServer.getTransportInfo()
 
     return {
       ...transportInfo,
-      ...(activeProject?.id === undefined ? {} : { workspaceId: activeProject.id }),
       mode: 'local' as const
-    }
+    } satisfies WorkspaceWebSocketTransportInfo
+  })
+
+  ipcMain.handle(webContentsIdChannel, (event) => {
+    return event.sender.id
   })
 }
