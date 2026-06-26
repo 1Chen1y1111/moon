@@ -4,15 +4,15 @@
  */
 
 import { ClaudeAgent } from '../../../claude-agent'
-import type { AgentBackendDriver } from '../driver-types'
+import type { ProviderDriver } from '../driver-types'
 
-export const anthropicDriver: AgentBackendDriver = {
+export const anthropicDriver: ProviderDriver = {
   provider: 'anthropic',
 
   /**
    * 创建 Claude Agent SDK backed agent 实例。
    */
-  createAgent(config) {
+  createBackend(config) {
     return new ClaudeAgent({
       apiKey: config.apiKey,
       baseUrl: config.baseUrl,

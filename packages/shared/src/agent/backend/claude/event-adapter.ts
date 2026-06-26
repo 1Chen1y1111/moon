@@ -6,7 +6,14 @@
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 
 import type { AgentEventUsage } from '@moon/core/types'
+import { BaseEventAdapter } from '../base-event-adapter'
 import type { AgentEvent } from '../types'
+
+type ClaudeToolIndexEntry = {
+  input?: Record<string, unknown>
+  parentToolUseId?: string
+  toolName: string
+}
 
 type ClaudeUsagePayload = {
   input_tokens?: unknown
@@ -27,6 +34,8 @@ type ClaudeContentBlock = {
 }
 
 type ClaudeResultMessage = Extract<SDKMessage, { type: 'result' }>
+type ToolResultAgentEvent = Extract<AgentEvent, { type: 'tool_result' }>
+type ToolStartAgentEvent = Extract<AgentEvent, { type: 'tool_start' }>
 
 /**
  * 从未知值中读取数字字段，避免 SDK usage 字段缺失时污染统一事件。
@@ -310,7 +319,7 @@ function readStreamTextDelta(message: SDKMessage): string {
 /**
  * 把一条 Claude SDK 消息转换成零到多条统一 agent 事件。
  */
-export function adaptClaudeSdkMessage(message: SDKMessage): AgentEvent[] {
+function adaptSdkMessage(message: SDKMessage): AgentEvent[] {
   const events: AgentEvent[] = []
   const sessionId = readSessionId(message)
 
@@ -390,4 +399,78 @@ export function adaptClaudeSdkMessage(message: SDKMessage): AgentEvent[] {
   }
 
   return events
+}
+
+/**
+ * 把 Claude Agent SDK 消息流适配成 Moon 统一 AgentEvent。
+ */
+export class ClaudeEventAdapter extends BaseEventAdapter {
+  private readonly toolIndex = new Map<string, ClaudeToolIndexEntry>()
+
+  /**
+   * 每轮开始时清空 Claude 工具索引，避免上一轮工具元数据污染当前 turn。
+   */
+  protected onTurnStart(): void {
+    this.toolIndex.clear()
+  }
+
+  /**
+   * 转换单条 Claude SDK 消息，调用方负责按 SDK 流顺序逐条调用。
+   */
+  adapt(message: SDKMessage): AgentEvent[] {
+    return adaptSdkMessage(message).map((event) => this.enrichEvent(event))
+  }
+
+  /**
+   * 记录 tool_start 元数据，并给可归属到当前 turn 的事件补充 turnId。
+   */
+  private enrichEvent(event: AgentEvent): AgentEvent {
+    if (event.type === 'tool_start') {
+      this.recordToolStart(event)
+      return this.withCurrentTurnId(event)
+    }
+
+    if (event.type === 'tool_result') {
+      return this.withCurrentTurnId(this.enrichToolResult(event))
+    }
+
+    return this.withCurrentTurnId(event)
+  }
+
+  /**
+   * 把 Claude tool_use 开始事件写入索引，供后续 synthetic user tool_result 回填。
+   */
+  private recordToolStart(event: ToolStartAgentEvent): void {
+    this.toolIndex.set(event.toolUseId, {
+      ...(event.input === undefined ? {} : { input: event.input }),
+      ...(event.parentToolUseId === undefined ? {} : { parentToolUseId: event.parentToolUseId }),
+      toolName: event.toolName
+    })
+  }
+
+  /**
+   * 用同 turn 内已知的 tool_start 元数据补全 tool_result，并消费权限阻止原因。
+   */
+  private enrichToolResult(event: ToolResultAgentEvent): ToolResultAgentEvent {
+    const indexedTool = this.toolIndex.get(event.toolUseId)
+    const blockReason = this.consumeBlockReason(event.toolUseId, `perm-${event.toolUseId}`)
+    const accumulatedOutput = this.consumeOutput(event.toolUseId)
+
+    return {
+      ...event,
+      ...(event.toolName !== undefined || indexedTool === undefined
+        ? {}
+        : { toolName: indexedTool.toolName }),
+      ...(event.input !== undefined || indexedTool?.input === undefined
+        ? {}
+        : { input: indexedTool.input }),
+      ...(event.parentToolUseId !== undefined || indexedTool?.parentToolUseId === undefined
+        ? {}
+        : { parentToolUseId: indexedTool.parentToolUseId }),
+      ...(blockReason === undefined ? {} : { isError: true, result: blockReason }),
+      ...(blockReason !== undefined || accumulatedOutput === undefined || event.result !== undefined
+        ? {}
+        : { result: accumulatedOutput })
+    }
+  }
 }

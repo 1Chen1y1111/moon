@@ -338,6 +338,7 @@ export type ChatOperationEvent =
       threadId: string
       messageId: string
       delta: string
+      turnId?: string
     }
   | {
       type: 'reasoning-delta'
@@ -347,6 +348,7 @@ export type ChatOperationEvent =
       threadId: string
       messageId: string
       delta: string
+      turnId?: string
     }
   | {
       type: 'tool-start'
@@ -356,6 +358,7 @@ export type ChatOperationEvent =
       threadId: string
       messageId: string
       toolInvocation: ToolInvocationRecord
+      turnId?: string
     }
   | {
       type: 'tool-waiting-approval'
@@ -365,6 +368,7 @@ export type ChatOperationEvent =
       threadId: string
       messageId: string
       toolInvocation: ToolInvocationRecord
+      turnId?: string
     }
   | {
       type: 'tool-finish'
@@ -374,6 +378,7 @@ export type ChatOperationEvent =
       threadId: string
       messageId: string
       toolInvocation: ToolInvocationRecord
+      turnId?: string
     }
   | {
       type: 'operation-done'

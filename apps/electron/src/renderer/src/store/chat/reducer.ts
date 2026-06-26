@@ -325,6 +325,23 @@ function updateToolInvocation(
   }
 }
 
+/**
+ * 在 renderer live store 中保留 agent turn 标识，只记录语义元数据，不参与路由。
+ */
+function withAgentTurnMetadata(message: MessageRecord, turnId: string | undefined): MessageRecord {
+  if (turnId === undefined) {
+    return message
+  }
+
+  return {
+    ...message,
+    metadata: {
+      ...(message.metadata ?? {}),
+      agentTurnId: turnId
+    }
+  }
+}
+
 function removePendingToolInvocation(
   pendingToolInvocations: ToolInvocationRecord[],
   toolInvocationId: string
@@ -436,7 +453,7 @@ function applyChatOperationEvent(state: ChatState, event: ChatOperationEvent): C
     }
 
     return updateMessageById(state, event.messageId, (message) => ({
-      ...message,
+      ...withAgentTurnMetadata(message, event.turnId),
       content: `${message.content}${event.delta}`
     }))
   }
@@ -452,7 +469,7 @@ function applyChatOperationEvent(state: ChatState, event: ChatOperationEvent): C
     }
 
     return updateMessageById(state, event.messageId, (message) => ({
-      ...message,
+      ...withAgentTurnMetadata(message, event.turnId),
       reasoning: `${message.reasoning ?? ''}${event.delta}`
     }))
   }

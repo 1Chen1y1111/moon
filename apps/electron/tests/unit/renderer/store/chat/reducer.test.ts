@@ -2,11 +2,13 @@ import { describe, expect, it } from 'vitest'
 
 import { createInitialChatState } from '@renderer/store/chat/initial-state'
 import { chatReducer } from '@renderer/store/chat/reducer'
+import type { ChatState } from '@renderer/store/chat/types'
 import type {
   AgentOperationRecord,
   MessageRecord,
   SessionRecord,
   ThreadRecord,
+  ToolInvocationRecord,
   TopicRecord
 } from '@moon/shared/domain/chat'
 
@@ -71,6 +73,43 @@ const messageTwo: MessageRecord = {
   status: 'complete',
   createdAt: '2026-05-09T00:00:01.000Z',
   updatedAt: '2026-05-09T00:00:01.000Z'
+}
+
+const assistantMessage: MessageRecord = {
+  id: 'assistant-1',
+  sessionId: 'session-1',
+  topicId: 'topic-1',
+  threadId: 'thread-1',
+  operationId: 'operation-1',
+  role: 'assistant',
+  content: '',
+  status: 'streaming',
+  createdAt: '2026-05-09T00:00:02.000Z',
+  updatedAt: '2026-05-09T00:00:02.000Z'
+}
+
+function createStreamingChatState(message: MessageRecord = assistantMessage): ChatState {
+  return {
+    ...createInitialChatState(),
+    activeSessionId: 'session-1',
+    activeTopicId: 'topic-1',
+    activeThreadId: 'thread-1',
+    messages: [message],
+    messageIds: [message.id],
+    messagesMap: { [message.id]: message },
+    operationsById: {
+      [operationOne.id]: {
+        id: operationOne.id,
+        sessionId: 'session-1',
+        topicId: 'topic-1',
+        threadId: 'thread-1',
+        assistantMessageId: message.id,
+        status: 'running',
+        createdAt: '2026-05-09T00:00:00.000Z',
+        updatedAt: '2026-05-09T00:00:02.000Z'
+      }
+    }
+  }
 }
 
 describe('chat reducer message ownership', () => {
@@ -289,5 +328,153 @@ describe('chat reducer message ownership', () => {
     expect(state.activeThreadId).toBeNull()
     expect(state.messages).toEqual([])
     expect(state.operationsById).toEqual({})
+  })
+})
+
+describe('chat reducer agent turn metadata', () => {
+  it('preserves turn id from message deltas in live assistant message metadata', () => {
+    const state = chatReducer(createStreamingChatState(), {
+      type: 'applyChatOperationEvent',
+      event: {
+        type: 'message-delta',
+        operationId: 'operation-1',
+        sessionId: 'session-1',
+        topicId: 'topic-1',
+        threadId: 'thread-1',
+        messageId: 'assistant-1',
+        delta: 'hello',
+        turnId: 'operation-1'
+      }
+    })
+
+    expect(state.messagesMap['assistant-1']?.content).toBe('hello')
+    expect(state.messagesMap['assistant-1']?.metadata).toEqual({ agentTurnId: 'operation-1' })
+  })
+
+  it('merges turn id from reasoning deltas without dropping existing metadata', () => {
+    const state = chatReducer(
+      createStreamingChatState({
+        ...assistantMessage,
+        metadata: { source: 'existing' }
+      }),
+      {
+        type: 'applyChatOperationEvent',
+        event: {
+          type: 'reasoning-delta',
+          operationId: 'operation-1',
+          sessionId: 'session-1',
+          topicId: 'topic-1',
+          threadId: 'thread-1',
+          messageId: 'assistant-1',
+          delta: 'thinking',
+          turnId: 'operation-1'
+        }
+      }
+    )
+
+    expect(state.messagesMap['assistant-1']?.reasoning).toBe('thinking')
+    expect(state.messagesMap['assistant-1']?.metadata).toEqual({
+      source: 'existing',
+      agentTurnId: 'operation-1'
+    })
+  })
+
+  it('does not create empty metadata when delta events do not carry a turn id', () => {
+    const state = chatReducer(createStreamingChatState(), {
+      type: 'applyChatOperationEvent',
+      event: {
+        type: 'message-delta',
+        operationId: 'operation-1',
+        sessionId: 'session-1',
+        topicId: 'topic-1',
+        threadId: 'thread-1',
+        messageId: 'assistant-1',
+        delta: 'hello'
+      }
+    })
+
+    expect(state.messagesMap['assistant-1']?.content).toBe('hello')
+    expect(state.messagesMap['assistant-1']?.metadata).toBeUndefined()
+  })
+
+  it('keeps tool invocation turn state through tool operation events', () => {
+    const startedToolInvocation: ToolInvocationRecord = {
+      id: 'tool-1',
+      operationId: 'operation-1',
+      messageId: 'assistant-1',
+      name: 'Bash',
+      arguments: { command: 'pwd' },
+      state: { agentTurnId: 'operation-1' },
+      status: 'running',
+      createdAt: '2026-05-09T00:00:03.000Z',
+      updatedAt: '2026-05-09T00:00:03.000Z'
+    }
+    const waitingToolInvocation: ToolInvocationRecord = {
+      ...startedToolInvocation,
+      status: 'waiting_for_human',
+      updatedAt: '2026-05-09T00:00:04.000Z'
+    }
+    const finishedToolInvocation: ToolInvocationRecord = {
+      ...startedToolInvocation,
+      result: { stdout: '/workspace' },
+      status: 'success',
+      updatedAt: '2026-05-09T00:00:05.000Z'
+    }
+
+    let state = chatReducer(createStreamingChatState(), {
+      type: 'applyChatOperationEvent',
+      event: {
+        type: 'tool-start',
+        operationId: 'operation-1',
+        sessionId: 'session-1',
+        topicId: 'topic-1',
+        threadId: 'thread-1',
+        messageId: 'assistant-1',
+        toolInvocation: startedToolInvocation,
+        turnId: 'operation-1'
+      }
+    })
+
+    expect(state.messagesMap['assistant-1']?.toolInvocations?.[0]?.state).toEqual({
+      agentTurnId: 'operation-1'
+    })
+
+    state = chatReducer(state, {
+      type: 'applyChatOperationEvent',
+      event: {
+        type: 'tool-waiting-approval',
+        operationId: 'operation-1',
+        sessionId: 'session-1',
+        topicId: 'topic-1',
+        threadId: 'thread-1',
+        messageId: 'assistant-1',
+        toolInvocation: waitingToolInvocation,
+        turnId: 'operation-1'
+      }
+    })
+
+    expect(state.messagesMap['assistant-1']?.toolInvocations?.[0]?.state).toEqual({
+      agentTurnId: 'operation-1'
+    })
+    expect(state.pendingToolInvocations[0]?.state).toEqual({ agentTurnId: 'operation-1' })
+
+    state = chatReducer(state, {
+      type: 'applyChatOperationEvent',
+      event: {
+        type: 'tool-finish',
+        operationId: 'operation-1',
+        sessionId: 'session-1',
+        topicId: 'topic-1',
+        threadId: 'thread-1',
+        messageId: 'assistant-1',
+        toolInvocation: finishedToolInvocation,
+        turnId: 'operation-1'
+      }
+    })
+
+    expect(state.messagesMap['assistant-1']?.toolInvocations?.[0]?.state).toEqual({
+      agentTurnId: 'operation-1'
+    })
+    expect(state.pendingToolInvocations).toEqual([])
   })
 })

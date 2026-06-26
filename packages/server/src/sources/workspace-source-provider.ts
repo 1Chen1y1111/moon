@@ -7,7 +7,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import type {
-  SessionSourceProviderPort,
+  SessionSourceProvider,
   SessionSourceProviderScope
 } from '@moon/server-core/sessions'
 import type { AgentSourceRecord } from '@moon/shared/agent'
@@ -52,9 +52,9 @@ function createReadErrorMessage(guidePath: string, error: unknown): string {
 }
 
 /**
- * 基于项目元数据提供当前 workspace source，作为 SourceProvider port 的本地默认实现。
+ * 基于项目元数据提供当前 workspace source，作为 SessionSourceProvider 的本地默认实现。
  */
-export class WorkspaceSourceProvider implements SessionSourceProviderPort {
+export class WorkspaceSourceProvider implements SessionSourceProvider {
   /**
    * 根据会话作用域派生 sources；未绑定项目的会话不注入 source context。
    */

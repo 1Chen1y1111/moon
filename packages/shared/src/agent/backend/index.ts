@@ -4,4 +4,6 @@
  */
 
 export * from './factory'
+export * from './base-event-adapter'
+export * from './event-queue'
 export * from './types'

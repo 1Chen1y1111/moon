@@ -6,7 +6,7 @@
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { describe, expect, it } from 'vitest'
 
-import { adaptClaudeSdkMessage } from '../../../../src/agent/backend/claude/event-adapter'
+import { ClaudeEventAdapter } from '../../../../src/agent/backend/claude/event-adapter'
 
 /**
  * 把局部 fixture 转成 SDKMessage，避免测试依赖 SDK 私有字段全集。
@@ -15,10 +15,73 @@ function sdkMessage(input: unknown): SDKMessage {
   return input as SDKMessage
 }
 
-describe('adaptClaudeSdkMessage', () => {
+/**
+ * 用对象式 ClaudeEventAdapter 适配单条 SDK 消息，贴齐生产链路入口。
+ */
+function adaptWithAdapter(message: SDKMessage, turnId?: string) {
+  const adapter = new ClaudeEventAdapter()
+
+  adapter.startTurn(turnId)
+  return adapter.adapt(message)
+}
+
+describe('ClaudeEventAdapter', () => {
+  it('adds current turn id to turn-scoped text, tool, and error events', () => {
+    expect(
+      adaptWithAdapter(
+        sdkMessage({
+          type: 'stream_event',
+          event: {
+            type: 'content_block_delta',
+            delta: { type: 'text_delta', text: 'hello' }
+          }
+        }),
+        'turn-1'
+      )
+    ).toEqual([{ type: 'text_delta', text: 'hello', turnId: 'turn-1' }])
+
+    expect(
+      adaptWithAdapter(
+        sdkMessage({
+          type: 'assistant',
+          message: {
+            content: [
+              {
+                type: 'tool_use',
+                id: 'tool-1',
+                name: 'Read',
+                input: { file_path: 'README.md' }
+              }
+            ]
+          }
+        }),
+        'turn-1'
+      )
+    ).toEqual([
+      {
+        type: 'tool_start',
+        toolUseId: 'tool-1',
+        toolName: 'Read',
+        input: { file_path: 'README.md' },
+        turnId: 'turn-1'
+      }
+    ])
+
+    expect(
+      adaptWithAdapter(
+        sdkMessage({
+          type: 'assistant',
+          error: 'assistant failed',
+          message: { content: [] }
+        }),
+        'turn-1'
+      )
+    ).toEqual([{ type: 'error', message: 'assistant failed', turnId: 'turn-1' }])
+  })
+
   it('converts stream text deltas to text_delta events', () => {
     expect(
-      adaptClaudeSdkMessage(
+      adaptWithAdapter(
         sdkMessage({
           type: 'stream_event',
           event: {
@@ -32,7 +95,7 @@ describe('adaptClaudeSdkMessage', () => {
 
   it('converts assistant text blocks to text_complete events', () => {
     expect(
-      adaptClaudeSdkMessage(
+      adaptWithAdapter(
         sdkMessage({
           type: 'assistant',
           message: {
@@ -48,7 +111,7 @@ describe('adaptClaudeSdkMessage', () => {
 
   it('emits session id updates when SDK messages carry session ids', () => {
     expect(
-      adaptClaudeSdkMessage(
+      adaptWithAdapter(
         sdkMessage({
           type: 'stream_event',
           session_id: 'sdk-session-1',
@@ -60,7 +123,7 @@ describe('adaptClaudeSdkMessage', () => {
 
   it('converts assistant usage snapshots to usage_update events', () => {
     expect(
-      adaptClaudeSdkMessage(
+      adaptWithAdapter(
         sdkMessage({
           type: 'assistant',
           session_id: 'sdk-session-1',
@@ -93,7 +156,7 @@ describe('adaptClaudeSdkMessage', () => {
 
   it('converts assistant tool_use blocks to tool_start events', () => {
     expect(
-      adaptClaudeSdkMessage(
+      adaptWithAdapter(
         sdkMessage({
           type: 'assistant',
           session_id: 'sdk-session-1',
@@ -124,7 +187,7 @@ describe('adaptClaudeSdkMessage', () => {
 
   it('converts synthetic user tool_result blocks to tool_result events', () => {
     expect(
-      adaptClaudeSdkMessage(
+      adaptWithAdapter(
         sdkMessage({
           type: 'user',
           session_id: 'sdk-session-1',
@@ -153,9 +216,174 @@ describe('adaptClaudeSdkMessage', () => {
     ])
   })
 
+  it('fills tool_result metadata from the current turn tool index', () => {
+    const adapter = new ClaudeEventAdapter()
+
+    adapter.startTurn('turn-1')
+    adapter.adapt(
+      sdkMessage({
+        type: 'assistant',
+        parent_tool_use_id: 'parent-tool-1',
+        message: {
+          content: [
+            {
+              type: 'tool_use',
+              id: 'tool-1',
+              name: 'Edit',
+              input: { file_path: 'README.md', old_string: 'old', new_string: 'new' }
+            }
+          ]
+        }
+      })
+    )
+
+    expect(
+      adapter.adapt(
+        sdkMessage({
+          type: 'user',
+          isSynthetic: true,
+          message: {
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: 'tool-1',
+                content: 'updated',
+                is_error: false
+              }
+            ]
+          }
+        })
+      )
+    ).toEqual([
+      {
+        type: 'tool_result',
+        toolUseId: 'tool-1',
+        toolName: 'Edit',
+        input: { file_path: 'README.md', old_string: 'old', new_string: 'new' },
+        parentToolUseId: 'parent-tool-1',
+        isError: false,
+        result: 'updated',
+        turnId: 'turn-1'
+      }
+    ])
+  })
+
+  it('clears tool index and transient block/output state when starting a new turn', () => {
+    const adapter = new ClaudeEventAdapter()
+
+    adapter.startTurn('turn-1')
+    adapter.adapt(
+      sdkMessage({
+        type: 'assistant',
+        message: {
+          content: [
+            {
+              type: 'tool_use',
+              id: 'tool-1',
+              name: 'Write',
+              input: { file_path: 'README.md' }
+            }
+          ]
+        }
+      })
+    )
+    adapter.setBlockReason('tool-1', 'blocked in previous turn')
+    adapter.accumulateOutput('tool-1', 'previous output')
+
+    adapter.startTurn('turn-2')
+
+    expect(
+      adapter.adapt(
+        sdkMessage({
+          type: 'user',
+          isSynthetic: true,
+          message: {
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: 'tool-1',
+                content: 'fresh result',
+                is_error: false
+              }
+            ]
+          }
+        })
+      )
+    ).toEqual([
+      {
+        type: 'tool_result',
+        toolUseId: 'tool-1',
+        isError: false,
+        result: 'fresh result',
+        turnId: 'turn-2'
+      }
+    ])
+  })
+
+  it('uses and consumes block reasons for blocked tool results', () => {
+    const adapter = new ClaudeEventAdapter()
+
+    adapter.startTurn('turn-1')
+    adapter.setBlockReason('tool-1', 'User denied permission')
+
+    expect(
+      adapter.adapt(
+        sdkMessage({
+          type: 'user',
+          isSynthetic: true,
+          message: {
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: 'tool-1',
+                content: 'fallback text',
+                is_error: true
+              }
+            ]
+          }
+        })
+      )
+    ).toEqual([
+      {
+        type: 'tool_result',
+        toolUseId: 'tool-1',
+        isError: true,
+        result: 'User denied permission',
+        turnId: 'turn-1'
+      }
+    ])
+
+    expect(
+      adapter.adapt(
+        sdkMessage({
+          type: 'user',
+          isSynthetic: true,
+          message: {
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: 'tool-1',
+                content: 'fallback text',
+                is_error: true
+              }
+            ]
+          }
+        })
+      )
+    ).toEqual([
+      {
+        type: 'tool_result',
+        toolUseId: 'tool-1',
+        isError: true,
+        result: 'fallback text',
+        turnId: 'turn-1'
+      }
+    ])
+  })
+
   it('converts system status messages to status events', () => {
     expect(
-      adaptClaudeSdkMessage(
+      adaptWithAdapter(
         sdkMessage({
           type: 'system',
           subtype: 'status',
@@ -175,7 +403,7 @@ describe('adaptClaudeSdkMessage', () => {
 
   it('converts tool progress messages to info events', () => {
     expect(
-      adaptClaudeSdkMessage(
+      adaptWithAdapter(
         sdkMessage({
           type: 'tool_progress',
           session_id: 'sdk-session-1',
@@ -194,9 +422,46 @@ describe('adaptClaudeSdkMessage', () => {
     ])
   })
 
+  it('keeps global lifecycle events unscoped even when a turn id is active', () => {
+    expect(
+      adaptWithAdapter(
+        sdkMessage({
+          type: 'result',
+          subtype: 'success',
+          is_error: false,
+          usage: {
+            input_tokens: 10,
+            output_tokens: 5
+          },
+          total_cost_usd: 0.12
+        }),
+        'turn-1'
+      )
+    ).toEqual([
+      {
+        type: 'usage_update',
+        usage: {
+          costUsd: 0.12,
+          inputTokens: 10,
+          outputTokens: 5,
+          totalTokens: 15
+        }
+      },
+      {
+        type: 'complete',
+        usage: {
+          costUsd: 0.12,
+          inputTokens: 10,
+          outputTokens: 5,
+          totalTokens: 15
+        }
+      }
+    ])
+  })
+
   it('converts auth status errors to typed errors', () => {
     expect(
-      adaptClaudeSdkMessage(
+      adaptWithAdapter(
         sdkMessage({
           type: 'auth_status',
           session_id: 'sdk-session-1',
@@ -221,7 +486,7 @@ describe('adaptClaudeSdkMessage', () => {
 
   it('converts successful result messages to usage_update and complete events', () => {
     expect(
-      adaptClaudeSdkMessage(
+      adaptWithAdapter(
         sdkMessage({
           type: 'result',
           subtype: 'success',
@@ -259,7 +524,7 @@ describe('adaptClaudeSdkMessage', () => {
 
   it('converts assistant and result errors to error events', () => {
     expect(
-      adaptClaudeSdkMessage(
+      adaptWithAdapter(
         sdkMessage({
           type: 'assistant',
           error: 'assistant failed',
@@ -269,7 +534,7 @@ describe('adaptClaudeSdkMessage', () => {
     ).toEqual([{ type: 'error', message: 'assistant failed' }])
 
     expect(
-      adaptClaudeSdkMessage(
+      adaptWithAdapter(
         sdkMessage({
           type: 'result',
           is_error: true,
@@ -281,7 +546,7 @@ describe('adaptClaudeSdkMessage', () => {
 
   it('ignores SDK messages that do not carry user-visible events', () => {
     expect(
-      adaptClaudeSdkMessage(
+      adaptWithAdapter(
         sdkMessage({
           type: 'stream_event',
           event: { type: 'content_block_stop' }

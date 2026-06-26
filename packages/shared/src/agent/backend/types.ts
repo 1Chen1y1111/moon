@@ -8,8 +8,8 @@ import type {
   MessageAttachment as CoreMessageAttachment
 } from '@moon/core/types'
 import type { AgentBackendProvider, CustomEndpointApi, ThinkingLevel } from '../../config'
-import type { AgentSourceRecord } from '../runtime/source-manager'
-import type { AgentPermissionMode } from '../runtime/types'
+import type { AgentSourceRecord } from '../core/source-manager'
+import type { AgentPermissionMode } from '../core/types'
 
 export type { AgentEvent, AgentPermissionDecision, MessageAttachment } from '@moon/core/types'
 
@@ -17,6 +17,7 @@ export type AgentChatOptions = {
   isRetry?: boolean
   thinkingOverride?: ThinkingLevel
   abortSignal?: AbortSignal
+  turnId?: string
 }
 
 export type AgentBackendMessage = {

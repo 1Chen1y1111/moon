@@ -8,8 +8,9 @@ import { describe, expect, it, vi } from 'vitest'
 
 import {
   createClaudePreToolUseHooks,
-  runClaudePreToolUseChecks
+  type ClaudeToolUseChecker
 } from '../../../../src/agent/backend/internal/tool-permission-hooks'
+import { PermissionManager } from '../../../../src/agent'
 
 const workspace = { path: '/workspace/moon' }
 type ClaudePreToolUseHook = NonNullable<
@@ -38,9 +39,9 @@ function createPreToolUseInput(
  * 读取 createClaudePreToolUseHooks 创建的单个 hook callback。
  */
 function resolvePreToolUseHook(
-  options: Parameters<typeof createClaudePreToolUseHooks>
+  options: Parameters<typeof createClaudePreToolUseHooks>[0]
 ): ClaudePreToolUseHook {
-  const hooks = createClaudePreToolUseHooks(...options)
+  const hooks = createClaudePreToolUseHooks(options)
   const hook = hooks?.PreToolUse?.[0]?.hooks[0]
 
   if (hook === undefined) {
@@ -59,18 +60,25 @@ function runPreToolUseHook(hook: ClaudePreToolUseHook, input: HookInput): Promis
   return hook(...args)
 }
 
-describe('runClaudePreToolUseChecks', () => {
+/**
+ * 创建由 core PermissionManager 提供的工具权限 checker，模拟 BaseAgent 注入到 hook 的能力。
+ */
+function createPermissionChecker(
+  permissionMode: 'ask' | 'safe' | 'allow-all' = 'ask'
+): ClaudeToolUseChecker {
+  const permissionManager = new PermissionManager({ workspace, permissionMode })
+
+  return (input) => permissionManager.checkClaudeToolUse(input)
+}
+
+describe('ClaudeToolUseChecker with PermissionManager', () => {
   it('prompts for file writes in ask mode with path and risk metadata', () => {
     expect(
-      runClaudePreToolUseChecks(
-        workspace,
-        createPreToolUseInput({
-          tool_name: 'Edit',
-          tool_input: { file_path: 'README.md', old_string: 'old', new_string: 'new' },
-          tool_use_id: 'edit-tool-1'
-        }),
-        'ask'
-      )
+      createPermissionChecker('ask')({
+        toolName: 'Edit',
+        toolInput: { file_path: 'README.md', old_string: 'old', new_string: 'new' },
+        toolUseId: 'edit-tool-1'
+      })
     ).toEqual({
       type: 'prompt',
       request: {
@@ -86,15 +94,11 @@ describe('runClaudePreToolUseChecks', () => {
 
   it('blocks file writes in safe mode', () => {
     expect(
-      runClaudePreToolUseChecks(
-        workspace,
-        createPreToolUseInput({
-          tool_name: 'Write',
-          tool_input: { file_path: 'generated.txt', content: 'hello' },
-          tool_use_id: 'write-tool-1'
-        }),
-        'safe'
-      )
+      createPermissionChecker('safe')({
+        toolName: 'Write',
+        toolInput: { file_path: 'generated.txt', content: 'hello' },
+        toolUseId: 'write-tool-1'
+      })
     ).toMatchObject({
       type: 'block',
       reason: '安全模式禁止 Claude Code SDK 修改项目文件。'
@@ -103,29 +107,21 @@ describe('runClaudePreToolUseChecks', () => {
 
   it('allows file writes in allow-all mode when the target stays inside workspace', () => {
     expect(
-      runClaudePreToolUseChecks(
-        workspace,
-        createPreToolUseInput({
-          tool_name: 'MultiEdit',
-          tool_input: { file_path: 'README.md', edits: [] },
-          tool_use_id: 'multi-edit-tool-1'
-        }),
-        'allow-all'
-      )
+      createPermissionChecker('allow-all')({
+        toolName: 'MultiEdit',
+        toolInput: { file_path: 'README.md', edits: [] },
+        toolUseId: 'multi-edit-tool-1'
+      })
     ).toEqual({ type: 'allow' })
   })
 
   it('blocks file writes outside the workspace before permission mode is applied', () => {
     expect(
-      runClaudePreToolUseChecks(
-        workspace,
-        createPreToolUseInput({
-          tool_name: 'Edit',
-          tool_input: { file_path: '../README.md', old_string: 'old', new_string: 'new' },
-          tool_use_id: 'edit-tool-2'
-        }),
-        'allow-all'
-      )
+      createPermissionChecker('allow-all')({
+        toolName: 'Edit',
+        toolInput: { file_path: '../README.md', old_string: 'old', new_string: 'new' },
+        toolUseId: 'edit-tool-2'
+      })
     ).toMatchObject({
       type: 'block',
       reason: '工具路径超出当前项目 workspace，已被 Moon 阻止。'
@@ -136,7 +132,10 @@ describe('runClaudePreToolUseChecks', () => {
 describe('createClaudePreToolUseHooks', () => {
   it('continues allowed tool calls without asking for UI permission', async () => {
     const requestPermission = vi.fn()
-    const hook = resolvePreToolUseHook([workspace, requestPermission, 'allow-all'])
+    const hook = resolvePreToolUseHook({
+      checkToolUse: createPermissionChecker('allow-all'),
+      requestPermission
+    })
 
     await expect(
       runPreToolUseHook(
@@ -152,7 +151,11 @@ describe('createClaudePreToolUseHooks', () => {
   })
 
   it('translates blocked permission checks into Claude SDK block output', async () => {
-    const hook = resolvePreToolUseHook([workspace, undefined, 'safe'])
+    const onToolUseBlocked = vi.fn()
+    const hook = resolvePreToolUseHook({
+      checkToolUse: createPermissionChecker('safe'),
+      onToolUseBlocked
+    })
 
     await expect(
       runPreToolUseHook(
@@ -168,6 +171,14 @@ describe('createClaudePreToolUseHooks', () => {
       decision: 'block',
       reason: '安全模式禁止 Claude Code SDK 修改项目文件。'
     })
+    expect(onToolUseBlocked).toHaveBeenCalledWith(
+      {
+        toolName: 'Write',
+        toolInput: { file_path: 'README.md', content: 'hello' },
+        toolUseId: 'write-tool-1'
+      },
+      '安全模式禁止 Claude Code SDK 修改项目文件。'
+    )
   })
 
   it('uses the UI permission requester for prompt decisions', async () => {
@@ -175,7 +186,10 @@ describe('createClaudePreToolUseHooks', () => {
       requestId: 'perm-edit-tool-1',
       approved: true
     }))
-    const hook = resolvePreToolUseHook([workspace, requestPermission, 'ask'])
+    const hook = resolvePreToolUseHook({
+      checkToolUse: createPermissionChecker('ask'),
+      requestPermission
+    })
 
     await expect(
       runPreToolUseHook(
@@ -197,12 +211,17 @@ describe('createClaudePreToolUseHooks', () => {
   })
 
   it('blocks prompt decisions when the UI requester denies permission', async () => {
+    const onToolUseBlocked = vi.fn()
     const requestPermission = vi.fn(async () => ({
       requestId: 'perm-edit-tool-1',
       approved: false,
       reason: 'No'
     }))
-    const hook = resolvePreToolUseHook([workspace, requestPermission, 'ask'])
+    const hook = resolvePreToolUseHook({
+      checkToolUse: createPermissionChecker('ask'),
+      onToolUseBlocked,
+      requestPermission
+    })
 
     await expect(
       runPreToolUseHook(
@@ -218,5 +237,13 @@ describe('createClaudePreToolUseHooks', () => {
       decision: 'block',
       reason: 'No'
     })
+    expect(onToolUseBlocked).toHaveBeenCalledWith(
+      {
+        toolName: 'Edit',
+        toolInput: { file_path: 'README.md', old_string: 'old', new_string: 'new' },
+        toolUseId: 'edit-tool-1'
+      },
+      'No'
+    )
   })
 })

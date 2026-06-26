@@ -6,11 +6,11 @@
 import type { AgentBackendProvider } from '../../../config'
 import type { AgentBackend, AgentBackendConfig } from '../types'
 
-export type AgentBackendDriver = {
+export type ProviderDriver = {
   provider: AgentBackendProvider
 
   /**
    * 根据统一 backend config 创建 provider 专属 agent 实例。
    */
-  createAgent(config: AgentBackendConfig): AgentBackend
+  createBackend(config: AgentBackendConfig): AgentBackend
 }

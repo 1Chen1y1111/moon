@@ -8,14 +8,22 @@ import type { AgentPermissionRequest } from '@moon/core/types'
 import type {
   AgentBackend,
   AgentBackendWorkspace,
+  AgentBackendMessage,
   AgentChatOptions,
   AgentEvent,
   AgentPermissionDecision,
   MessageAttachment
 } from './backend/types'
-import { SourceManager, type AgentSourceRecord } from './runtime/source-manager'
+import { EventQueue } from './backend/event-queue'
+import {
+  PermissionManager,
+  type AgentToolPermissionCheckResult,
+  type ClaudeToolUsePermissionInput
+} from './core/permission-manager'
+import { PromptBuilder } from './core/prompt-builder'
+import { SourceManager, type AgentSourceRecord } from './core/source-manager'
 import type { ThinkingLevel } from '../config'
-import type { AgentPermissionMode } from './runtime/types'
+import type { AgentPermissionMode } from './core/types'
 
 export type BaseAgentInput = {
   model: string
@@ -25,15 +33,11 @@ export type BaseAgentInput = {
   workspace?: AgentBackendWorkspace
 }
 
-export type AgentEventQueuePort = {
-  push: (event: AgentEvent) => void
-  next: () => Promise<AgentEvent>
-}
-
-export type BaseAgentTurnContext = {
+type AgentTurnState = {
   abortController: AbortController
-  eventQueue: AgentEventQueuePort
+  eventQueue: EventQueue
   cleanupExternalAbort: () => void
+  turnId: string | null
 }
 
 type PendingAgentPermission = {
@@ -41,53 +45,19 @@ type PendingAgentPermission = {
 }
 
 /**
- * 在 SDK hook 或子运行时事件需要插队时，提供一个轻量事件队列。
- */
-class AgentEventQueue implements AgentEventQueuePort {
-  private readonly events: AgentEvent[] = []
-  private readonly waiters: Array<(event: AgentEvent) => void> = []
-
-  /**
-   * 推入一个需要优先交给会话编排层处理的 agent 事件。
-   */
-  push(event: AgentEvent): void {
-    const waiter = this.waiters.shift()
-
-    if (waiter !== undefined) {
-      waiter(event)
-      return
-    }
-
-    this.events.push(event)
-  }
-
-  /**
-   * 读取下一条已排队事件；没有事件时等待后续事件推入。
-   */
-  next(): Promise<AgentEvent> {
-    const event = this.events.shift()
-
-    if (event !== undefined) {
-      return Promise.resolve(event)
-    }
-
-    return new Promise((resolve) => {
-      this.waiters.push(resolve)
-    })
-  }
-}
-
-/**
- * 提供所有 backend 都需要的模型状态、运行中标记、取消和权限决策桥接。
+ * 提供所有 backend 都需要的模型状态、core modules、运行中标记、取消和权限决策桥接。
  */
 export abstract class BaseAgent implements AgentBackend {
+  protected readonly permissionManager?: PermissionManager
   protected readonly permissionMode?: AgentPermissionMode
+  protected readonly promptBuilder: PromptBuilder
   protected readonly sourceManager: SourceManager
   protected readonly thinkingLevel?: ThinkingLevel
   protected readonly workspace?: AgentBackendWorkspace
   private readonly pendingPermissions = new Map<string, PendingAgentPermission>()
   private abortController: AbortController | null = null
-  private eventQueue: AgentEventQueuePort | null = null
+  private currentTurnId: string | null = null
+  private eventQueue: EventQueue | null = null
   private model: string
   private processing = false
 
@@ -97,6 +67,9 @@ export abstract class BaseAgent implements AgentBackend {
   constructor({ model, permissionMode, sources, thinkingLevel, workspace }: BaseAgentInput) {
     this.model = model
     this.permissionMode = permissionMode
+    this.permissionManager =
+      workspace === undefined ? undefined : new PermissionManager({ permissionMode, workspace })
+    this.promptBuilder = new PromptBuilder()
     this.sourceManager = new SourceManager({ sources })
     this.thinkingLevel = thinkingLevel
     this.workspace = workspace
@@ -168,12 +141,14 @@ export abstract class BaseAgent implements AgentBackend {
   /**
    * 启动一次 agent turn，并把外部 abort signal 桥接到本轮内部 AbortController。
    */
-  protected beginTurn(options: AgentChatOptions = {}): BaseAgentTurnContext {
+  protected startTurn(options: AgentChatOptions = {}): AgentTurnState {
     const abortController = new AbortController()
-    const eventQueue = new AgentEventQueue()
+    const eventQueue = new EventQueue()
+    const turnId = options.turnId ?? null
     const relayAbort = (): void => abortController.abort(options.abortSignal?.reason)
 
     this.abortController = abortController
+    this.currentTurnId = turnId
     this.eventQueue = eventQueue
     this.processing = true
 
@@ -185,6 +160,7 @@ export abstract class BaseAgent implements AgentBackend {
 
     return {
       abortController,
+      turnId,
       eventQueue,
       cleanupExternalAbort: () => options.abortSignal?.removeEventListener('abort', relayAbort)
     }
@@ -193,7 +169,7 @@ export abstract class BaseAgent implements AgentBackend {
   /**
    * 结束一次 agent turn，清理 abort、事件队列和未决权限请求。
    */
-  protected endTurn(turn: BaseAgentTurnContext): void {
+  protected endTurn(turn: AgentTurnState): void {
     turn.cleanupExternalAbort()
 
     if (this.abortController === turn.abortController) {
@@ -202,6 +178,10 @@ export abstract class BaseAgent implements AgentBackend {
 
     if (this.eventQueue === turn.eventQueue) {
       this.eventQueue = null
+    }
+
+    if (this.currentTurnId === turn.turnId) {
+      this.currentTurnId = null
     }
 
     this.rejectPendingPermissions('Agent turn ended.')
@@ -228,9 +208,41 @@ export abstract class BaseAgent implements AgentBackend {
       this.pendingPermissions.set(request.requestId, { resolve })
     })
 
-    eventQueue.push({ type: 'permission_request', request })
+    eventQueue.push({
+      type: 'permission_request',
+      request,
+      ...(this.currentTurnId === null ? {} : { turnId: this.currentTurnId })
+    })
 
     return decisionPromise
+  }
+
+  /**
+   * 构造本轮 provider prompt，并统一注入 SourceManager 管理的 source context。
+   */
+  protected buildPrompt(fallbackMessage: string, messages: AgentBackendMessage[]): string {
+    return this.promptBuilder.build({
+      fallbackMessage,
+      messages,
+      sourceContextBlock: this.sourceManager.buildContextBlock(),
+      workspace: this.workspace
+    })
+  }
+
+  /**
+   * 使用 BaseAgent 持有的 PermissionManager 检查 Claude SDK 工具调用。
+   */
+  protected checkClaudeToolUse(
+    input: ClaudeToolUsePermissionInput
+  ): AgentToolPermissionCheckResult {
+    if (this.permissionManager === undefined) {
+      return {
+        type: 'block',
+        reason: 'No active workspace is available for Claude Code tool permissions.'
+      }
+    }
+
+    return this.permissionManager.checkClaudeToolUse(input)
   }
 
   /**
@@ -249,6 +261,7 @@ export abstract class BaseAgent implements AgentBackend {
    */
   private clearTurnState(): void {
     this.abortController = null
+    this.currentTurnId = null
     this.eventQueue = null
     this.processing = false
   }

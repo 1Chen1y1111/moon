@@ -9,8 +9,8 @@ import type {
   AgentBackendMessage,
   AgentBackendWorkspace
 } from './backend/types'
-import type { AgentSourceRecord } from './runtime/source-manager'
-import type { AgentPermissionMode } from './runtime/types'
+import type { AgentSourceRecord } from './core/source-manager'
+import type { AgentPermissionMode } from './core/types'
 
 export const piBackendNotWiredMessage =
   'Pi backend is not wired yet. Configure an Anthropic-compatible connection for now.'

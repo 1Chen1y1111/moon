@@ -38,6 +38,24 @@ class TestAgent extends BaseAgent {
   }
 
   /**
+   * 通过 BaseAgent 持有的 PromptBuilder 构造 provider prompt。
+   */
+  buildProviderPrompt(message = 'inspect repo'): string {
+    return this.buildPrompt(message, [{ role: 'user', content: 'previous question' }])
+  }
+
+  /**
+   * 通过 BaseAgent 持有的 PermissionManager 检查 Claude 工具权限。
+   */
+  checkEditPermission() {
+    return this.checkClaudeToolUse({
+      toolName: 'Edit',
+      toolInput: { file_path: 'README.md', old_string: 'old', new_string: 'new' },
+      toolUseId: 'edit-tool-1'
+    })
+  }
+
+  /**
    * 用不同 message 触发测试所需的最小行为。
    */
   async *chat(
@@ -45,7 +63,7 @@ class TestAgent extends BaseAgent {
     _attachments?: MessageAttachment[],
     options: AgentChatOptions = {}
   ): AsyncGenerator<AgentEvent, void, void> {
-    const turn = this.beginTurn(options)
+    const turn = this.startTurn(options)
 
     this.lastAbortSignal = turn.abortController.signal
 
@@ -99,10 +117,40 @@ Active:
   it('owns shared source manager state for concrete backends', () => {
     const agent = new TestAgent({ model: 'claude-sonnet' })
 
-    expect(agent.buildSourceContextBlock()).toBe(`<sources>
+expect(agent.buildSourceContextBlock()).toBe(`<sources>
 Active:
 - github (GitHub): GitHub repository context
 </sources>`)
+  })
+
+  it('owns prompt building through shared core modules', () => {
+    const agent = new TestAgent({ model: 'claude-sonnet', sources })
+
+    expect(agent.buildProviderPrompt()).toBe(`<sources>
+Active:
+- github (GitHub): GitHub repository context
+</sources>
+
+USER:
+previous question`)
+  })
+
+  it('owns permission checks through shared core modules', () => {
+    const agent = new TestAgent({
+      model: 'claude-sonnet',
+      permissionMode: 'ask',
+      workspace: { path: '/workspace/moon' }
+    })
+
+    expect(agent.checkEditPermission()).toMatchObject({
+      type: 'prompt',
+      request: {
+        requestId: 'perm-edit-tool-1',
+        toolName: 'Edit',
+        path: 'README.md',
+        type: 'file_write'
+      }
+    })
   })
 
   it('owns common model state', () => {
@@ -146,11 +194,12 @@ Active:
 
   it('resolves permission requests through respondToPermission', async () => {
     const agent = new TestAgent({ model: 'claude-sonnet' })
-    const events = agent.chat('permission')
+    const events = agent.chat('permission', undefined, { turnId: 'operation-1' })
 
     await expect(events.next()).resolves.toMatchObject({
       value: {
         type: 'permission_request',
+        turnId: 'operation-1',
         request: {
           requestId: 'permission-1',
           toolName: 'Bash',

@@ -12,7 +12,7 @@ describe('piDriver', () => {
   it('rejects backend creation while Pi is not wired', () => {
     expect(piDriver.provider).toBe('pi')
     expect(() =>
-      piDriver.createAgent({
+      piDriver.createBackend({
         provider: 'pi',
         model: 'gpt-5',
         messages: []

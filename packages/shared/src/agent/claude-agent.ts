@@ -6,10 +6,10 @@
 import { query } from '@anthropic-ai/claude-agent-sdk'
 
 import { BaseAgent } from './base-agent'
-import { adaptClaudeSdkMessage } from './backend/claude/event-adapter'
+import { ClaudeEventAdapter } from './backend/claude/event-adapter'
 import { createClaudeQueryOptions } from './backend/internal/runtime-resolver'
-import { AgentPromptBuilder } from './runtime/prompt-builder'
-import type { AgentSourceRecord } from './runtime/source-manager'
+import { createClaudePreToolUseHooks } from './backend/internal/tool-permission-hooks'
+import type { AgentSourceRecord } from './core/source-manager'
 import type { ThinkingLevel } from '../config'
 import type {
   AgentBackendMessage,
@@ -18,7 +18,7 @@ import type {
   AgentEvent,
   MessageAttachment
 } from './backend/types'
-import type { AgentPermissionMode } from './runtime/types'
+import type { AgentPermissionMode } from './core/types'
 
 export type ClaudeAgentInput = {
   apiKey?: string
@@ -145,8 +145,8 @@ class ClaudeStderrBuffer {
 export class ClaudeAgent extends BaseAgent {
   private readonly apiKey?: string
   private readonly baseUrl?: string
+  private readonly eventAdapter = new ClaudeEventAdapter()
   private readonly messages: AgentBackendMessage[]
-  private readonly promptBuilder = new AgentPromptBuilder()
   private readonly queryClaude: typeof query
 
   /**
@@ -181,25 +181,29 @@ export class ClaudeAgent extends BaseAgent {
   ): AsyncGenerator<AgentEvent, void, void> {
     void attachments
 
-    const turn = this.beginTurn(options)
+    const turn = this.startTurn(options)
     const { abortController, eventQueue } = turn
     const stderrBuffer = new ClaudeStderrBuffer()
     let runtimeSummary: string | undefined
 
     try {
-      const prompt = this.promptBuilder.build({
-        fallbackMessage: message,
-        messages: this.messages,
-        sourceContextBlock: this.sourceManager.buildContextBlock(),
-        workspace: this.workspace
-      })
+      this.eventAdapter.startTurn(options.turnId)
+
+      const prompt = this.buildPrompt(message, this.messages)
       const queryOptions = createClaudeQueryOptions({
         abortController,
         apiKey: this.apiKey,
         baseUrl: this.baseUrl,
+        hooks:
+          this.workspace === undefined
+            ? undefined
+            : createClaudePreToolUseHooks({
+                checkToolUse: (input) => this.checkClaudeToolUse(input),
+                onToolUseBlocked: (input, reason) =>
+                  this.eventAdapter.setBlockReason(input.toolUseId, reason),
+                requestPermission: (request) => this.requestPermission(request)
+              }),
         model: this.getModel(),
-        permissionMode: this.permissionMode,
-        requestPermission: (request) => this.requestPermission(request),
         stderr: (data) => stderrBuffer.append(data),
         thinkingLevel: options.thinkingOverride ?? this.thinkingLevel,
         workspace: this.workspace
@@ -228,7 +232,7 @@ export class ClaudeAgent extends BaseAgent {
 
         sdkEventResultPromise = sdkEvents.next()
 
-        for (const agentEvent of adaptClaudeSdkMessage(result.result.value)) {
+        for (const agentEvent of this.eventAdapter.adapt(result.result.value)) {
           if (agentEvent.type === 'complete') {
             hasCompleteEvent = true
           }

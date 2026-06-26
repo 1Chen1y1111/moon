@@ -7,10 +7,10 @@ import { agentBackendProviders } from '../../config'
 import { anthropicDriver } from './internal/drivers/anthropic'
 import { piCompatDriver } from './internal/drivers/pi-compat'
 import { piDriver } from './internal/drivers/pi'
-import type { AgentBackendDriver } from './internal/driver-types'
+import type { ProviderDriver } from './internal/driver-types'
 import type { AgentBackend, AgentBackendConfig } from './types'
 
-const driverRegistry: Record<AgentBackendConfig['provider'], AgentBackendDriver> = {
+const DRIVER_REGISTRY: Record<AgentBackendConfig['provider'], ProviderDriver> = {
   anthropic: anthropicDriver,
   pi: piDriver,
   pi_compat: piCompatDriver
@@ -19,8 +19,8 @@ const driverRegistry: Record<AgentBackendConfig['provider'], AgentBackendDriver>
 /**
  * 返回指定 provider 的 backend driver，缺失时抛出配置错误。
  */
-function getProviderDriver(provider: AgentBackendConfig['provider']): AgentBackendDriver {
-  const driver = driverRegistry[provider]
+function getProviderDriver(provider: AgentBackendConfig['provider']): ProviderDriver {
+  const driver = DRIVER_REGISTRY[provider]
 
   if (driver === undefined) {
     throw new Error(`No agent backend driver registered for provider: ${String(provider)}`)
@@ -39,11 +39,11 @@ export function getAvailableAgentProviders(): AgentBackendConfig['provider'][] {
 /**
  * 根据 provider 创建具体 backend，调用方负责提前完成配置校验和密钥解析。
  */
-export function createAgent(config: AgentBackendConfig): AgentBackend {
-  return getProviderDriver(config.provider).createAgent(config)
+export function createBackend(config: AgentBackendConfig): AgentBackend {
+  return getProviderDriver(config.provider).createBackend(config)
 }
 
 /**
- * 保留 backend 创建别名，方便后续在 createBackend 与 createAgent 调用语义之间兼容。
+ * 保留 agent 创建别名，旧调用方可以继续使用；新代码优先使用 createBackend。
  */
-export const createBackend = createAgent
+export const createAgent = createBackend

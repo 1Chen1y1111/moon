@@ -20,7 +20,7 @@ describe('anthropicDriver', () => {
   ]
 
   it('creates a ClaudeAgent with the configured model', () => {
-    const agent = anthropicDriver.createAgent({
+    const agent = anthropicDriver.createBackend({
       provider: 'anthropic',
       model: 'claude-sonnet-4-5',
       apiKey: 'test-key',
@@ -33,7 +33,7 @@ describe('anthropicDriver', () => {
   })
 
   it('passes configured sources into the ClaudeAgent runtime', () => {
-    const agent = anthropicDriver.createAgent({
+    const agent = anthropicDriver.createBackend({
       provider: 'anthropic',
       model: 'claude-sonnet-4-5',
       apiKey: 'test-key',

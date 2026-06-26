@@ -11,7 +11,7 @@ import { join } from 'node:path'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { SessionManager, type SessionSourceProviderPort } from '@moon/server-core/sessions'
+import { SessionManager, type SessionSourceProvider } from '@moon/server-core/sessions'
 import type {
   AgentOperationRecord,
   MessageRecord,
@@ -439,7 +439,8 @@ function createPermissionAgentBackend(
           command: 'pnpm test',
           type: 'bash',
           reason: '验证权限闭环'
-        }
+        },
+        ...(chatOptions?.turnId === undefined ? {} : { turnId: chatOptions.turnId })
       }
       const decision = await permissionDecisionPromise
 
@@ -467,7 +468,7 @@ function createService(input: {
   messages?: MessageRecord[]
   projects?: ProjectRecord[]
   sessions?: SessionRecord[]
-  sourceProvider?: SessionSourceProviderPort
+  sourceProvider?: SessionSourceProvider
   settings: AppSettings
 }): CreateServiceResult {
   const sessionsRepository = new SessionsRepositoryMock(input.sessions)
@@ -723,7 +724,7 @@ describe('SessionManager.sendMessage', () => {
         status: 'active'
       }
     ]
-    const sourceProvider: SessionSourceProviderPort = {
+    const sourceProvider: SessionSourceProvider = {
       resolveSources: vi.fn(async (scope) => {
         expect(scope.project).toMatchObject({ id: project.id, path: project.path })
         expect(scope.session.projectId).toBe(project.id)
@@ -751,6 +752,213 @@ describe('SessionManager.sendMessage', () => {
         sources
       })
     )
+  })
+
+  it('passes operation id as agent turn id when running a backend', async () => {
+    const chatOptions: AgentChatOptions[] = []
+    const createAgentBackend = vi.fn(
+      (): AgentBackend => ({
+        async *chat(
+          _message: string,
+          _attachments?: MessageAttachment[],
+          options?: AgentChatOptions
+        ): AsyncGenerator<AgentEvent, void, void> {
+          void _message
+          void _attachments
+          chatOptions.push(options ?? {})
+          yield { type: 'text_delta', text: 'ok' }
+        },
+        abort: vi.fn(async () => {}),
+        destroy: vi.fn(),
+        getModel: vi.fn(() => 'test-model'),
+        isProcessing: vi.fn(() => false),
+        respondToPermission: vi.fn(),
+        setModel: vi.fn()
+      })
+    )
+    const { service } = createService({
+      createAgentBackend,
+      settings: createClaudeSettings()
+    })
+
+    const result = await service.sendMessage({ content: 'hello' })
+
+    expect(chatOptions[0]).toMatchObject({ turnId: result.operation.id })
+  })
+
+  it('preserves turn id on message deltas and assistant message metadata', async () => {
+    const events: unknown[] = []
+    const createAgentBackend = vi.fn(
+      (): AgentBackend => ({
+        async *chat(
+          _message: string,
+          _attachments?: MessageAttachment[],
+          options?: AgentChatOptions
+        ): AsyncGenerator<AgentEvent, void, void> {
+          void _message
+          void _attachments
+          yield {
+            type: 'text_delta',
+            text: 'ok',
+            ...(options?.turnId === undefined ? {} : { turnId: options.turnId })
+          }
+        },
+        abort: vi.fn(async () => {}),
+        destroy: vi.fn(),
+        getModel: vi.fn(() => 'test-model'),
+        isProcessing: vi.fn(() => false),
+        respondToPermission: vi.fn(),
+        setModel: vi.fn()
+      })
+    )
+    const { service } = createService({
+      createAgentBackend,
+      settings: createClaudeSettings()
+    })
+
+    const result = await service.sendMessage({ content: 'hello' }, (event) => events.push(event))
+    const assistantMessage = result.messages.find((message) => message.role === 'assistant')
+    const deltaEvent = events.find(
+      (event): event is { type: 'message-delta'; turnId?: string } =>
+        (event as { type?: string }).type === 'message-delta'
+    )
+
+    expect(assistantMessage?.metadata).toMatchObject({ agentTurnId: result.operation.id })
+    expect(deltaEvent).toMatchObject({ turnId: result.operation.id })
+  })
+
+  it('preserves turn id on permission requests and permission resolution events', async () => {
+    const settings = createClaudeSettings()
+    const decisions: AgentPermissionDecision[] = []
+    const events: unknown[] = []
+    const agentBackend = createPermissionAgentBackend(decisions)
+    const { service, toolInvocationsRepository } = createService({
+      createAgentBackend: vi.fn(() => agentBackend),
+      settings
+    })
+
+    const result = await service.sendMessage({ content: '需要工具权限' }, (event) => {
+      events.push(event)
+
+      if (event.type === 'tool-waiting-approval') {
+        void service.approveToolCall({ toolInvocationId: event.toolInvocation.id })
+      }
+    })
+    const waitingEvent = events.find(
+      (event): event is { type: 'tool-waiting-approval'; turnId?: string } =>
+        (event as { type?: string }).type === 'tool-waiting-approval'
+    )
+    const finishEvent = events.find(
+      (event): event is { type: 'tool-finish'; turnId?: string } =>
+        (event as { type?: string }).type === 'tool-finish'
+    )
+
+    expect(toolInvocationsRepository.invocations).toEqual([
+      expect.objectContaining({
+        id: 'permission-tool-1',
+        state: { agentTurnId: result.operation.id },
+        status: 'done'
+      })
+    ])
+    expect(waitingEvent).toMatchObject({ turnId: result.operation.id })
+    expect(finishEvent).toMatchObject({ turnId: result.operation.id })
+  })
+
+  it('preserves turn id on tool start and tool finish events', async () => {
+    const events: unknown[] = []
+    const createAgentBackend = vi.fn(
+      (): AgentBackend => ({
+        async *chat(
+          _message: string,
+          _attachments?: MessageAttachment[],
+          options?: AgentChatOptions
+        ): AsyncGenerator<AgentEvent, void, void> {
+          void _message
+          void _attachments
+          yield {
+            type: 'tool_start',
+            toolUseId: 'tool-1',
+            toolName: 'Read',
+            input: { file_path: 'README.md' },
+            ...(options?.turnId === undefined ? {} : { turnId: options.turnId })
+          }
+          yield {
+            type: 'tool_result',
+            toolUseId: 'tool-1',
+            result: { output: 'hello' },
+            isError: false,
+            ...(options?.turnId === undefined ? {} : { turnId: options.turnId })
+          }
+          yield {
+            type: 'text_delta',
+            text: 'done',
+            ...(options?.turnId === undefined ? {} : { turnId: options.turnId })
+          }
+        },
+        abort: vi.fn(async () => {}),
+        destroy: vi.fn(),
+        getModel: vi.fn(() => 'test-model'),
+        isProcessing: vi.fn(() => false),
+        respondToPermission: vi.fn(),
+        setModel: vi.fn()
+      })
+    )
+    const { service, toolInvocationsRepository } = createService({
+      createAgentBackend,
+      settings: createClaudeSettings()
+    })
+
+    const result = await service.sendMessage({ content: '跑工具' }, (event) => events.push(event))
+    const startEvent = events.find(
+      (event): event is { type: 'tool-start'; turnId?: string } =>
+        (event as { type?: string }).type === 'tool-start'
+    )
+    const finishEvent = events.find(
+      (event): event is { type: 'tool-finish'; turnId?: string } =>
+        (event as { type?: string }).type === 'tool-finish'
+    )
+
+    expect(toolInvocationsRepository.invocations).toEqual([
+      expect.objectContaining({
+        id: 'tool-1',
+        state: { agentTurnId: result.operation.id },
+        status: 'done'
+      })
+    ])
+    expect(startEvent).toMatchObject({ turnId: result.operation.id })
+    expect(finishEvent).toMatchObject({ turnId: result.operation.id })
+  })
+
+  it('does not write empty turn metadata for events without turn id', async () => {
+    const settings = createClaudeSettings()
+    const { service, toolInvocationsRepository } = createService({
+      settings,
+      agentEvents: [
+        {
+          type: 'tool_start',
+          toolUseId: 'tool-1',
+          toolName: 'Read',
+          input: { file_path: 'README.md' }
+        },
+        {
+          type: 'tool_result',
+          toolUseId: 'tool-1',
+          result: { output: 'hello' },
+          isError: false
+        },
+        { type: 'text_delta', text: 'done' }
+      ]
+    })
+
+    const result = await service.sendMessage({ content: '跑工具' })
+    const assistantMessage = result.messages.find((message) => message.role === 'assistant')
+
+    expect(assistantMessage?.metadata).toBeUndefined()
+    expect(toolInvocationsRepository.invocations).toEqual([
+      expect.not.objectContaining({
+        state: expect.anything()
+      })
+    ])
   })
 
   it('passes Anthropic-compatible providers through Anthropic backend config', async () => {

@@ -11,12 +11,7 @@ import { dirname, join, parse, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import type { ThinkingLevel } from '../../../config'
-import type { AgentPermissionMode } from '../../runtime/types'
 import type { AgentBackendWorkspace } from '../types'
-import {
-  createClaudePreToolUseHooks,
-  type ClaudeToolPermissionRequester
-} from './tool-permission-hooks'
 
 const thinkingLevelTokenBudgets: Record<ThinkingLevel, number> = {
   low: 1024,
@@ -33,9 +28,8 @@ export type ClaudeRuntimeEnvInput = {
 
 export type ClaudeQueryOptionsInput = ClaudeRuntimeEnvInput & {
   abortController: AbortController
+  hooks?: Options['hooks']
   model: string
-  permissionMode?: AgentPermissionMode
-  requestPermission?: ClaudeToolPermissionRequester
   stderr?: (data: string) => void
   thinkingLevel?: ThinkingLevel
   workspace?: AgentBackendWorkspace
@@ -408,9 +402,8 @@ export function createClaudeQueryOptions({
   apiKey,
   baseEnv,
   baseUrl,
+  hooks,
   model,
-  permissionMode,
-  requestPermission,
   stderr,
   thinkingLevel,
   workspace
@@ -434,7 +427,7 @@ export function createClaudeQueryOptions({
           allowDangerouslySkipPermissions: true,
           cwd: workspace.path,
           disallowedTools: claudeCodeUnsupportedTools,
-          hooks: createClaudePreToolUseHooks(workspace, requestPermission, permissionMode),
+          ...(hooks === undefined ? {} : { hooks }),
           permissionMode: 'bypassPermissions' as const,
           systemPrompt: {
             type: 'preset' as const,

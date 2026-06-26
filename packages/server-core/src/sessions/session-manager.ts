@@ -10,7 +10,7 @@ import { join } from 'node:path'
 import {
   assertLlmConnectionReadyForAgent,
   assertProviderReadyForAgent,
-  createAgent,
+  createBackend,
   createConnectionAgentBackendConfig,
   createAgentBackendMessage,
   createProviderLlmConnection,
@@ -141,9 +141,9 @@ export type SessionSourceProviderScope = {
 }
 
 /**
- * 为当前会话 turn 提供 agent sources 的外部端口，具体来源由 Electron main 或未来 runtime 注入。
+ * 为当前会话 turn 提供 agent sources，具体来源由 Electron main 或未来 runtime 注入。
  */
-export type SessionSourceProviderPort = {
+export type SessionSourceProvider = {
   resolveSources: (scope: SessionSourceProviderScope) => Promise<AgentSourceRecord[]>
 }
 
@@ -156,7 +156,7 @@ export type SessionManagerDependencies = {
   projectsRepository?: ProjectsRepositoryPort
   sessionsRepository: SessionsRepositoryPort
   settingsRepository: SettingsRepositoryPort
-  sourceProvider?: SessionSourceProviderPort
+  sourceProvider?: SessionSourceProvider
   threadsRepository: ThreadsRepositoryPort
   toolInvocationsRepository: ToolInvocationsRepositoryPort
   topicsRepository: TopicsRepositoryPort
@@ -298,6 +298,47 @@ function createPermissionRequestArguments(
     ...(request.reason === undefined ? {} : { reason: request.reason }),
     ...(request.impact === undefined ? {} : { impact: request.impact })
   }
+}
+
+/**
+ * 生成保留 agent turn id 的 message metadata patch；没有 turn id 时保持旧记录形状。
+ */
+function createAgentTurnMessageMetadataPatch(
+  metadata: ChatJsonObject | undefined,
+  turnId?: string
+): Pick<MessageRecord, 'metadata'> | Record<string, never> {
+  return turnId === undefined
+    ? {}
+    : {
+        metadata: {
+          ...(metadata ?? {}),
+          agentTurnId: turnId
+        }
+      }
+}
+
+/**
+ * 生成保留 agent turn id 的 tool state patch；没有 turn id 时不写空 state。
+ */
+function createAgentTurnToolStatePatch(
+  state: ChatJsonObject | null | undefined,
+  turnId?: string
+): Pick<ToolInvocationRecord, 'state'> | Record<string, never> {
+  const nextState =
+    turnId === undefined ? (state ?? undefined) : { ...(state ?? {}), agentTurnId: turnId }
+
+  return nextState === undefined ? {} : { state: nextState }
+}
+
+/**
+ * 从工具状态中读取 agent turn id，用于权限恢复这类非 AgentEvent 直接触发的广播。
+ */
+function readAgentTurnIdFromToolState(
+  state: ChatJsonObject | null | undefined
+): string | undefined {
+  const turnId = state?.agentTurnId
+
+  return typeof turnId === 'string' && turnId.length > 0 ? turnId : undefined
 }
 
 /**
@@ -482,7 +523,7 @@ export class SessionManager {
   private readonly projectsRepository?: ProjectsRepositoryPort
   private readonly sessionsRepository: SessionsRepositoryPort
   private readonly settingsRepository: SettingsRepositoryPort
-  private readonly sourceProvider?: SessionSourceProviderPort
+  private readonly sourceProvider?: SessionSourceProvider
   private readonly threadsRepository: ThreadsRepositoryPort
   private readonly toolInvocationsRepository: ToolInvocationsRepositoryPort
   private readonly topicsRepository: TopicsRepositoryPort
@@ -506,7 +547,7 @@ export class SessionManager {
   }: SessionManagerDependencies) {
     this.agentOperationsRepository = agentOperationsRepository
     this.createAgentBackend =
-      createAgentBackend ?? ((config) => agentBackend ?? createAgent(config))
+      createAgentBackend ?? ((config) => agentBackend ?? createBackend(config))
     this.attachmentsDirectory = attachmentsDirectory ?? join(process.cwd(), '.moon-attachments')
     this.messagesRepository = messagesRepository
     this.projectsRepository = projectsRepository
@@ -899,6 +940,8 @@ export class SessionManager {
       return
     }
 
+    const turnId = readAgentTurnIdFromToolState(toolInvocation.state)
+
     listenerRegistration.listener(
       {
         type: 'tool-finish',
@@ -907,7 +950,8 @@ export class SessionManager {
         topicId: operation.topicId,
         threadId: operation.threadId,
         messageId: toolInvocation.messageId,
-        toolInvocation
+        toolInvocation,
+        ...(turnId === undefined ? {} : { turnId })
       },
       listenerRegistration.routeHint
     )
@@ -1071,7 +1115,8 @@ export class SessionManager {
 
     try {
       const agentEvents = agentBackend.chat(currentUserMessage, undefined, {
-        abortSignal: abortController.signal
+        abortSignal: abortController.signal,
+        turnId: operation.id
       })
       let agentEventResult = await agentEvents.next()
 
@@ -1243,6 +1288,7 @@ export class SessionManager {
       const updatedMessage = await this.messagesRepository.save({
         ...message,
         content: `${message.content}${event.text}`,
+        ...createAgentTurnMessageMetadataPatch(message.metadata, event.turnId),
         updatedAt: createTimestamp()
       })
 
@@ -1254,7 +1300,8 @@ export class SessionManager {
           topicId: scope.topic.id,
           threadId: scope.thread.id,
           messageId: message.id,
-          delta: event.text
+          delta: event.text,
+          ...(event.turnId === undefined ? {} : { turnId: event.turnId })
         },
         eventRouteHint
       )
@@ -1270,6 +1317,7 @@ export class SessionManager {
       const updatedMessage = await this.messagesRepository.save({
         ...message,
         content: event.text,
+        ...createAgentTurnMessageMetadataPatch(message.metadata, event.turnId),
         updatedAt: createTimestamp()
       })
 
@@ -1281,7 +1329,8 @@ export class SessionManager {
           topicId: scope.topic.id,
           threadId: scope.thread.id,
           messageId: message.id,
-          delta: event.text
+          delta: event.text,
+          ...(event.turnId === undefined ? {} : { turnId: event.turnId })
         },
         eventRouteHint
       )
@@ -1293,6 +1342,7 @@ export class SessionManager {
       const updatedMessage = await this.messagesRepository.save({
         ...message,
         reasoning: `${message.reasoning ?? ''}${event.text}`,
+        ...createAgentTurnMessageMetadataPatch(message.metadata, event.turnId),
         updatedAt: createTimestamp()
       })
 
@@ -1304,7 +1354,8 @@ export class SessionManager {
           topicId: scope.topic.id,
           threadId: scope.thread.id,
           messageId: message.id,
-          delta: event.text
+          delta: event.text,
+          ...(event.turnId === undefined ? {} : { turnId: event.turnId })
         },
         eventRouteHint
       )
@@ -1329,6 +1380,7 @@ export class SessionManager {
           ...(event.request.reason === undefined ? {} : { reason: event.request.reason }),
           ...(event.request.impact === undefined ? {} : { impact: event.request.impact })
         },
+        ...createAgentTurnToolStatePatch(undefined, event.turnId),
         status: 'waiting_for_human',
         createdAt: timestamp,
         updatedAt: timestamp
@@ -1351,7 +1403,8 @@ export class SessionManager {
           topicId: scope.topic.id,
           threadId: scope.thread.id,
           messageId: message.id,
-          toolInvocation
+          toolInvocation,
+          ...(event.turnId === undefined ? {} : { turnId: event.turnId })
         },
         eventRouteHint
       )
@@ -1370,6 +1423,7 @@ export class SessionManager {
         messageId: message.id,
         name: event.toolName,
         arguments: event.input ?? {},
+        ...createAgentTurnToolStatePatch(undefined, event.turnId),
         status,
         createdAt: timestamp,
         updatedAt: timestamp
@@ -1394,7 +1448,8 @@ export class SessionManager {
           topicId: scope.topic.id,
           threadId: scope.thread.id,
           messageId: message.id,
-          toolInvocation
+          toolInvocation,
+          ...(event.turnId === undefined ? {} : { turnId: event.turnId })
         },
         eventRouteHint
       )
@@ -1414,6 +1469,7 @@ export class SessionManager {
         arguments: event.input ?? currentToolInvocation?.arguments ?? {},
         result: event.isError ? null : normalizeToolResult(event.result ?? null),
         error: event.isError ? getErrorMessage(event.result ?? 'Tool call failed.') : null,
+        ...createAgentTurnToolStatePatch(currentToolInvocation?.state, event.turnId),
         status: event.isError ? 'error' : 'done',
         createdAt: currentToolInvocation?.createdAt ?? timestamp,
         updatedAt: timestamp
@@ -1429,7 +1485,8 @@ export class SessionManager {
           topicId: scope.topic.id,
           threadId: scope.thread.id,
           messageId: message.id,
-          toolInvocation
+          toolInvocation,
+          ...(event.turnId === undefined ? {} : { turnId: event.turnId })
         },
         eventRouteHint
       )

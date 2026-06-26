@@ -4,15 +4,15 @@
  */
 
 import { piBackendNotWiredMessage } from '../../../connection-adapter'
-import type { AgentBackendDriver } from '../driver-types'
+import type { ProviderDriver } from '../driver-types'
 
-export const piDriver: AgentBackendDriver = {
+export const piDriver: ProviderDriver = {
   provider: 'pi',
 
   /**
    * 明确拒绝创建 Pi backend，直到 Pi 子进程和 JSONL 协议接入完成。
    */
-  createAgent() {
+  createBackend() {
     throw new Error(piBackendNotWiredMessage)
   }
 }

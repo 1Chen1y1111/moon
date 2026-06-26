@@ -5,7 +5,7 @@
 
 import type { AgentBackendMessage, AgentBackendWorkspace } from '../backend/types'
 
-export type AgentPromptBuilderInput = {
+export type PromptBuilderInput = {
   fallbackMessage: string
   messages: AgentBackendMessage[]
   sourceContextBlock?: string
@@ -43,7 +43,7 @@ function serializePromptMessages(
 /**
  * 构造 agent backend 单轮调用使用的 prompt，并封装 workspace 下的上下文选择规则。
  */
-export class AgentPromptBuilder {
+export class PromptBuilder {
   /**
    * 返回 provider 调用需要的 prompt 文本；当 source context 存在时放在消息正文前。
    */
@@ -52,7 +52,7 @@ export class AgentPromptBuilder {
     messages,
     sourceContextBlock,
     workspace
-  }: AgentPromptBuilderInput): string {
+  }: PromptBuilderInput): string {
     const serializedMessages = serializePromptMessages(
       selectPromptMessages(messages, workspace),
       fallbackMessage

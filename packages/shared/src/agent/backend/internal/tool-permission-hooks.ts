@@ -1,14 +1,15 @@
 /**
  * 负责把 Claude SDK PreToolUse hook 输入适配到 Moon 工具权限规则。
- * 本文件只处理 SDK hook 与 PermissionManager 的桥接，不解析 runtime/env/executable。
+ * 本文件只处理 SDK hook 与 BaseAgent 权限能力的桥接，不解析 runtime/env/executable。
  */
 
 import type { HookInput, HookJSONOutput, Options } from '@anthropic-ai/claude-agent-sdk'
 import type { AgentPermissionDecision, AgentPermissionRequest } from '@moon/core/types'
 
-import { PermissionManager, type AgentToolPermissionCheckResult } from '../../runtime'
-import type { AgentPermissionMode } from '../../runtime/types'
-import type { AgentBackendWorkspace } from '../types'
+import type {
+  AgentToolPermissionCheckResult,
+  ClaudeToolUsePermissionInput
+} from '../../core'
 
 type ClaudePreToolUseCheckResult = AgentToolPermissionCheckResult
 
@@ -20,6 +21,27 @@ export type ClaudeToolPermissionRequester = (
 ) => Promise<AgentPermissionDecision>
 
 /**
+ * 负责执行 Claude 工具权限规则，通常由 BaseAgent 绑定 PermissionManager 后传入。
+ */
+export type ClaudeToolUseChecker = (
+  input: ClaudeToolUsePermissionInput
+) => ClaudePreToolUseCheckResult
+
+/**
+ * 负责通知调用方某次 Claude 工具调用已被阻止，通常用于事件适配器补全 tool_result。
+ */
+export type ClaudeToolUseBlockedReporter = (
+  input: ClaudeToolUsePermissionInput,
+  reason: string
+) => void
+
+export type ClaudePreToolUseHooksInput = {
+  checkToolUse: ClaudeToolUseChecker
+  onToolUseBlocked?: ClaudeToolUseBlockedReporter
+  requestPermission?: ClaudeToolPermissionRequester
+}
+
+/**
  * 安全读取 hook payload 中的普通对象字段，避免 SDK 传入非对象 tool input 时抛错。
  */
 function readRecord(value: unknown): Record<string, unknown> {
@@ -27,28 +49,26 @@ function readRecord(value: unknown): Record<string, unknown> {
 }
 
 /**
- * 运行 Craft 风格的 Claude PreToolUse 检查：只读工具自动允许，命令和写操作按权限模式处理。
+ * 把 Claude SDK PreToolUse payload 转换成 core PermissionManager 可识别的输入。
  */
-export function runClaudePreToolUseChecks(
-  workspace: AgentBackendWorkspace,
-  input: Extract<HookInput, { hook_event_name: 'PreToolUse' }>,
-  permissionMode: AgentPermissionMode = 'ask'
-): ClaudePreToolUseCheckResult {
-  return new PermissionManager({ permissionMode, workspace }).checkClaudeToolUse({
+function createClaudeToolUsePermissionInput(
+  input: Extract<HookInput, { hook_event_name: 'PreToolUse' }>
+): ClaudeToolUsePermissionInput {
+  return {
     toolName: input.tool_name,
     toolUseId: input.tool_use_id,
     toolInput: readRecord(input.tool_input)
-  })
+  }
 }
 
 /**
  * 创建 Claude SDK PreToolUse hooks，并把检查结果翻译成 SDK hook 输出。
  */
-export function createClaudePreToolUseHooks(
-  workspace: AgentBackendWorkspace,
-  requestPermission?: ClaudeToolPermissionRequester,
-  permissionMode: AgentPermissionMode = 'ask'
-): Options['hooks'] {
+export function createClaudePreToolUseHooks({
+  checkToolUse,
+  onToolUseBlocked,
+  requestPermission
+}: ClaudePreToolUseHooksInput): Options['hooks'] {
   return {
     PreToolUse: [
       {
@@ -58,14 +78,19 @@ export function createClaudePreToolUseHooks(
               return { continue: true }
             }
 
-            const checkResult = runClaudePreToolUseChecks(workspace, input, permissionMode)
+            const permissionInput = createClaudeToolUsePermissionInput(input)
+            const checkResult = checkToolUse(permissionInput)
 
             if (checkResult.type === 'prompt') {
               if (requestPermission === undefined) {
+                const reason = 'Moon 当前阶段需要 UI 审批后才允许执行该工具。'
+
+                onToolUseBlocked?.(permissionInput, reason)
+
                 return {
                   continue: false,
                   decision: 'block',
-                  reason: 'Moon 当前阶段需要 UI 审批后才允许执行该工具。'
+                  reason
                 }
               }
 
@@ -75,14 +100,20 @@ export function createClaudePreToolUseHooks(
                 return { continue: true }
               }
 
+              const reason = decision.reason ?? 'User denied permission'
+
+              onToolUseBlocked?.(permissionInput, reason)
+
               return {
                 continue: false,
                 decision: 'block',
-                reason: decision.reason ?? 'User denied permission'
+                reason
               }
             }
 
             if (checkResult.type === 'block') {
+              onToolUseBlocked?.(permissionInput, checkResult.reason)
+
               return {
                 continue: false,
                 decision: 'block',

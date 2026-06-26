@@ -5,13 +5,13 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { AgentPromptBuilder } from '../../../src/agent'
+import { PromptBuilder } from '../../../src/agent'
 
-describe('AgentPromptBuilder', () => {
+describe('PromptBuilder', () => {
   const workspace = { path: '/workspace/moon' }
 
   it('returns the fallback message when there are no prompt messages', () => {
-    const promptBuilder = new AgentPromptBuilder()
+    const promptBuilder = new PromptBuilder()
 
     expect(
       promptBuilder.build({
@@ -22,7 +22,7 @@ describe('AgentPromptBuilder', () => {
   })
 
   it('serializes history messages with explicit role labels when no workspace is active', () => {
-    const promptBuilder = new AgentPromptBuilder()
+    const promptBuilder = new PromptBuilder()
 
     expect(
       promptBuilder.build({
@@ -37,7 +37,7 @@ describe('AgentPromptBuilder', () => {
   })
 
   it('filters system messages when workspace context is active', () => {
-    const promptBuilder = new AgentPromptBuilder()
+    const promptBuilder = new PromptBuilder()
 
     expect(
       promptBuilder.build({
@@ -52,7 +52,7 @@ describe('AgentPromptBuilder', () => {
   })
 
   it('returns the fallback message when workspace filtering removes every history message', () => {
-    const promptBuilder = new AgentPromptBuilder()
+    const promptBuilder = new PromptBuilder()
 
     expect(
       promptBuilder.build({
@@ -64,7 +64,7 @@ describe('AgentPromptBuilder', () => {
   })
 
   it('prepends source context before serialized history when source context is available', () => {
-    const promptBuilder = new AgentPromptBuilder()
+    const promptBuilder = new PromptBuilder()
 
     expect(
       promptBuilder.build({
@@ -76,7 +76,7 @@ describe('AgentPromptBuilder', () => {
   })
 
   it('ignores blank source context so fallback behavior stays unchanged', () => {
-    const promptBuilder = new AgentPromptBuilder()
+    const promptBuilder = new PromptBuilder()
 
     expect(
       promptBuilder.build({

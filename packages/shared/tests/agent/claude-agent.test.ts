@@ -43,6 +43,41 @@ function createResultQueryClaudeMock() {
 }
 
 /**
+ * 创建返回多种 turn-scoped 事件的 Claude SDK query mock。
+ */
+function createTurnScopedQueryClaudeMock() {
+  return vi.fn(async function* () {
+    yield {
+      type: 'stream_event',
+      event: {
+        type: 'content_block_delta',
+        delta: { type: 'text_delta', text: 'hello' }
+      }
+    }
+    yield {
+      type: 'assistant',
+      message: {
+        content: [
+          {
+            type: 'tool_use',
+            id: 'tool-1',
+            name: 'Read',
+            input: { file_path: 'README.md' }
+          }
+        ]
+      }
+    }
+    yield {
+      type: 'assistant',
+      error: 'assistant failed',
+      message: {
+        content: []
+      }
+    }
+  })
+}
+
+/**
  * 创建会触发 Claude SDK Bash PreToolUse hook 的 query mock。
  */
 function createBashHookQueryClaudeMock() {
@@ -295,6 +330,34 @@ inspect repo`
     ])
   })
 
+  it('scopes Claude text, tool, and error events to the provided turn id', async () => {
+    const queryClaude = createTurnScopedQueryClaudeMock()
+    const agent = new ClaudeAgent({
+      model: 'claude-sonnet',
+      messages: [],
+      queryClaude: queryClaude as never
+    })
+    const events: AgentEvent[] = []
+
+    for await (const event of agent.chat('hello', undefined, { turnId: 'operation-1' })) {
+      events.push(event)
+    }
+
+    expect(events).toEqual(
+      expect.arrayContaining([
+        { type: 'text_delta', text: 'hello', turnId: 'operation-1' },
+        {
+          type: 'tool_start',
+          toolUseId: 'tool-1',
+          toolName: 'Read',
+          input: { file_path: 'README.md' },
+          turnId: 'operation-1'
+        },
+        { type: 'error', message: 'assistant failed', turnId: 'operation-1' }
+      ])
+    )
+  })
+
   it('uses Claude SDK stderr details when result error is unknown', async () => {
     const queryClaude = createUnknownErrorWithStderrQueryClaudeMock()
     const agent = new ClaudeAgent({
@@ -503,12 +566,13 @@ inspect repo`
         path: '/workspace/moon'
       }
     })
-    const events = agent.chat('run pwd')
+    const events = agent.chat('run pwd', undefined, { turnId: 'operation-1' })
 
     const permissionEvent = await events.next()
 
     expect(permissionEvent.value).toMatchObject({
       type: 'permission_request',
+      turnId: 'operation-1',
       request: {
         requestId: 'perm-bash-tool-1',
         toolName: 'Bash',
@@ -521,7 +585,11 @@ inspect repo`
 
     const textEvent = await events.next()
 
-    expect(textEvent.value).toMatchObject({ type: 'text_complete', text: 'allowed' })
+    expect(textEvent.value).toMatchObject({
+      type: 'text_complete',
+      text: 'allowed',
+      turnId: 'operation-1'
+    })
   })
 
   it('emits a permission request when Claude Code SDK asks to edit a file', async () => {

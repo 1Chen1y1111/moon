@@ -19,7 +19,7 @@ describe('agent backend factory', () => {
   })
 
   it('creates a Claude backend for Anthropic config', () => {
-    const backend = createAgent({
+    const backend = createBackend({
       provider: 'anthropic',
       model: 'claude-sonnet-4-5',
       apiKey: 'test-key',
@@ -32,7 +32,7 @@ describe('agent backend factory', () => {
 
   it('rejects Anthropic Messages pi_compat config while Pi is not wired', () => {
     expect(() =>
-      createAgent({
+      createBackend({
         provider: 'pi_compat',
         model: 'compat-model',
         apiKey: 'test-key',
@@ -45,7 +45,7 @@ describe('agent backend factory', () => {
 
   it('rejects OpenAI Chat Completions pi_compat config while Pi is not wired', () => {
     expect(() =>
-      createAgent({
+      createBackend({
         provider: 'pi_compat',
         model: 'deepseek-v4-flash',
         apiKey: 'test-key',
@@ -56,13 +56,13 @@ describe('agent backend factory', () => {
     ).toThrow(piBackendNotWiredMessage)
   })
 
-  it('keeps createBackend as a compatibility alias', () => {
-    expect(createBackend).toBe(createAgent)
+  it('keeps createAgent as a compatibility alias', () => {
+    expect(createAgent).toBe(createBackend)
   })
 
   it('rejects Pi config while Pi is not wired', () => {
     expect(() =>
-      createAgent({
+      createBackend({
         provider: 'pi',
         model: 'gpt-5',
         messages: []

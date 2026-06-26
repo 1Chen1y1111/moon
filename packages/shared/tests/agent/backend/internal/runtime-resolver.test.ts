@@ -235,4 +235,19 @@ describe('createClaudeQueryOptions', () => {
       })
     ).toMatchObject({ stderr })
   })
+
+  it('passes prebuilt hooks through only when workspace options are active', () => {
+    const hooks = {
+      PreToolUse: [{ hooks: [async (): Promise<{ continue: true }> => ({ continue: true })] }]
+    }
+
+    expect(
+      createClaudeQueryOptions({
+        abortController: new AbortController(),
+        hooks,
+        model: 'claude-sonnet',
+        workspace: { path: '/workspace/moon' }
+      })
+    ).toMatchObject({ hooks })
+  })
 })
