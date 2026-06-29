@@ -211,18 +211,39 @@ export class ClaudeAgent extends BaseAgent {
       runtimeSummary = createClaudeRuntimeSummary(queryOptions)
       let hasCompleteEvent = false
       const sdkEvents = this.queryClaude({ prompt, options: queryOptions })
+      const queuedEvents = eventQueue.drain()
       let sdkEventResultPromise = sdkEvents.next()
-      let queuedEventPromise = eventQueue.next()
+      let queuedEventResultPromise: Promise<IteratorResult<AgentEvent, void>> | null =
+        queuedEvents.next()
 
       while (true) {
-        const result = await Promise.race([
-          sdkEventResultPromise.then((result) => ({ type: 'sdk' as const, result })),
-          queuedEventPromise.then((event) => ({ type: 'queue' as const, event }))
-        ])
+        const raceCandidates: Array<
+          Promise<
+            | { type: 'sdk'; result: Awaited<typeof sdkEventResultPromise> }
+            | { type: 'queue'; result: IteratorResult<AgentEvent, void> }
+          >
+        > = [sdkEventResultPromise.then((result) => ({ type: 'sdk' as const, result }))]
+
+        if (queuedEventResultPromise !== null) {
+          raceCandidates.push(
+            queuedEventResultPromise.then((result) => ({ type: 'queue' as const, result }))
+          )
+        }
+
+        const result = await Promise.race(raceCandidates)
 
         if (result.type === 'queue') {
-          yield result.event
-          queuedEventPromise = eventQueue.next()
+          if (result.result.done === true) {
+            queuedEventResultPromise = null
+            continue
+          }
+
+          if (result.result.value.type === 'complete') {
+            hasCompleteEvent = true
+          }
+
+          yield result.result.value
+          queuedEventResultPromise = queuedEvents.next()
           continue
         }
 
@@ -248,6 +269,21 @@ export class ClaudeAgent extends BaseAgent {
                 )
               }
             : agentEvent
+        }
+      }
+
+      eventQueue.complete()
+
+      if (queuedEventResultPromise !== null) {
+        let queuedResult = await queuedEventResultPromise
+
+        while (queuedResult.done !== true) {
+          if (queuedResult.value.type === 'complete') {
+            hasCompleteEvent = true
+          }
+
+          yield queuedResult.value
+          queuedResult = await queuedEvents.next()
         }
       }
 

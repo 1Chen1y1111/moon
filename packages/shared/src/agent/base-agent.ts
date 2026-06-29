@@ -104,6 +104,7 @@ export abstract class BaseAgent implements AgentBackend {
    */
   async abort(reason?: string): Promise<void> {
     this.abortController?.abort(reason)
+    this.eventQueue?.complete()
     this.rejectPendingPermissions(typeof reason === 'string' ? reason : 'Agent aborted.')
     this.clearTurnState()
   }
@@ -113,6 +114,7 @@ export abstract class BaseAgent implements AgentBackend {
    */
   destroy(): void {
     this.abortController?.abort('destroyed')
+    this.eventQueue?.complete()
     this.rejectPendingPermissions('Agent destroyed.')
     this.clearTurnState()
   }
@@ -171,6 +173,7 @@ export abstract class BaseAgent implements AgentBackend {
    */
   protected endTurn(turn: AgentTurnState): void {
     turn.cleanupExternalAbort()
+    turn.eventQueue.complete()
 
     if (this.abortController === turn.abortController) {
       this.abortController = null
@@ -208,7 +211,7 @@ export abstract class BaseAgent implements AgentBackend {
       this.pendingPermissions.set(request.requestId, { resolve })
     })
 
-    eventQueue.push({
+    eventQueue.enqueue({
       type: 'permission_request',
       request,
       ...(this.currentTurnId === null ? {} : { turnId: this.currentTurnId })

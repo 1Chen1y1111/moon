@@ -115,6 +115,29 @@ function createBashHookQueryClaudeMock() {
 }
 
 /**
+ * 创建在 SDK iterator 结束前排入权限事件但不等待审批的 query mock。
+ */
+function createDetachedPermissionHookQueryClaudeMock() {
+  return vi.fn(async function* ({ options }: { options?: Options }) {
+    const hook = options?.hooks?.PreToolUse?.[0]?.hooks[0]
+
+    void hook?.(
+      {
+        hook_event_name: 'PreToolUse',
+        session_id: 'sdk-session-1',
+        transcript_path: '/tmp/transcript.jsonl',
+        cwd: '/workspace/moon',
+        tool_name: 'Bash',
+        tool_input: { command: 'pwd' },
+        tool_use_id: 'detached-bash-tool-1'
+      },
+      'detached-bash-tool-1',
+      { signal: new AbortController().signal }
+    )
+  })
+}
+
+/**
  * 创建会触发 Claude SDK Edit PreToolUse hook 的 query mock。
  */
 function createEditHookQueryClaudeMock() {
@@ -328,6 +351,41 @@ inspect repo`
         }
       }
     ])
+  })
+
+  it('flushes queued permission events when the SDK iterator finishes first', async () => {
+    const queryClaude = createDetachedPermissionHookQueryClaudeMock()
+    const agent = new ClaudeAgent({
+      model: 'claude-sonnet',
+      messages: [],
+      queryClaude: queryClaude as never,
+      workspace: {
+        path: '/workspace/moon'
+      }
+    })
+    const events: AgentEvent[] = []
+
+    for await (const event of agent.chat('run detached command', undefined, {
+      turnId: 'operation-1'
+    })) {
+      events.push(event)
+    }
+
+    const permissionIndex = events.findIndex((event) => event.type === 'permission_request')
+    const completeIndex = events.findIndex((event) => event.type === 'complete')
+
+    expect(events[permissionIndex]).toMatchObject({
+      type: 'permission_request',
+      turnId: 'operation-1',
+      request: {
+        requestId: 'perm-detached-bash-tool-1',
+        toolName: 'Bash',
+        command: 'pwd',
+        type: 'bash'
+      }
+    })
+    expect(permissionIndex).toBeGreaterThanOrEqual(0)
+    expect(completeIndex).toBeGreaterThan(permissionIndex)
   })
 
   it('scopes Claude text, tool, and error events to the provided turn id', async () => {

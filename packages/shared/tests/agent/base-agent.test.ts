@@ -77,7 +77,12 @@ class TestAgent extends BaseAgent {
           type: 'bash'
         })
 
-        yield await turn.eventQueue.next()
+        const queuedEvents = turn.eventQueue.drain()
+        const queuedEvent = await queuedEvents.next()
+
+        if (queuedEvent.done !== true) {
+          yield queuedEvent.value
+        }
 
         const result = await decision
 
