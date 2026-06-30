@@ -508,6 +508,10 @@ function applyChatOperationEvent(state: ChatState, event: ChatOperationEvent): C
     }
   }
 
+  if (event.type === 'source-activated') {
+    return state
+  }
+
   if (event.type === 'operation-done') {
     if (!isVisibleEvent(state, event.session.id, event.thread.id)) {
       return {

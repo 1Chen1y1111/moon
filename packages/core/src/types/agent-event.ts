@@ -79,6 +79,7 @@ export type AgentEvent =
       parentToolUseId?: string
     }
   | { type: 'permission_request'; request: AgentPermissionRequest; turnId?: string }
+  | { type: 'source_activated'; sourceSlug: string; originalMessage?: string; turnId?: string }
   | { type: 'usage_update'; usage: AgentEventUsage }
   | { type: 'status'; message: string; statusType?: 'compacting' | 'compaction_complete' }
   | { type: 'info'; message: string; level?: 'info' | 'warning' | 'error' | 'success' }

@@ -477,4 +477,37 @@ describe('chat reducer agent turn metadata', () => {
     })
     expect(state.pendingToolInvocations).toEqual([])
   })
+
+  it('accepts source activation events without changing live chat state', () => {
+    const initialState = createStreamingChatState()
+    const stateWithOptionalFields = chatReducer(initialState, {
+      type: 'applyChatOperationEvent',
+      event: {
+        type: 'source-activated',
+        operationId: 'operation-1',
+        sessionId: 'session-1',
+        topicId: 'topic-1',
+        threadId: 'thread-1',
+        messageId: 'assistant-1',
+        sourceSlug: 'workspace',
+        originalMessage: 'hello',
+        turnId: 'operation-1'
+      }
+    })
+    const stateWithoutOptionalFields = chatReducer(initialState, {
+      type: 'applyChatOperationEvent',
+      event: {
+        type: 'source-activated',
+        operationId: 'operation-1',
+        sessionId: 'session-1',
+        topicId: 'topic-1',
+        threadId: 'thread-1',
+        messageId: 'assistant-1',
+        sourceSlug: 'workspace'
+      }
+    })
+
+    expect(stateWithOptionalFields).toBe(initialState)
+    expect(stateWithoutOptionalFields).toBe(initialState)
+  })
 })

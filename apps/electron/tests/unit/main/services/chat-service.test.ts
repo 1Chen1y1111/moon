@@ -929,6 +929,65 @@ describe('SessionManager.sendMessage', () => {
     expect(finishEvent).toMatchObject({ turnId: result.operation.id })
   })
 
+  it('passes source activation events through without creating records', async () => {
+    const events: unknown[] = []
+    const createAgentBackend = vi.fn(
+      (): AgentBackend => ({
+        async *chat(
+          _message: string,
+          _attachments?: MessageAttachment[],
+          options?: AgentChatOptions
+        ): AsyncGenerator<AgentEvent, void, void> {
+          void _message
+          void _attachments
+          yield {
+            type: 'source_activated',
+            sourceSlug: 'workspace',
+            originalMessage: 'hello',
+            ...(options?.turnId === undefined ? {} : { turnId: options.turnId })
+          }
+          yield {
+            type: 'text_delta',
+            text: 'done',
+            ...(options?.turnId === undefined ? {} : { turnId: options.turnId })
+          }
+        },
+        abort: vi.fn(async () => {}),
+        destroy: vi.fn(),
+        getModel: vi.fn(() => 'test-model'),
+        isProcessing: vi.fn(() => false),
+        respondToPermission: vi.fn(),
+        setModel: vi.fn()
+      })
+    )
+    const { service, messagesRepository, toolInvocationsRepository } = createService({
+      createAgentBackend,
+      settings: createClaudeSettings()
+    })
+
+    const result = await service.sendMessage({ content: 'hello' }, (event) => events.push(event))
+    const sourceEvent = events.find(
+      (
+        event
+      ): event is {
+        type: 'source-activated'
+        sourceSlug: string
+        originalMessage?: string
+        turnId?: string
+      } => (event as { type?: string }).type === 'source-activated'
+    )
+
+    expect(sourceEvent).toMatchObject({
+      type: 'source-activated',
+      sourceSlug: 'workspace',
+      originalMessage: 'hello',
+      turnId: result.operation.id
+    })
+    expect(messagesRepository.messages).toHaveLength(2)
+    expect(toolInvocationsRepository.invocations).toEqual([])
+    expect(result.operation.status).toBe('done')
+  })
+
   it('does not write empty turn metadata for events without turn id', async () => {
     const settings = createClaudeSettings()
     const { service, toolInvocationsRepository } = createService({

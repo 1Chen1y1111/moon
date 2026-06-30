@@ -16,6 +16,7 @@ type TurnScopedAgentEvent = Extract<
       | 'tool_start'
       | 'tool_result'
       | 'permission_request'
+      | 'source_activated'
       | 'error'
       | 'typed_error'
   }
@@ -179,6 +180,7 @@ export abstract class BaseEventAdapter {
       event.type === 'tool_start' ||
       event.type === 'tool_result' ||
       event.type === 'permission_request' ||
+      event.type === 'source_activated' ||
       event.type === 'error' ||
       event.type === 'typed_error'
     )

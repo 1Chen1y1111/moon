@@ -381,6 +381,17 @@ export type ChatOperationEvent =
       turnId?: string
     }
   | {
+      type: 'source-activated'
+      operationId: string
+      sessionId: string
+      topicId: string
+      threadId: string
+      messageId: string
+      sourceSlug: string
+      originalMessage?: string
+      turnId?: string
+    }
+  | {
       type: 'operation-done'
       operationId: string
       session: SessionRecord

@@ -1284,6 +1284,27 @@ export class SessionManager {
       return { message, operation: updatedOperation }
     }
 
+    if (event.type === 'source_activated') {
+      onEvent?.(
+        {
+          type: 'source-activated',
+          operationId: operation.id,
+          sessionId: scope.session.id,
+          topicId: scope.topic.id,
+          threadId: scope.thread.id,
+          messageId: message.id,
+          sourceSlug: event.sourceSlug,
+          ...(event.originalMessage === undefined
+            ? {}
+            : { originalMessage: event.originalMessage }),
+          ...(event.turnId === undefined ? {} : { turnId: event.turnId })
+        },
+        eventRouteHint
+      )
+
+      return { message, operation }
+    }
+
     if (event.type === 'text_delta') {
       const updatedMessage = await this.messagesRepository.save({
         ...message,
