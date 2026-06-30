@@ -175,10 +175,16 @@ type AgentEventUsagePayload = Extract<AgentEvent, { type: 'usage_update' }>['usa
 type AgentEventApplicationResult = {
   message: MessageRecord
   operation: AgentOperationRecord
+  sourceActivation?: SourceActivationSignal
 }
 
 type PendingToolPermission = {
   operationId: string
+}
+
+type SourceActivationSignal = {
+  originalMessage?: string
+  sourceSlug: string
 }
 
 type OperationEventListenerRegistration = {
@@ -1063,6 +1069,7 @@ export class SessionManager {
     const eventRouteHint = createSessionEventRouteHint(eventScope.session)
     let assistantMessage = initialAssistantMessage
     let currentOperation = operation
+    let sourceActivationSignal: SourceActivationSignal | null = null
 
     // 拿出当前 thread 里的历史消息
     const previousMessages = await this.messagesRepository.listByThread(scope.thread.id)
@@ -1132,12 +1139,17 @@ export class SessionManager {
 
         assistantMessage = eventResult.message
         currentOperation = eventResult.operation
+        sourceActivationSignal ??= eventResult.sourceActivation ?? null
         agentEventResult = await agentEvents.next()
       }
 
       const completedTimestamp = createTimestamp()
 
-      if (assistantMessage.content.trim().length === 0 && !assistantMessage.reasoning) {
+      if (
+        sourceActivationSignal === null &&
+        assistantMessage.content.trim().length === 0 &&
+        !assistantMessage.reasoning
+      ) {
         throw new Error('Model returned an empty response.')
       }
 
@@ -1173,6 +1185,13 @@ export class SessionManager {
         },
         eventRouteHint
       )
+
+      await this.runSourceActivationAutoRetry({
+        onEvent,
+        operation: completedOperation,
+        scope: eventScope,
+        signal: sourceActivationSignal
+      })
 
       return {
         session: sessionAfterAssistant,
@@ -1220,6 +1239,46 @@ export class SessionManager {
       this.activeAgentBackends.delete(operation.id)
       this.operationEventListeners.delete(operation.id)
     }
+  }
+
+  /**
+   * source_activated 结束当前 turn 后，复用同一会话作用域自动创建下一轮重发消息。
+   */
+  private async runSourceActivationAutoRetry({
+    onEvent,
+    operation,
+    scope,
+    signal
+  }: {
+    onEvent?: SessionOperationEventListener
+    operation: AgentOperationRecord
+    scope: ConversationScope
+    signal: SourceActivationSignal | null
+  }): Promise<void> {
+    const originalMessage = signal?.originalMessage?.trim()
+
+    if (signal === null || originalMessage === undefined || originalMessage.length === 0) {
+      return
+    }
+
+    const llmConnectionId =
+      typeof operation.appContext?.llmConnectionId === 'string'
+        ? operation.appContext.llmConnectionId
+        : undefined
+    const provider = operation.provider ?? scope.session.provider
+
+    await this.sendMessage(
+      {
+        sessionId: scope.session.id,
+        topicId: scope.topic.id,
+        threadId: scope.thread.id,
+        projectId: scope.project?.id ?? null,
+        provider,
+        ...(llmConnectionId === undefined ? {} : { llmConnectionId }),
+        content: `${originalMessage}\n\n[${signal.sourceSlug} activated]`
+      },
+      onEvent
+    )
   }
 
   /**
@@ -1302,7 +1361,14 @@ export class SessionManager {
         eventRouteHint
       )
 
-      return { message, operation }
+      return {
+        message,
+        operation,
+        sourceActivation: {
+          sourceSlug: event.sourceSlug,
+          ...(event.originalMessage === undefined ? {} : { originalMessage: event.originalMessage })
+        }
+      }
     }
 
     if (event.type === 'text_delta') {

@@ -356,6 +356,7 @@ class ProjectsRepositoryMock {
 }
 
 type CreateServiceResult = {
+  agentOperationsRepository: AgentOperationsRepositoryMock
   createAgentBackend: ReturnType<typeof vi.fn>
   messagesRepository: MessagesRepositoryMock
   projectsRepository: ProjectsRepositoryMock
@@ -527,6 +528,7 @@ function createService(input: {
     vi.fn(() => createMockAgentBackend(input.agentEvents ?? [{ type: 'text_delta', text: 'ok' }]))
 
   return {
+    agentOperationsRepository,
     createAgentBackend,
     messagesRepository,
     service: new SessionManager({
@@ -943,7 +945,6 @@ describe('SessionManager.sendMessage', () => {
           yield {
             type: 'source_activated',
             sourceSlug: 'workspace',
-            originalMessage: 'hello',
             ...(options?.turnId === undefined ? {} : { turnId: options.turnId })
           }
           yield {
@@ -980,12 +981,138 @@ describe('SessionManager.sendMessage', () => {
     expect(sourceEvent).toMatchObject({
       type: 'source-activated',
       sourceSlug: 'workspace',
-      originalMessage: 'hello',
       turnId: result.operation.id
     })
     expect(messagesRepository.messages).toHaveLength(2)
     expect(toolInvocationsRepository.invocations).toEqual([])
     expect(result.operation.status).toBe('done')
+  })
+
+  it('auto-retries in the same thread after source activation completes the current operation', async () => {
+    const events: unknown[] = []
+    const chatMessages: string[] = []
+    let backendIndex = 0
+    const createAgentBackend = vi.fn(
+      (): AgentBackend => ({
+        async *chat(
+          message: string,
+          _attachments?: MessageAttachment[],
+          options?: AgentChatOptions
+        ): AsyncGenerator<AgentEvent, void, void> {
+          void _attachments
+          chatMessages.push(message)
+          backendIndex += 1
+
+          if (backendIndex === 1) {
+            yield {
+              type: 'source_activated',
+              sourceSlug: 'workspace',
+              originalMessage: 'hello',
+              ...(options?.turnId === undefined ? {} : { turnId: options.turnId })
+            }
+            return
+          }
+
+          yield {
+            type: 'text_delta',
+            text: 'retried',
+            ...(options?.turnId === undefined ? {} : { turnId: options.turnId })
+          }
+        },
+        abort: vi.fn(async () => {}),
+        destroy: vi.fn(),
+        getModel: vi.fn(() => 'test-model'),
+        isProcessing: vi.fn(() => false),
+        respondToPermission: vi.fn(),
+        setModel: vi.fn()
+      })
+    )
+    const { agentOperationsRepository, messagesRepository, service } = createService({
+      createAgentBackend,
+      settings: createClaudeSettings()
+    })
+
+    const result = await service.sendMessage({ content: 'hello' }, (event) => events.push(event))
+    const sourceEvent = events.find(
+      (
+        event
+      ): event is {
+        type: 'source-activated'
+        operationId: string
+        sourceSlug: string
+        originalMessage?: string
+        turnId?: string
+      } => (event as { type?: string }).type === 'source-activated'
+    )
+
+    expect(result.operation.status).toBe('done')
+    expect(sourceEvent).toMatchObject({
+      type: 'source-activated',
+      operationId: result.operation.id,
+      sourceSlug: 'workspace',
+      originalMessage: 'hello',
+      turnId: result.operation.id
+    })
+    expect(createAgentBackend).toHaveBeenCalledTimes(2)
+    expect(chatMessages).toEqual(['hello', 'hello\n\n[workspace activated]'])
+    expect(agentOperationsRepository.operations.map((operation) => operation.status)).toEqual([
+      'done',
+      'done'
+    ])
+    expect(
+      events.filter((event) => (event as { type?: string }).type === 'operation-done')
+    ).toHaveLength(2)
+    expect(messagesRepository.messages.map((message) => [message.role, message.content])).toEqual([
+      ['user', 'hello'],
+      ['assistant', ''],
+      ['user', 'hello\n\n[workspace activated]'],
+      ['assistant', 'retried']
+    ])
+  })
+
+  it('does not auto-retry source activation when original message is blank', async () => {
+    const events: unknown[] = []
+    const createAgentBackend = vi.fn(
+      (): AgentBackend => ({
+        async *chat(
+          _message: string,
+          _attachments?: MessageAttachment[],
+          options?: AgentChatOptions
+        ): AsyncGenerator<AgentEvent, void, void> {
+          void _message
+          void _attachments
+          yield {
+            type: 'source_activated',
+            sourceSlug: 'workspace',
+            originalMessage: '   ',
+            ...(options?.turnId === undefined ? {} : { turnId: options.turnId })
+          }
+        },
+        abort: vi.fn(async () => {}),
+        destroy: vi.fn(),
+        getModel: vi.fn(() => 'test-model'),
+        isProcessing: vi.fn(() => false),
+        respondToPermission: vi.fn(),
+        setModel: vi.fn()
+      })
+    )
+    const { messagesRepository, service } = createService({
+      createAgentBackend,
+      settings: createClaudeSettings()
+    })
+
+    const result = await service.sendMessage({ content: 'hello' }, (event) => events.push(event))
+    const assistantMessage = messagesRepository.messages.find(
+      (message) => message.role === 'assistant'
+    )
+
+    expect(result.operation.status).toBe('done')
+    expect(createAgentBackend).toHaveBeenCalledTimes(1)
+    expect(messagesRepository.messages).toHaveLength(2)
+    expect(assistantMessage).toMatchObject({ content: '', status: 'complete' })
+    expect(
+      events.filter((event) => (event as { type?: string }).type === 'source-activated')
+    ).toHaveLength(1)
   })
 
   it('does not write empty turn metadata for events without turn id', async () => {
