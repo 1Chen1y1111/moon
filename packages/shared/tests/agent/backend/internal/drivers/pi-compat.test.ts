@@ -12,7 +12,7 @@ describe('piCompatDriver', () => {
   it('rejects anthropic-messages endpoints while Pi is not wired', () => {
     expect(piCompatDriver.provider).toBe('pi_compat')
     expect(() =>
-      piCompatDriver.createBackend({
+      piCompatDriver.resolve({
         provider: 'pi_compat',
         model: 'compat-model',
         apiKey: 'test-key',
@@ -25,7 +25,7 @@ describe('piCompatDriver', () => {
 
   it('rejects openai-completions endpoints while Pi is not wired', () => {
     expect(() =>
-      piCompatDriver.createBackend({
+      piCompatDriver.resolve({
         provider: 'pi_compat',
         model: 'gpt-compatible',
         apiKey: 'test-key',

@@ -12,7 +12,7 @@ export const piCompatDriver: ProviderDriver = {
   /**
    * 明确拒绝创建 Pi-compatible backend，直到 Pi 子进程协议接入完成。
    */
-  createBackend() {
+  resolve() {
     throw new Error(piBackendNotWiredMessage)
   }
 }

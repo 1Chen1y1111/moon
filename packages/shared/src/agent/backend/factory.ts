@@ -4,10 +4,12 @@
  */
 
 import { agentBackendProviders } from '../../config'
+import { ClaudeAgent } from '../claude-agent'
 import { anthropicDriver } from './internal/drivers/anthropic'
 import { piCompatDriver } from './internal/drivers/pi-compat'
 import { piDriver } from './internal/drivers/pi'
 import type { ProviderDriver } from './internal/driver-types'
+import { resolveBackendContext, type ResolvedBackendContext } from './internal/runtime-resolver'
 import type { AgentBackend, AgentBackendConfig } from './types'
 
 const DRIVER_REGISTRY: Record<AgentBackendConfig['provider'], ProviderDriver> = {
@@ -30,6 +32,26 @@ function getProviderDriver(provider: AgentBackendConfig['provider']): ProviderDr
 }
 
 /**
+ * 根据已解析 backend context 创建具体 backend，保证 provider 创建主入口收口在 factory。
+ */
+function createBackendFromResolvedContext(context: ResolvedBackendContext): AgentBackend {
+  if (context.provider === 'anthropic') {
+    return new ClaudeAgent({
+      apiKey: context.apiKey,
+      baseUrl: context.baseUrl,
+      messages: context.messages,
+      model: context.model,
+      permissionMode: context.permissionMode,
+      sources: context.sources,
+      thinkingLevel: context.thinkingLevel,
+      workspace: context.workspace
+    })
+  }
+
+  throw new Error(`No resolved agent backend factory for provider: ${String(context.provider)}`)
+}
+
+/**
  * 返回当前架构规划中支持的 backend provider 列表，用于设置页和测试固定选项。
  */
 export function getAvailableAgentProviders(): AgentBackendConfig['provider'][] {
@@ -40,7 +62,10 @@ export function getAvailableAgentProviders(): AgentBackendConfig['provider'][] {
  * 根据 provider 创建具体 backend，调用方负责提前完成配置校验和密钥解析。
  */
 export function createBackend(config: AgentBackendConfig): AgentBackend {
-  return getProviderDriver(config.provider).createBackend(config)
+  const driver = getProviderDriver(config.provider)
+  const context = resolveBackendContext(config, driver.resolve(config))
+
+  return createBackendFromResolvedContext(context)
 }
 
 /**

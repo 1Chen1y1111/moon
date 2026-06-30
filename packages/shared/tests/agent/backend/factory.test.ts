@@ -14,6 +14,15 @@ import {
 } from '../../../src/agent'
 
 describe('agent backend factory', () => {
+  const sourceRecords = [
+    {
+      slug: 'github',
+      name: 'GitHub',
+      description: 'GitHub repository context',
+      status: 'active' as const
+    }
+  ]
+
   it('returns the registered backend provider list', () => {
     expect(getAvailableAgentProviders()).toEqual(['anthropic', 'pi', 'pi_compat'])
   })
@@ -28,6 +37,39 @@ describe('agent backend factory', () => {
 
     expect(backend).toBeInstanceOf(ClaudeAgent)
     expect(backend.getModel()).toBe('claude-sonnet-4-5')
+  })
+
+  it('passes resolved backend context into the Claude backend', () => {
+    const backend = createBackend({
+      provider: 'anthropic',
+      model: 'claude-sonnet-4-5',
+      apiKey: 'test-key',
+      baseUrl: 'https://api.example.com',
+      messages: [{ role: 'user', content: 'hello' }],
+      permissionMode: 'ask',
+      sources: sourceRecords,
+      thinkingLevel: 'high',
+      workspace: { name: 'moon', path: '/workspace/moon' }
+    }) as unknown as {
+      apiKey?: string
+      baseUrl?: string
+      messages: unknown[]
+      permissionMode?: string
+      sourceManager: { buildContextBlock: () => string }
+      thinkingLevel?: string
+      workspace?: { name?: string; path: string }
+    }
+
+    expect(backend.apiKey).toBe('test-key')
+    expect(backend.baseUrl).toBe('https://api.example.com')
+    expect(backend.messages).toEqual([{ role: 'user', content: 'hello' }])
+    expect(backend.permissionMode).toBe('ask')
+    expect(backend.thinkingLevel).toBe('high')
+    expect(backend.workspace).toEqual({ name: 'moon', path: '/workspace/moon' })
+    expect(backend.sourceManager.buildContextBlock()).toBe(`<sources>
+Active:
+- github (GitHub): GitHub repository context
+</sources>`)
   })
 
   it('rejects Anthropic Messages pi_compat config while Pi is not wired', () => {

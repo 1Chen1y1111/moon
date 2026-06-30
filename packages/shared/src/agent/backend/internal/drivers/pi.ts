@@ -12,7 +12,7 @@ export const piDriver: ProviderDriver = {
   /**
    * 明确拒绝创建 Pi backend，直到 Pi 子进程和 JSONL 协议接入完成。
    */
-  createBackend() {
+  resolve() {
     throw new Error(piBackendNotWiredMessage)
   }
 }

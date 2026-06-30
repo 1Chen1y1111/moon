@@ -4,13 +4,20 @@
  */
 
 import type { AgentBackendProvider } from '../../../config'
-import type { AgentBackend, AgentBackendConfig } from '../types'
+import type { AgentBackendConfig } from '../types'
+
+export type ProviderRuntimeResolution = {
+  provider: AgentBackendProvider
+  model: string
+  apiKey?: string
+  baseUrl?: string
+}
 
 export type ProviderDriver = {
   provider: AgentBackendProvider
 
   /**
-   * 根据统一 backend config 创建 provider 专属 agent 实例。
+   * 解析 provider 专属运行时基础信息；backend 实例统一交给 factory 创建。
    */
-  createBackend(config: AgentBackendConfig): AgentBackend
+  resolve(config: AgentBackendConfig): ProviderRuntimeResolution
 }

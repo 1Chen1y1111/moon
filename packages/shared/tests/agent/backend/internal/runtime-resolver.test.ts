@@ -11,10 +11,21 @@ import { describe, expect, it } from 'vitest'
 
 import {
   createClaudeQueryOptions,
+  resolveBackendContext,
   resolveClaudeCodeExecutablePath,
   resolveClaudeThinkingTokenBudget,
   resolveClaudeRuntimeEnv
 } from '../../../../src/agent/backend/internal/runtime-resolver'
+import { anthropicDriver } from '../../../../src/agent/backend/internal/drivers/anthropic'
+
+const sourceRecords = [
+  {
+    slug: 'github',
+    name: 'GitHub',
+    description: 'GitHub repository context',
+    status: 'active' as const
+  }
+]
 
 describe('resolveClaudeRuntimeEnv', () => {
   it('returns undefined when no runtime override is needed', () => {
@@ -90,6 +101,47 @@ describe('resolveClaudeThinkingTokenBudget', () => {
     expect(resolveClaudeThinkingTokenBudget('medium')).toBe(4096)
     expect(resolveClaudeThinkingTokenBudget('high')).toBe(8192)
     expect(resolveClaudeThinkingTokenBudget(undefined)).toBeUndefined()
+  })
+})
+
+describe('resolveBackendContext', () => {
+  it('combines provider runtime fields with shared backend runtime config', () => {
+    const config = {
+      provider: 'anthropic' as const,
+      model: 'claude-sonnet-4-5',
+      apiKey: 'test-key',
+      baseUrl: 'https://api.example.com',
+      messages: [{ role: 'user' as const, content: 'hello' }],
+      permissionMode: 'ask' as const,
+      sources: sourceRecords,
+      thinkingLevel: 'high' as const,
+      workspace: { name: 'moon', path: '/workspace/moon' }
+    }
+
+    expect(resolveBackendContext(config, anthropicDriver.resolve(config))).toEqual({
+      provider: 'anthropic',
+      apiKey: 'test-key',
+      baseUrl: 'https://api.example.com',
+      messages: [{ role: 'user', content: 'hello' }],
+      model: 'claude-sonnet-4-5',
+      permissionMode: 'ask',
+      sources: sourceRecords,
+      thinkingLevel: 'high',
+      workspace: { name: 'moon', path: '/workspace/moon' }
+    })
+  })
+
+  it('defaults messages to an empty array for backend construction', () => {
+    const config = {
+      provider: 'anthropic' as const,
+      model: 'claude-sonnet-4-5'
+    }
+
+    expect(resolveBackendContext(config, anthropicDriver.resolve(config))).toMatchObject({
+      provider: 'anthropic',
+      messages: [],
+      model: 'claude-sonnet-4-5'
+    })
   })
 })
 

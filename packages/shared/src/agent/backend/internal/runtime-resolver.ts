@@ -1,6 +1,6 @@
 /**
  * 负责解析 agent backend 运行时参数和 SDK 调用选项。
- * 它只处理进程环境与 SDK options 的组装，不负责事件转换、会话持久化或 UI 状态。
+ * 它只处理 backend context、进程环境与 SDK options 的组装，不负责事件转换、会话持久化或 UI 状态。
  */
 
 import type { Options } from '@anthropic-ai/claude-agent-sdk'
@@ -11,7 +11,14 @@ import { dirname, join, parse, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import type { ThinkingLevel } from '../../../config'
-import type { AgentBackendWorkspace } from '../types'
+import type { AgentPermissionMode } from '../../core/types'
+import type { AgentSourceRecord } from '../../core/source-manager'
+import type {
+  AgentBackendConfig,
+  AgentBackendMessage,
+  AgentBackendWorkspace
+} from '../types'
+import type { ProviderRuntimeResolution } from './driver-types'
 
 const thinkingLevelTokenBudgets: Record<ThinkingLevel, number> = {
   low: 1024,
@@ -31,6 +38,18 @@ export type ClaudeQueryOptionsInput = ClaudeRuntimeEnvInput & {
   hooks?: Options['hooks']
   model: string
   stderr?: (data: string) => void
+  thinkingLevel?: ThinkingLevel
+  workspace?: AgentBackendWorkspace
+}
+
+export type ResolvedBackendContext = {
+  provider: ProviderRuntimeResolution['provider']
+  model: string
+  apiKey?: string
+  baseUrl?: string
+  messages: AgentBackendMessage[]
+  permissionMode?: AgentPermissionMode
+  sources?: AgentSourceRecord[]
   thinkingLevel?: ThinkingLevel
   workspace?: AgentBackendWorkspace
 }
@@ -392,6 +411,26 @@ export function resolveClaudeThinkingTokenBudget(
   thinkingLevel: ThinkingLevel | undefined
 ): number | undefined {
   return thinkingLevel === undefined ? undefined : thinkingLevelTokenBudgets[thinkingLevel]
+}
+
+/**
+ * 合并 provider driver 解析结果和统一 backend config，形成 factory 创建 backend 的单一上下文。
+ */
+export function resolveBackendContext(
+  config: AgentBackendConfig,
+  providerRuntime: ProviderRuntimeResolution
+): ResolvedBackendContext {
+  return {
+    provider: providerRuntime.provider,
+    apiKey: providerRuntime.apiKey,
+    baseUrl: providerRuntime.baseUrl,
+    messages: config.messages ?? [],
+    model: providerRuntime.model,
+    permissionMode: config.permissionMode,
+    sources: config.sources,
+    thinkingLevel: config.thinkingLevel,
+    workspace: config.workspace
+  }
 }
 
 /**
