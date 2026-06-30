@@ -7,6 +7,7 @@ import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import type {
+  SessionSourceActivator,
   SessionSourceProvider,
   SessionSourceProviderScope
 } from '@moon/server-core/sessions'
@@ -54,7 +55,7 @@ function createReadErrorMessage(guidePath: string, error: unknown): string {
 /**
  * 基于项目元数据提供当前 workspace source，作为 SessionSourceProvider 的本地默认实现。
  */
-export class WorkspaceSourceProvider implements SessionSourceProvider {
+export class WorkspaceSourceProvider implements SessionSourceProvider, SessionSourceActivator {
   /**
    * 根据会话作用域派生 sources；未绑定项目的会话不注入 source context。
    */
@@ -94,5 +95,12 @@ export class WorkspaceSourceProvider implements SessionSourceProvider {
         }
       ]
     }
+  }
+
+  /**
+   * 激活内置 workspace source；这里只表达下一轮可重新解析 workspace context，不连接外部 MCP。
+   */
+  async activateSource(scope: SessionSourceProviderScope, sourceSlug: string): Promise<boolean> {
+    return sourceSlug === 'workspace' && scope.project !== null
   }
 }

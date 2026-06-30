@@ -60,10 +60,14 @@ describe('ChatService facade', () => {
 
     const service = new ChatService(dependencies)
 
+    const sessionManagerInput = SessionManager.mock.calls[0]?.[0]
+
     expect(SessionManager).toHaveBeenCalledWith({
       ...dependencies,
+      sourceActivator: expect.any(WorkspaceSourceProvider),
       sourceProvider: expect.any(WorkspaceSourceProvider)
     })
+    expect(sessionManagerInput?.sourceActivator).toBe(sessionManagerInput?.sourceProvider)
     expect(createSessionHandlers).toHaveBeenCalledWith({ sessionManager })
 
     await expect(service.listSessions()).resolves.toBe(sessions)

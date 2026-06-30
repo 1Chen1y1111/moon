@@ -94,6 +94,38 @@ describe('WorkspaceSourceProvider', () => {
     ])
   })
 
+  it('activates the workspace source when the session is bound to a project', async () => {
+    const provider = new WorkspaceSourceProvider()
+    const project: ProjectRecord = {
+      id: 'project-1',
+      name: 'Moon',
+      path: '/workspace/moon',
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }
+
+    await expect(provider.activateSource(createScope(project), 'workspace')).resolves.toBe(true)
+  })
+
+  it('does not activate the workspace source without a bound project', async () => {
+    const provider = new WorkspaceSourceProvider()
+
+    await expect(provider.activateSource(createScope(null), 'workspace')).resolves.toBe(false)
+  })
+
+  it('does not activate non-workspace sources', async () => {
+    const provider = new WorkspaceSourceProvider()
+    const project: ProjectRecord = {
+      id: 'project-1',
+      name: 'Moon',
+      path: '/workspace/moon',
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }
+
+    await expect(provider.activateSource(createScope(project), 'linear')).resolves.toBe(false)
+  })
+
   it('loads AGENTS.md as workspace source instructions', async () => {
     const provider = new WorkspaceSourceProvider()
     const projectPath = await createProjectDirectory()

@@ -60,9 +60,11 @@ export class ChatService {
   private readonly sessionHandlers: SessionHandlers
 
   constructor(dependencies: ChatServiceDependencies) {
+    const defaultSourceProvider = new WorkspaceSourceProvider()
     const sessionManager = new SessionManager({
       ...dependencies,
-      sourceProvider: dependencies.sourceProvider ?? new WorkspaceSourceProvider()
+      sourceActivator: dependencies.sourceActivator ?? defaultSourceProvider,
+      sourceProvider: dependencies.sourceProvider ?? defaultSourceProvider
     })
 
     this.sessionHandlers = createSessionHandlers({ sessionManager })
