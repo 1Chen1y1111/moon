@@ -180,6 +180,64 @@ describe('SourceManager', () => {
     expect(sourceManager.checkInactiveMcpSourceTool('mcp__docs')).toBeNull()
   })
 
+  it('detects inactive source tool errors from conservative tool-not-found messages', () => {
+    const sourceManager = new SourceManager({ sources })
+
+    expect(
+      sourceManager.detectInactiveSourceToolError(
+        'mcp__docs__search',
+        'No such tool available: mcp__docs__search</tool_use_error>'
+      )
+    ).toEqual({
+      sourceSlug: 'docs',
+      toolName: 'mcp__docs__search'
+    })
+    expect(
+      sourceManager.detectInactiveSourceToolError(
+        'mcp__slack__list_channels',
+        'No tool available: mcp__slack__list_channels'
+      )
+    ).toEqual({
+      sourceSlug: 'slack',
+      toolName: 'mcp__slack__list_channels'
+    })
+    expect(
+      sourceManager.detectInactiveSourceToolError(
+        'mcp__linear__createIssue',
+        "Tool 'mcp__linear__createIssue' not found"
+      )
+    ).toEqual({
+      sourceSlug: 'linear',
+      toolName: 'mcp__linear__createIssue'
+    })
+  })
+
+  it('ignores active, unknown, non-MCP, and unrelated tool result errors', () => {
+    const sourceManager = new SourceManager({ sources })
+
+    expect(
+      sourceManager.detectInactiveSourceToolError(
+        'mcp__github__list_issues',
+        'No such tool available: mcp__github__list_issues'
+      )
+    ).toBeNull()
+    expect(
+      sourceManager.detectInactiveSourceToolError(
+        'mcp__missing__search',
+        'No such tool available: mcp__missing__search'
+      )
+    ).toBeNull()
+    expect(
+      sourceManager.detectInactiveSourceToolError('Read', "Tool 'Read' not found")
+    ).toBeNull()
+    expect(
+      sourceManager.detectInactiveSourceToolError(
+        'mcp__docs__search',
+        'Source request failed with a timeout'
+      )
+    ).toBeNull()
+  })
+
   it('reflects runtime status changes in the prompt context block', () => {
     const sourceManager = new SourceManager({
       sources: [sources[0], sources[3]]

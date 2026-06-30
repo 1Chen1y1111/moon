@@ -278,6 +278,30 @@ export class ClaudeAgent extends BaseAgent {
             hasCompleteEvent = true
           }
 
+          if (normalizedEvent.type === 'tool_result' && normalizedEvent.isError) {
+            const inactiveSourceError = this.sourceManager.detectInactiveSourceToolError(
+              normalizedEvent.toolName ?? '',
+              typeof normalizedEvent.result === 'string' ? normalizedEvent.result : ''
+            )
+
+            if (inactiveSourceError !== null && this.onSourceActivationRequest !== null) {
+              try {
+                const activated = await this.onSourceActivationRequest(
+                  inactiveSourceError.sourceSlug
+                )
+
+                if (activated) {
+                  this.setPendingSourceActivationRestart({
+                    sourceSlug: inactiveSourceError.sourceSlug,
+                    originalMessage: message
+                  })
+                }
+              } catch {
+                // 保留原始 tool_result 错误，让现有事件流继续向下游呈现失败原因。
+              }
+            }
+          }
+
           if (
             sourceActivationDrain.observe(normalizedEvent, () =>
               this.consumePendingSourceActivationRestart()

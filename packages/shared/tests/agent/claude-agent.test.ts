@@ -148,6 +148,51 @@ function createToolResultQueryClaudeMock(onBeforeToolResult?: () => void) {
 }
 
 /**
+ * 创建会产出 inactive source tool-not-found 错误的 Claude SDK query mock。
+ */
+function createInactiveSourceToolErrorQueryClaudeMock(
+  errorMessage = 'No such tool available: mcp__linear__createIssue'
+) {
+  return vi.fn(async function* () {
+    yield {
+      type: 'assistant',
+      message: {
+        content: [
+          {
+            type: 'tool_use',
+            id: 'source-tool-1',
+            name: 'mcp__linear__createIssue',
+            input: { title: 'Bug' }
+          }
+        ]
+      }
+    }
+
+    yield {
+      type: 'user',
+      isSynthetic: true,
+      message: {
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'source-tool-1',
+            content: errorMessage,
+            is_error: true
+          }
+        ]
+      }
+    }
+
+    yield {
+      type: 'result',
+      subtype: 'success',
+      is_error: false,
+      session_id: 'sdk-session-1'
+    }
+  })
+}
+
+/**
  * 创建会触发 Claude SDK Bash PreToolUse hook 的 query mock。
  */
 function createBashHookQueryClaudeMock() {
@@ -529,6 +574,224 @@ inspect repo`
     ])
     expect(events.some((event) => event.type === 'tool_result')).toBe(false)
     expect(events.some((event) => event.type === 'complete')).toBe(false)
+  })
+
+  it('activates inactive sources from tool-not-found tool results and ends the turn', async () => {
+    const queryClaude = createInactiveSourceToolErrorQueryClaudeMock()
+    const requestSourceActivation = vi.fn(async () => true)
+    const agent = new ClaudeAgent({
+      model: 'claude-sonnet',
+      messages: [],
+      queryClaude: queryClaude as never,
+      sources: [
+        {
+          slug: 'linear',
+          name: 'Linear',
+          status: 'inactive'
+        }
+      ]
+    })
+    const events: AgentEvent[] = []
+
+    agent.onSourceActivationRequest = requestSourceActivation
+
+    for await (const event of agent.chat('create linear issue', undefined, {
+      turnId: 'operation-1'
+    })) {
+      events.push(event)
+    }
+
+    expect(requestSourceActivation).toHaveBeenCalledWith('linear')
+    expect(events).toEqual([
+      {
+        type: 'tool_start',
+        toolUseId: 'source-tool-1',
+        toolName: 'mcp__linear__createIssue',
+        input: { title: 'Bug' },
+        turnId: 'operation-1'
+      },
+      {
+        type: 'source_activated',
+        sourceSlug: 'linear',
+        originalMessage: 'create linear issue',
+        turnId: 'operation-1'
+      }
+    ])
+    expect(events.some((event) => event.type === 'tool_result')).toBe(false)
+    expect(events.some((event) => event.type === 'complete')).toBe(false)
+  })
+
+  it('keeps the original inactive source tool error when activation fails', async () => {
+    const queryClaude = createInactiveSourceToolErrorQueryClaudeMock()
+    const requestSourceActivation = vi.fn(async () => false)
+    const agent = new ClaudeAgent({
+      model: 'claude-sonnet',
+      messages: [],
+      queryClaude: queryClaude as never,
+      sources: [
+        {
+          slug: 'linear',
+          name: 'Linear',
+          status: 'inactive'
+        }
+      ]
+    })
+    const events: AgentEvent[] = []
+
+    agent.onSourceActivationRequest = requestSourceActivation
+
+    for await (const event of agent.chat('create linear issue', undefined, {
+      turnId: 'operation-1'
+    })) {
+      events.push(event)
+    }
+
+    expect(requestSourceActivation).toHaveBeenCalledWith('linear')
+    expect(events).toEqual(
+      expect.arrayContaining([
+        {
+          type: 'tool_result',
+          toolUseId: 'source-tool-1',
+          toolName: 'mcp__linear__createIssue',
+          input: { title: 'Bug' },
+          isError: true,
+          result: 'No such tool available: mcp__linear__createIssue',
+          turnId: 'operation-1'
+        },
+        { type: 'complete' }
+      ])
+    )
+    expect(events.some((event) => event.type === 'source_activated')).toBe(false)
+  })
+
+  it('keeps the original inactive source tool error when activation throws', async () => {
+    const queryClaude = createInactiveSourceToolErrorQueryClaudeMock()
+    const requestSourceActivation = vi.fn(async () => {
+      throw new Error('activation crashed')
+    })
+    const agent = new ClaudeAgent({
+      model: 'claude-sonnet',
+      messages: [],
+      queryClaude: queryClaude as never,
+      sources: [
+        {
+          slug: 'linear',
+          name: 'Linear',
+          status: 'inactive'
+        }
+      ]
+    })
+    const events: AgentEvent[] = []
+
+    agent.onSourceActivationRequest = requestSourceActivation
+
+    for await (const event of agent.chat('create linear issue', undefined, {
+      turnId: 'operation-1'
+    })) {
+      events.push(event)
+    }
+
+    expect(requestSourceActivation).toHaveBeenCalledWith('linear')
+    expect(events).toEqual(
+      expect.arrayContaining([
+        {
+          type: 'tool_result',
+          toolUseId: 'source-tool-1',
+          toolName: 'mcp__linear__createIssue',
+          input: { title: 'Bug' },
+          isError: true,
+          result: 'No such tool available: mcp__linear__createIssue',
+          turnId: 'operation-1'
+        },
+        { type: 'complete' }
+      ])
+    )
+    expect(events.some((event) => event.type === 'source_activated')).toBe(false)
+  })
+
+  it('keeps the original inactive source tool error when no activation callback exists', async () => {
+    const queryClaude = createInactiveSourceToolErrorQueryClaudeMock()
+    const agent = new ClaudeAgent({
+      model: 'claude-sonnet',
+      messages: [],
+      queryClaude: queryClaude as never,
+      sources: [
+        {
+          slug: 'linear',
+          name: 'Linear',
+          status: 'inactive'
+        }
+      ]
+    })
+    const events: AgentEvent[] = []
+
+    for await (const event of agent.chat('create linear issue', undefined, {
+      turnId: 'operation-1'
+    })) {
+      events.push(event)
+    }
+
+    expect(events).toEqual(
+      expect.arrayContaining([
+        {
+          type: 'tool_result',
+          toolUseId: 'source-tool-1',
+          toolName: 'mcp__linear__createIssue',
+          input: { title: 'Bug' },
+          isError: true,
+          result: 'No such tool available: mcp__linear__createIssue',
+          turnId: 'operation-1'
+        },
+        { type: 'complete' }
+      ])
+    )
+    expect(events.some((event) => event.type === 'source_activated')).toBe(false)
+  })
+
+  it.each([
+    {
+      name: 'active',
+      sources: [{ slug: 'linear', name: 'Linear', status: 'active' as const }]
+    },
+    {
+      name: 'unknown',
+      sources: [] as AgentSourceRecord[]
+    }
+  ])('keeps $name source tool-not-found errors on the normal path', async ({ sources }) => {
+    const queryClaude = createInactiveSourceToolErrorQueryClaudeMock()
+    const requestSourceActivation = vi.fn(async () => true)
+    const agent = new ClaudeAgent({
+      model: 'claude-sonnet',
+      messages: [],
+      queryClaude: queryClaude as never,
+      sources
+    })
+    const events: AgentEvent[] = []
+
+    agent.onSourceActivationRequest = requestSourceActivation
+
+    for await (const event of agent.chat('create linear issue', undefined, {
+      turnId: 'operation-1'
+    })) {
+      events.push(event)
+    }
+
+    expect(requestSourceActivation).not.toHaveBeenCalled()
+    expect(events).toEqual(
+      expect.arrayContaining([
+        {
+          type: 'tool_result',
+          toolUseId: 'source-tool-1',
+          toolName: 'mcp__linear__createIssue',
+          input: { title: 'Bug' },
+          isError: true,
+          result: 'No such tool available: mcp__linear__createIssue',
+          turnId: 'operation-1'
+        },
+        { type: 'complete' }
+      ])
+    )
+    expect(events.some((event) => event.type === 'source_activated')).toBe(false)
   })
 
   it('keeps normal tool result and completion behavior without pending source activation', async () => {

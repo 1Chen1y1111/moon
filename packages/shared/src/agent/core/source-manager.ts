@@ -27,6 +27,14 @@ export type SourceToolActivationCheckResult = {
   sourceExists: boolean
 }
 
+/**
+ * 描述一次 tool_result 错误中识别出的未激活 source 工具调用。
+ */
+export type InactiveSourceToolError = {
+  sourceSlug: string
+  toolName: string
+}
+
 const sourceStatusOrder: AgentSourceStatus[] = ['active', 'needs_auth', 'failed', 'inactive']
 
 const sourceStatusLabels: Record<AgentSourceStatus, string> = {
@@ -63,6 +71,34 @@ function formatSourceLine(source: AgentSourceRecord): string {
  */
 function formatSourceSection(status: AgentSourceStatus, sources: AgentSourceRecord[]): string {
   return [sourceStatusLabels[status] + ':', ...sources.map(formatSourceLine)].join('\n')
+}
+
+/**
+ * 从 Claude/MCP tool-not-found 错误文本里提取原始工具名。
+ */
+function extractUnavailableToolName(errorMessage: string): string | null {
+  const noSuchToolMatch = errorMessage.match(/No (?:such )?tool available:\s*([^\s<]+)/i)
+
+  if (noSuchToolMatch?.[1] !== undefined) {
+    return noSuchToolMatch[1]
+  }
+
+  const toolNotFoundMatch = errorMessage.match(/Tool\s+['"`]([^'"`]+)['"`]\s+not found/i)
+
+  return toolNotFoundMatch?.[1] ?? null
+}
+
+/**
+ * 从 `mcp__{sourceSlug}__{tool}` 形态的工具名里读取 source slug。
+ */
+function readMcpSourceSlug(toolName: string): string | null {
+  const parts = toolName.split('__')
+
+  if (parts.length < 3 || parts[0] !== 'mcp' || parts[1] === undefined || parts[1] === '') {
+    return null
+  }
+
+  return parts[1]
 }
 
 /**
@@ -162,14 +198,13 @@ export class SourceManager {
    * 判断 Claude MCP 工具名是否指向已知但尚未 active 的 source。
    */
   checkInactiveMcpSourceTool(toolName: string): SourceToolActivationCheckResult | null {
-    const parts = toolName.split('__')
+    const sourceSlug = readMcpSourceSlug(toolName)
 
-    if (parts.length < 3 || parts[0] !== 'mcp') {
+    if (sourceSlug === null) {
       return null
     }
 
-    const sourceSlug = parts[1]
-    const source = sourceSlug === undefined ? undefined : this.sourcesBySlug.get(sourceSlug)
+    const source = this.sourcesBySlug.get(sourceSlug)
 
     if (source === undefined || source.status === 'active') {
       return null
@@ -178,6 +213,37 @@ export class SourceManager {
     return {
       sourceSlug,
       sourceExists: true
+    }
+  }
+
+  /**
+   * 判断工具结果错误是否表示 Claude 调用了已知但未激活的 MCP source 工具。
+   */
+  detectInactiveSourceToolError(
+    _toolName: string,
+    errorMessage: string
+  ): InactiveSourceToolError | null {
+    const extractedToolName = extractUnavailableToolName(errorMessage)
+
+    if (extractedToolName === null) {
+      return null
+    }
+
+    const sourceSlug = readMcpSourceSlug(extractedToolName)
+
+    if (sourceSlug === null) {
+      return null
+    }
+
+    const source = this.sourcesBySlug.get(sourceSlug)
+
+    if (source === undefined || source.status === 'active') {
+      return null
+    }
+
+    return {
+      sourceSlug,
+      toolName: extractedToolName
     }
   }
 
