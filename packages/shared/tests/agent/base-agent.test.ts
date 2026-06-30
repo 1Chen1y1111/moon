@@ -9,6 +9,7 @@ import { BaseAgent } from '../../src/agent'
 import type {
   AgentChatOptions,
   AgentEvent,
+  PendingSourceActivationRestart,
   AgentSourceRecord,
   MessageAttachment
 } from '../../src/agent'
@@ -56,6 +57,20 @@ class TestAgent extends BaseAgent {
    */
   consumeActivatedSourcesForTest(): string[] {
     return this.consumeActivatedSources()
+  }
+
+  /**
+   * 暴露 BaseAgent 的 pending source activation 写入能力，验证 first-writer-wins。
+   */
+  setPendingSourceActivationRestartForTest(pending: PendingSourceActivationRestart): void {
+    this.setPendingSourceActivationRestart(pending)
+  }
+
+  /**
+   * 暴露 BaseAgent 的 pending source activation 消费能力，验证清理语义。
+   */
+  consumePendingSourceActivationRestartForTest(): PendingSourceActivationRestart | null {
+    return this.consumePendingSourceActivationRestart()
   }
 
   /**
@@ -243,6 +258,64 @@ Active:
 
 USER:
 previous question`)
+  })
+
+  it('keeps the first pending source activation restart until consumed', () => {
+    const agent = new TestAgent({ model: 'claude-sonnet' })
+
+    agent.setPendingSourceActivationRestartForTest({
+      sourceSlug: 'workspace',
+      originalMessage: 'inspect repo'
+    })
+    agent.setPendingSourceActivationRestartForTest({
+      sourceSlug: 'github',
+      originalMessage: 'inspect repo again'
+    })
+
+    expect(agent.consumePendingSourceActivationRestartForTest()).toEqual({
+      sourceSlug: 'workspace',
+      originalMessage: 'inspect repo'
+    })
+  })
+
+  it('allows a new pending source activation restart after consume', () => {
+    const agent = new TestAgent({ model: 'claude-sonnet' })
+
+    agent.setPendingSourceActivationRestartForTest({
+      sourceSlug: 'workspace',
+      originalMessage: 'inspect repo'
+    })
+
+    expect(agent.consumePendingSourceActivationRestartForTest()).toEqual({
+      sourceSlug: 'workspace',
+      originalMessage: 'inspect repo'
+    })
+
+    agent.setPendingSourceActivationRestartForTest({
+      sourceSlug: 'github',
+      originalMessage: 'inspect repo again'
+    })
+
+    expect(agent.consumePendingSourceActivationRestartForTest()).toEqual({
+      sourceSlug: 'github',
+      originalMessage: 'inspect repo again'
+    })
+    expect(agent.consumePendingSourceActivationRestartForTest()).toBeNull()
+  })
+
+  it('clears pending source activation restart when starting a new turn', () => {
+    const agent = new TestAgent({ model: 'claude-sonnet' })
+
+    agent.setPendingSourceActivationRestartForTest({
+      sourceSlug: 'workspace',
+      originalMessage: 'inspect repo'
+    })
+
+    const endTurn = agent.beginTurnForTest()
+
+    expect(agent.consumePendingSourceActivationRestartForTest()).toBeNull()
+
+    endTurn()
   })
 
   it('owns permission checks through shared core modules', () => {

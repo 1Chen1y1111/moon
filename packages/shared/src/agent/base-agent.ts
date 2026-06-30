@@ -15,6 +15,7 @@ import type {
   MessageAttachment
 } from './backend/types'
 import { EventQueue } from './backend/event-queue'
+import type { PendingSourceActivationRestart } from './source-activation-drain'
 import {
   PermissionManager,
   type AgentToolPermissionCheckResult,
@@ -59,6 +60,7 @@ export abstract class BaseAgent implements AgentBackend {
   private currentTurnId: string | null = null
   private eventQueue: EventQueue | null = null
   private model: string
+  private pendingSourceActivationRestart: PendingSourceActivationRestart | null = null
   private processing = false
 
   /**
@@ -153,6 +155,7 @@ export abstract class BaseAgent implements AgentBackend {
     this.currentTurnId = turnId
     this.eventQueue = eventQueue
     this.processing = true
+    this.pendingSourceActivationRestart = null
     this.sourceManager.clearActivatedSources()
 
     if (options.abortSignal?.aborted) {
@@ -189,6 +192,7 @@ export abstract class BaseAgent implements AgentBackend {
     }
 
     this.rejectPendingPermissions('Agent turn ended.')
+    this.pendingSourceActivationRestart = null
     this.processing = false
   }
 
@@ -269,6 +273,28 @@ export abstract class BaseAgent implements AgentBackend {
   }
 
   /**
+   * 记录一次等待 drain 后发出的 source activation restart；同一轮内采用 first-writer-wins。
+   */
+  protected setPendingSourceActivationRestart(pending: PendingSourceActivationRestart): void {
+    if (this.pendingSourceActivationRestart !== null) {
+      return
+    }
+
+    this.pendingSourceActivationRestart = pending
+  }
+
+  /**
+   * 消费并清空 pending source activation restart，供 drain controller 在工具结果边界读取。
+   */
+  protected consumePendingSourceActivationRestart(): PendingSourceActivationRestart | null {
+    const pending = this.pendingSourceActivationRestart
+
+    this.pendingSourceActivationRestart = null
+
+    return pending
+  }
+
+  /**
    * 使用 BaseAgent 持有的 PermissionManager 检查 Claude SDK 工具调用。
    */
   protected checkClaudeToolUse(
@@ -302,6 +328,7 @@ export abstract class BaseAgent implements AgentBackend {
     this.abortController = null
     this.currentTurnId = null
     this.eventQueue = null
+    this.pendingSourceActivationRestart = null
     this.processing = false
   }
 }
