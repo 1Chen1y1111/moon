@@ -11,7 +11,11 @@ import { join } from 'node:path'
 
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { SessionManager, type SessionSourceProvider } from '@moon/server-core/sessions'
+import {
+  SessionManager,
+  type SessionSourceActivator,
+  type SessionSourceProvider
+} from '@moon/server-core/sessions'
 import type {
   AgentOperationRecord,
   MessageRecord,
@@ -469,6 +473,7 @@ function createService(input: {
   messages?: MessageRecord[]
   projects?: ProjectRecord[]
   sessions?: SessionRecord[]
+  sourceActivator?: SessionSourceActivator
   sourceProvider?: SessionSourceProvider
   settings: AppSettings
 }): CreateServiceResult {
@@ -539,6 +544,7 @@ function createService(input: {
       projectsRepository: projectsRepository as never,
       sessionsRepository: sessionsRepository as never,
       settingsRepository: settingsRepository as never,
+      sourceActivator: input.sourceActivator,
       sourceProvider: input.sourceProvider,
       threadsRepository: threadsRepository as never,
       toolInvocationsRepository: toolInvocationsRepository as never,
@@ -754,6 +760,129 @@ describe('SessionManager.sendMessage', () => {
         sources
       })
     )
+  })
+
+  it('wires source activation requests to the session source activator', async () => {
+    const project = {
+      id: 'project-1',
+      name: 'moon',
+      path: '/workspace/moon',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:00.000Z'
+    }
+    const pendingRestarts: unknown[] = []
+    const sourceActivator: SessionSourceActivator = {
+      activateSource: vi.fn(async (scope, sourceSlug) => {
+        expect(scope.project).toMatchObject({ id: project.id, path: project.path })
+        expect(scope.session.projectId).toBe(project.id)
+        expect(scope.topic.sessionId).toBe(scope.session.id)
+        expect(scope.thread.topicId).toBe(scope.topic.id)
+        expect(sourceSlug).toBe('workspace')
+
+        return true
+      })
+    }
+    const createAgentBackend = vi.fn((): AgentBackend => {
+      const backend: AgentBackend = {
+        async *chat(): AsyncGenerator<AgentEvent, void, void> {
+          const activated = await backend.onSourceActivationRequest?.('workspace')
+
+          yield { type: 'text_delta', text: activated === true ? 'activated' : 'inactive' }
+        },
+        abort: vi.fn(async () => {}),
+        destroy: vi.fn(),
+        getModel: vi.fn(() => 'test-model'),
+        isProcessing: vi.fn(() => false),
+        respondToPermission: vi.fn(),
+        setModel: vi.fn(),
+        setPendingSourceActivationRestart: vi.fn((pending) => {
+          pendingRestarts.push(pending)
+        })
+      }
+
+      return backend
+    })
+    const { service } = createService({
+      activeProjectId: project.id,
+      createAgentBackend,
+      projects: [project],
+      sourceActivator,
+      settings: createClaudeSettings()
+    })
+
+    await service.sendMessage({ content: 'hello' })
+
+    expect(sourceActivator.activateSource).toHaveBeenCalledTimes(1)
+    expect(pendingRestarts).toEqual([{ sourceSlug: 'workspace', originalMessage: 'hello' }])
+  })
+
+  it('does not write pending source activation when activation fails', async () => {
+    const pendingRestarts: unknown[] = []
+    const sourceActivator: SessionSourceActivator = {
+      activateSource: vi.fn(async () => false)
+    }
+    const createAgentBackend = vi.fn((): AgentBackend => {
+      const backend: AgentBackend = {
+        async *chat(): AsyncGenerator<AgentEvent, void, void> {
+          const activated = await backend.onSourceActivationRequest?.('workspace')
+
+          yield { type: 'text_delta', text: activated === true ? 'activated' : 'inactive' }
+        },
+        abort: vi.fn(async () => {}),
+        destroy: vi.fn(),
+        getModel: vi.fn(() => 'test-model'),
+        isProcessing: vi.fn(() => false),
+        respondToPermission: vi.fn(),
+        setModel: vi.fn(),
+        setPendingSourceActivationRestart: vi.fn((pending) => {
+          pendingRestarts.push(pending)
+        })
+      }
+
+      return backend
+    })
+    const { service } = createService({
+      createAgentBackend,
+      sourceActivator,
+      settings: createClaudeSettings()
+    })
+
+    await service.sendMessage({ content: 'hello' })
+
+    expect(sourceActivator.activateSource).toHaveBeenCalledTimes(1)
+    expect(pendingRestarts).toEqual([])
+  })
+
+  it('does not write pending source activation when no activator is configured', async () => {
+    const pendingRestarts: unknown[] = []
+    const createAgentBackend = vi.fn((): AgentBackend => {
+      const backend: AgentBackend = {
+        async *chat(): AsyncGenerator<AgentEvent, void, void> {
+          const activated = await backend.onSourceActivationRequest?.('workspace')
+
+          yield { type: 'text_delta', text: activated === true ? 'activated' : 'inactive' }
+        },
+        abort: vi.fn(async () => {}),
+        destroy: vi.fn(),
+        getModel: vi.fn(() => 'test-model'),
+        isProcessing: vi.fn(() => false),
+        respondToPermission: vi.fn(),
+        setModel: vi.fn(),
+        setPendingSourceActivationRestart: vi.fn((pending) => {
+          pendingRestarts.push(pending)
+        })
+      }
+
+      return backend
+    })
+    const { service } = createService({
+      createAgentBackend,
+      settings: createClaudeSettings()
+    })
+
+    await service.sendMessage({ content: 'hello' })
+
+    expect(pendingRestarts).toEqual([])
   })
 
   it('passes operation id as agent turn id when running a backend', async () => {

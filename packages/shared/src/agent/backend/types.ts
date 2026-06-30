@@ -20,6 +20,13 @@ export type AgentChatOptions = {
   turnId?: string
 }
 
+export type AgentSourceActivationCallback = (sourceSlug: string) => Promise<boolean>
+
+export type AgentSourceActivationRestart = {
+  sourceSlug: string
+  originalMessage: string
+}
+
 export type AgentBackendMessage = {
   role: 'system' | 'user' | 'assistant'
   content: string
@@ -46,6 +53,11 @@ export type AgentBackendConfig = {
 }
 
 export interface AgentBackend {
+  /**
+   * 请求宿主会话激活指定 source；backend 只负责发起请求和等待布尔结果。
+   */
+  onSourceActivationRequest?: AgentSourceActivationCallback | null
+
   /**
    * 发送一条用户消息并返回统一事件流，调用方负责把事件映射到会话状态和持久化结构。
    */
@@ -84,4 +96,9 @@ export interface AgentBackend {
    * 更新当前模型 ID；调用方负责在 UI 或配置层完成模型可用性校验。
    */
   setModel(model: string): void
+
+  /**
+   * 记录 source activation 成功后需要在工具结果批次边界发出的 restart 信号。
+   */
+  setPendingSourceActivationRestart?(pending: AgentSourceActivationRestart): void
 }

@@ -60,13 +60,6 @@ class TestAgent extends BaseAgent {
   }
 
   /**
-   * 暴露 BaseAgent 的 pending source activation 写入能力，验证 first-writer-wins。
-   */
-  setPendingSourceActivationRestartForTest(pending: PendingSourceActivationRestart): void {
-    this.setPendingSourceActivationRestart(pending)
-  }
-
-  /**
    * 暴露 BaseAgent 的 pending source activation 消费能力，验证清理语义。
    */
   consumePendingSourceActivationRestartForTest(): PendingSourceActivationRestart | null {
@@ -263,11 +256,11 @@ previous question`)
   it('keeps the first pending source activation restart until consumed', () => {
     const agent = new TestAgent({ model: 'claude-sonnet' })
 
-    agent.setPendingSourceActivationRestartForTest({
+    agent.setPendingSourceActivationRestart({
       sourceSlug: 'workspace',
       originalMessage: 'inspect repo'
     })
-    agent.setPendingSourceActivationRestartForTest({
+    agent.setPendingSourceActivationRestart({
       sourceSlug: 'github',
       originalMessage: 'inspect repo again'
     })
@@ -281,7 +274,7 @@ previous question`)
   it('allows a new pending source activation restart after consume', () => {
     const agent = new TestAgent({ model: 'claude-sonnet' })
 
-    agent.setPendingSourceActivationRestartForTest({
+    agent.setPendingSourceActivationRestart({
       sourceSlug: 'workspace',
       originalMessage: 'inspect repo'
     })
@@ -291,7 +284,7 @@ previous question`)
       originalMessage: 'inspect repo'
     })
 
-    agent.setPendingSourceActivationRestartForTest({
+    agent.setPendingSourceActivationRestart({
       sourceSlug: 'github',
       originalMessage: 'inspect repo again'
     })
@@ -306,7 +299,7 @@ previous question`)
   it('clears pending source activation restart when starting a new turn', () => {
     const agent = new TestAgent({ model: 'claude-sonnet' })
 
-    agent.setPendingSourceActivationRestartForTest({
+    agent.setPendingSourceActivationRestart({
       sourceSlug: 'workspace',
       originalMessage: 'inspect repo'
     })
@@ -344,6 +337,12 @@ previous question`)
     agent.setModel('claude-opus')
 
     expect(agent.getModel()).toBe('claude-opus')
+  })
+
+  it('starts without a source activation request callback', () => {
+    const agent = new TestAgent({ model: 'claude-sonnet' })
+
+    expect(agent.onSourceActivationRequest).toBeNull()
   })
 
   it('tracks processing while a turn is active', async () => {

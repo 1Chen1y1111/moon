@@ -12,6 +12,7 @@ import type {
   AgentChatOptions,
   AgentEvent,
   AgentPermissionDecision,
+  AgentSourceActivationCallback,
   MessageAttachment
 } from './backend/types'
 import { EventQueue } from './backend/event-queue'
@@ -49,6 +50,10 @@ type PendingAgentPermission = {
  * 提供所有 backend 都需要的模型状态、core modules、运行中标记、取消和权限决策桥接。
  */
 export abstract class BaseAgent implements AgentBackend {
+  /**
+   * 宿主会话注入的 source activation 请求回调；backend 只调用它，不直接激活 source。
+   */
+  onSourceActivationRequest: AgentSourceActivationCallback | null = null
   protected readonly permissionManager?: PermissionManager
   protected readonly permissionMode?: AgentPermissionMode
   protected readonly promptBuilder: PromptBuilder
@@ -275,7 +280,7 @@ export abstract class BaseAgent implements AgentBackend {
   /**
    * 记录一次等待 drain 后发出的 source activation restart；同一轮内采用 first-writer-wins。
    */
-  protected setPendingSourceActivationRestart(pending: PendingSourceActivationRestart): void {
+  setPendingSourceActivationRestart(pending: PendingSourceActivationRestart): void {
     if (this.pendingSourceActivationRestart !== null) {
       return
     }

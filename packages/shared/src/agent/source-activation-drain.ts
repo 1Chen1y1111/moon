@@ -3,12 +3,9 @@
  * 它只处理纯 AgentEvent 和 pending 状态，不触发 abort、重试或真实 source 激活。
  */
 
-import type { AgentEvent } from './backend/types'
+import type { AgentEvent, AgentSourceActivationRestart } from './backend/types'
 
-export type PendingSourceActivationRestart = {
-  sourceSlug: string
-  originalMessage: string
-}
+export type PendingSourceActivationRestart = AgentSourceActivationRestart
 
 export type SourceActivationDrainPolicy = 'batch-boundary'
 

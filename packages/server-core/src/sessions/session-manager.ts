@@ -147,6 +147,10 @@ export type SessionSourceProvider = {
   resolveSources: (scope: SessionSourceProviderScope) => Promise<AgentSourceRecord[]>
 }
 
+export type SessionSourceActivator = {
+  activateSource: (scope: SessionSourceProviderScope, sourceSlug: string) => Promise<boolean>
+}
+
 export type SessionManagerDependencies = {
   agentOperationsRepository: AgentOperationsRepositoryPort
   agentBackend?: AgentBackend
@@ -156,6 +160,7 @@ export type SessionManagerDependencies = {
   projectsRepository?: ProjectsRepositoryPort
   sessionsRepository: SessionsRepositoryPort
   settingsRepository: SettingsRepositoryPort
+  sourceActivator?: SessionSourceActivator
   sourceProvider?: SessionSourceProvider
   threadsRepository: ThreadsRepositoryPort
   toolInvocationsRepository: ToolInvocationsRepositoryPort
@@ -529,6 +534,7 @@ export class SessionManager {
   private readonly projectsRepository?: ProjectsRepositoryPort
   private readonly sessionsRepository: SessionsRepositoryPort
   private readonly settingsRepository: SettingsRepositoryPort
+  private readonly sourceActivator?: SessionSourceActivator
   private readonly sourceProvider?: SessionSourceProvider
   private readonly threadsRepository: ThreadsRepositoryPort
   private readonly toolInvocationsRepository: ToolInvocationsRepositoryPort
@@ -546,6 +552,7 @@ export class SessionManager {
     projectsRepository,
     sessionsRepository,
     settingsRepository,
+    sourceActivator,
     sourceProvider,
     threadsRepository,
     toolInvocationsRepository,
@@ -559,6 +566,7 @@ export class SessionManager {
     this.projectsRepository = projectsRepository
     this.sessionsRepository = sessionsRepository
     this.settingsRepository = settingsRepository
+    this.sourceActivator = sourceActivator
     this.sourceProvider = sourceProvider
     this.threadsRepository = threadsRepository
     this.toolInvocationsRepository = toolInvocationsRepository
@@ -1111,6 +1119,7 @@ export class SessionManager {
       )
     )
 
+    this.configureSourceActivationRequest(agentBackend, eventScope, currentUserMessage)
     this.activeAgentBackends.set(operation.id, agentBackend)
 
     if (onEvent !== undefined) {
@@ -1238,6 +1247,37 @@ export class SessionManager {
     } finally {
       this.activeAgentBackends.delete(operation.id)
       this.operationEventListeners.delete(operation.id)
+    }
+  }
+
+  /**
+   * 给 backend 注入 source activation 请求桥；真实激活能力由宿主 sourceActivator 提供。
+   */
+  private configureSourceActivationRequest(
+    agentBackend: AgentBackend,
+    scope: ConversationScope,
+    originalMessage: string
+  ): void {
+    agentBackend.onSourceActivationRequest = async (sourceSlug: string): Promise<boolean> => {
+      if (
+        this.sourceActivator === undefined ||
+        agentBackend.setPendingSourceActivationRestart === undefined
+      ) {
+        return false
+      }
+
+      const activated = await this.sourceActivator.activateSource(scope, sourceSlug)
+
+      if (!activated) {
+        return false
+      }
+
+      agentBackend.setPendingSourceActivationRestart({
+        sourceSlug,
+        originalMessage
+      })
+
+      return true
     }
   }
 
