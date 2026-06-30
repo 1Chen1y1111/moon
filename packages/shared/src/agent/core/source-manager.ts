@@ -61,6 +61,7 @@ function formatSourceSection(status: AgentSourceStatus, sources: AgentSourceReco
  * 集中维护当前 agent turn 可见的 source 状态，作为未来 Claude/Pi backend 共用的上下文边界。
  */
 export class SourceManager {
+  private readonly activatedSourceSlugs = new Set<string>()
   private readonly sourcesBySlug = new Map<string, AgentSourceRecord>()
 
   /**
@@ -79,6 +80,8 @@ export class SourceManager {
     for (const source of sources) {
       this.upsertSource(source)
     }
+
+    this.pruneActivatedSources()
   }
 
   /**
@@ -86,6 +89,51 @@ export class SourceManager {
    */
   upsertSource(source: AgentSourceRecord): void {
     this.sourcesBySlug.set(source.slug, cloneSource(source))
+  }
+
+  /**
+   * 将已知 source 标记为 active；只有从非 active 变为 active 时才记录为本 turn 激活。
+   */
+  markSourceActive(slug: string): boolean {
+    const source = this.sourcesBySlug.get(slug)
+
+    if (source === undefined) {
+      return false
+    }
+
+    const wasActive = source.status === 'active'
+    const updatedSource = cloneSource(source)
+
+    updatedSource.status = 'active'
+    delete updatedSource.error
+    this.sourcesBySlug.set(slug, updatedSource)
+
+    if (!wasActive) {
+      this.activatedSourceSlugs.add(slug)
+    }
+
+    return true
+  }
+
+  /**
+   * 将已知 source 标记为 inactive，并保留它的描述、guide 和 instructions 元数据。
+   */
+  markSourceInactive(slug: string): boolean {
+    return this.updateSourceStatus(slug, 'inactive')
+  }
+
+  /**
+   * 将已知 source 标记为 needs_auth，可附带鉴权失败原因。
+   */
+  markSourceNeedsAuth(slug: string, error?: string): boolean {
+    return this.updateSourceStatus(slug, 'needs_auth', error)
+  }
+
+  /**
+   * 将已知 source 标记为 failed，可附带运行时错误原因。
+   */
+  markSourceFailed(slug: string, error?: string): boolean {
+    return this.updateSourceStatus(slug, 'failed', error)
   }
 
   /**
@@ -100,6 +148,24 @@ export class SourceManager {
    */
   listActiveSources(): AgentSourceRecord[] {
     return this.listSources().filter((source) => source.status === 'active')
+  }
+
+  /**
+   * 返回本 turn 新激活的 source slugs，并清空已消费记录。
+   */
+  consumeActivatedSources(): string[] {
+    const activatedSources = Array.from(this.activatedSourceSlugs)
+
+    this.activatedSourceSlugs.clear()
+
+    return activatedSources
+  }
+
+  /**
+   * 清理本 turn 的 source activation 记录，不影响 source 列表和状态。
+   */
+  clearActivatedSources(): void {
+    this.activatedSourceSlugs.clear()
   }
 
   /**
@@ -123,5 +189,42 @@ export class SourceManager {
       .filter((section): section is string => section !== undefined)
 
     return `<sources>\n${sections.join('\n\n')}\n</sources>`
+  }
+
+  /**
+   * 更新已知 source 的状态；未知 slug 返回 false，避免创建未经过 provider 解析的 source。
+   */
+  private updateSourceStatus(slug: string, status: AgentSourceStatus, error?: string): boolean {
+    const source = this.sourcesBySlug.get(slug)
+
+    if (source === undefined) {
+      return false
+    }
+
+    const updatedSource = cloneSource(source)
+
+    updatedSource.status = status
+
+    if (error === undefined) {
+      delete updatedSource.error
+    } else {
+      updatedSource.error = error
+    }
+
+    this.sourcesBySlug.set(slug, updatedSource)
+    this.activatedSourceSlugs.delete(slug)
+
+    return true
+  }
+
+  /**
+   * source 列表刷新后移除已经不存在的 activation 记录。
+   */
+  private pruneActivatedSources(): void {
+    for (const slug of this.activatedSourceSlugs) {
+      if (!this.sourcesBySlug.has(slug)) {
+        this.activatedSourceSlugs.delete(slug)
+      }
+    }
   }
 }

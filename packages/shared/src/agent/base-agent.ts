@@ -153,6 +153,7 @@ export abstract class BaseAgent implements AgentBackend {
     this.currentTurnId = turnId
     this.eventQueue = eventQueue
     this.processing = true
+    this.sourceManager.clearActivatedSources()
 
     if (options.abortSignal?.aborted) {
       relayAbort()
@@ -230,6 +231,41 @@ export abstract class BaseAgent implements AgentBackend {
       sourceContextBlock: this.sourceManager.buildContextBlock(),
       workspace: this.workspace
     })
+  }
+
+  /**
+   * 将运行时已知 source 标记为 active，并在本 turn 记录一次 activation。
+   */
+  protected markSourceActive(slug: string): boolean {
+    return this.sourceManager.markSourceActive(slug)
+  }
+
+  /**
+   * 将运行时已知 source 标记为 inactive，不触发事件或自动重启。
+   */
+  protected markSourceInactive(slug: string): boolean {
+    return this.sourceManager.markSourceInactive(slug)
+  }
+
+  /**
+   * 将运行时已知 source 标记为 needs_auth，不触发鉴权流程。
+   */
+  protected markSourceNeedsAuth(slug: string, error?: string): boolean {
+    return this.sourceManager.markSourceNeedsAuth(slug, error)
+  }
+
+  /**
+   * 将运行时已知 source 标记为 failed，不触发事件或自动重启。
+   */
+  protected markSourceFailed(slug: string, error?: string): boolean {
+    return this.sourceManager.markSourceFailed(slug, error)
+  }
+
+  /**
+   * 消费本 turn 新激活的 source slugs，供后续 backend 决定是否触发更高层流程。
+   */
+  protected consumeActivatedSources(): string[] {
+    return this.sourceManager.consumeActivatedSources()
   }
 
   /**

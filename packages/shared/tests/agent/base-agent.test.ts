@@ -38,6 +38,36 @@ class TestAgent extends BaseAgent {
   }
 
   /**
+   * 暴露 BaseAgent 的 source active helper，供测试验证 protected 边界。
+   */
+  markSourceActiveForTest(slug: string): boolean {
+    return this.markSourceActive(slug)
+  }
+
+  /**
+   * 暴露 BaseAgent 的 source failed helper，供测试验证 prompt 会看到状态变化。
+   */
+  markSourceFailedForTest(slug: string, error?: string): boolean {
+    return this.markSourceFailed(slug, error)
+  }
+
+  /**
+   * 消费 BaseAgent 记录的本 turn source activations。
+   */
+  consumeActivatedSourcesForTest(): string[] {
+    return this.consumeActivatedSources()
+  }
+
+  /**
+   * 启动并立即返回清理函数，用于验证 startTurn 的 source activation 重置语义。
+   */
+  beginTurnForTest(): () => void {
+    const turn = this.startTurn()
+
+    return () => this.endTurn(turn)
+  }
+
+  /**
    * 通过 BaseAgent 持有的 PromptBuilder 构造 provider prompt。
    */
   buildProviderPrompt(message = 'inspect repo'): string {
@@ -122,14 +152,89 @@ Active:
   it('owns shared source manager state for concrete backends', () => {
     const agent = new TestAgent({ model: 'claude-sonnet' })
 
-expect(agent.buildSourceContextBlock()).toBe(`<sources>
+    expect(agent.buildSourceContextBlock()).toBe(`<sources>
 Active:
 - github (GitHub): GitHub repository context
 </sources>`)
   })
 
+  it('exposes protected source status helpers to concrete backends', () => {
+    const agent = new TestAgent({
+      model: 'claude-sonnet',
+      sources: [
+        {
+          slug: 'github',
+          name: 'GitHub',
+          description: 'GitHub repository context',
+          status: 'inactive'
+        }
+      ]
+    })
+
+    expect(agent.markSourceActiveForTest('github')).toBe(true)
+    expect(agent.consumeActivatedSourcesForTest()).toEqual(['github'])
+
+    expect(agent.markSourceFailedForTest('github', 'MCP server failed')).toBe(true)
+
+    expect(agent.readSourceContextBlock()).toBe(`<sources>
+Failed:
+- github (GitHub): GitHub repository context
+  Error: MCP server failed
+</sources>`)
+  })
+
+  it('clears turn-scoped source activations on startTurn but keeps source state', () => {
+    const agent = new TestAgent({
+      model: 'claude-sonnet',
+      sources: [
+        {
+          slug: 'github',
+          name: 'GitHub',
+          description: 'GitHub repository context',
+          status: 'inactive'
+        }
+      ]
+    })
+
+    agent.markSourceActiveForTest('github')
+
+    const endTurn = agent.beginTurnForTest()
+
+    expect(agent.consumeActivatedSourcesForTest()).toEqual([])
+    expect(agent.readSourceContextBlock()).toBe(`<sources>
+Active:
+- github (GitHub): GitHub repository context
+</sources>`)
+
+    endTurn()
+  })
+
   it('owns prompt building through shared core modules', () => {
     const agent = new TestAgent({ model: 'claude-sonnet', sources })
+
+    expect(agent.buildProviderPrompt()).toBe(`<sources>
+Active:
+- github (GitHub): GitHub repository context
+</sources>
+
+USER:
+previous question`)
+  })
+
+  it('builds prompts from the latest source runtime state', () => {
+    const agent = new TestAgent({
+      model: 'claude-sonnet',
+      sources: [
+        {
+          slug: 'github',
+          name: 'GitHub',
+          description: 'GitHub repository context',
+          status: 'inactive'
+        }
+      ]
+    })
+
+    agent.markSourceActiveForTest('github')
 
     expect(agent.buildProviderPrompt()).toBe(`<sources>
 Active:
