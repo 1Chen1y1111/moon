@@ -185,6 +185,67 @@ describe('ClaudeEventAdapter', () => {
     ])
   })
 
+  it('normalizes Bash read commands to Read tool_start events', () => {
+    expect(
+      adaptWithAdapter(
+        sdkMessage({
+          type: 'assistant',
+          parent_tool_use_id: 'parent-tool-1',
+          message: {
+            content: [
+              {
+                type: 'tool_use',
+                id: 'tool-1',
+                name: 'Bash',
+                input: { command: 'cat README.md' }
+              }
+            ]
+          }
+        }),
+        'turn-1'
+      )
+    ).toEqual([
+      {
+        type: 'tool_start',
+        toolUseId: 'tool-1',
+        toolName: 'Read',
+        input: {
+          file_path: 'README.md',
+          _command: 'cat README.md'
+        },
+        parentToolUseId: 'parent-tool-1',
+        turnId: 'turn-1'
+      }
+    ])
+  })
+
+  it('keeps non-read Bash commands as Bash tool_start events', () => {
+    expect(
+      adaptWithAdapter(
+        sdkMessage({
+          type: 'assistant',
+          message: {
+            content: [
+              {
+                type: 'tool_use',
+                id: 'tool-1',
+                name: 'Bash',
+                input: { command: 'npm test' }
+              }
+            ]
+          }
+        })
+      )
+    ).toEqual([
+      {
+        type: 'tool_start',
+        toolUseId: 'tool-1',
+        toolName: 'Bash',
+        input: { command: 'npm test' }
+      }
+    ])
+  })
+
   it('converts synthetic user tool_result blocks to tool_result events', () => {
     expect(
       adaptWithAdapter(
@@ -212,6 +273,77 @@ describe('ClaudeEventAdapter', () => {
         toolUseId: 'tool-1',
         isError: false,
         result: { output: 'hello' }
+      }
+    ])
+  })
+
+  it('fills read-classified tool_result metadata from Bash read command state', () => {
+    const adapter = new ClaudeEventAdapter()
+
+    adapter.startTurn('turn-1')
+
+    expect(
+      adapter.adapt(
+        sdkMessage({
+          type: 'assistant',
+          message: {
+            content: [
+              {
+                type: 'tool_use',
+                id: 'tool-1',
+                name: 'Bash',
+                input: { command: "sed -n '10,20p' src/app.ts" }
+              }
+            ]
+          }
+        })
+      )
+    ).toEqual([
+      {
+        type: 'tool_start',
+        toolUseId: 'tool-1',
+        toolName: 'Read',
+        input: {
+          file_path: 'src/app.ts',
+          offset: 10,
+          limit: 11,
+          _command: "sed -n '10,20p' src/app.ts"
+        },
+        turnId: 'turn-1'
+      }
+    ])
+
+    expect(
+      adapter.adapt(
+        sdkMessage({
+          type: 'user',
+          isSynthetic: true,
+          message: {
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: 'tool-1',
+                content: 'selected lines',
+                is_error: false
+              }
+            ]
+          }
+        })
+      )
+    ).toEqual([
+      {
+        type: 'tool_result',
+        toolUseId: 'tool-1',
+        toolName: 'Read',
+        input: {
+          file_path: 'src/app.ts',
+          offset: 10,
+          limit: 11,
+          _command: "sed -n '10,20p' src/app.ts"
+        },
+        isError: false,
+        result: 'selected lines',
+        turnId: 'turn-1'
       }
     ])
   })
@@ -268,6 +400,56 @@ describe('ClaudeEventAdapter', () => {
     ])
   })
 
+  it('clears read command state when starting a new turn', () => {
+    const adapter = new ClaudeEventAdapter()
+
+    adapter.startTurn('turn-1')
+    adapter.adapt(
+      sdkMessage({
+        type: 'assistant',
+        message: {
+          content: [
+            {
+              type: 'tool_use',
+              id: 'tool-1',
+              name: 'Bash',
+              input: { command: 'cat README.md' }
+            }
+          ]
+        }
+      })
+    )
+
+    adapter.startTurn('turn-2')
+
+    expect(
+      adapter.adapt(
+        sdkMessage({
+          type: 'user',
+          isSynthetic: true,
+          message: {
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: 'tool-1',
+                content: 'fresh result',
+                is_error: false
+              }
+            ]
+          }
+        })
+      )
+    ).toEqual([
+      {
+        type: 'tool_result',
+        toolUseId: 'tool-1',
+        isError: false,
+        result: 'fresh result',
+        turnId: 'turn-2'
+      }
+    ])
+  })
+
   it('clears tool index and transient block/output state when starting a new turn', () => {
     const adapter = new ClaudeEventAdapter()
 
@@ -316,6 +498,60 @@ describe('ClaudeEventAdapter', () => {
         isError: false,
         result: 'fresh result',
         turnId: 'turn-2'
+      }
+    ])
+  })
+
+  it('keeps block reason precedence for read-classified tool results', () => {
+    const adapter = new ClaudeEventAdapter()
+
+    adapter.startTurn('turn-1')
+    adapter.adapt(
+      sdkMessage({
+        type: 'assistant',
+        message: {
+          content: [
+            {
+              type: 'tool_use',
+              id: 'tool-1',
+              name: 'Bash',
+              input: { command: 'cat README.md' }
+            }
+          ]
+        }
+      })
+    )
+    adapter.setBlockReason('tool-1', 'User denied permission')
+
+    expect(
+      adapter.adapt(
+        sdkMessage({
+          type: 'user',
+          isSynthetic: true,
+          message: {
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: 'tool-1',
+                content: 'fallback text',
+                is_error: false
+              }
+            ]
+          }
+        })
+      )
+    ).toEqual([
+      {
+        type: 'tool_result',
+        toolUseId: 'tool-1',
+        toolName: 'Read',
+        input: {
+          file_path: 'README.md',
+          _command: 'cat README.md'
+        },
+        isError: true,
+        result: 'User denied permission',
+        turnId: 'turn-1'
       }
     ])
   })

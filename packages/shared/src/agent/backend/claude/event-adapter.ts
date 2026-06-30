@@ -426,8 +426,10 @@ export class ClaudeEventAdapter extends BaseEventAdapter {
    */
   private enrichEvent(event: AgentEvent): AgentEvent {
     if (event.type === 'tool_start') {
-      this.recordToolStart(event)
-      return this.withCurrentTurnId(event)
+      const toolStart = this.enrichToolStart(event)
+
+      this.recordToolStart(toolStart)
+      return this.withCurrentTurnId(toolStart)
     }
 
     if (event.type === 'tool_result') {
@@ -435,6 +437,23 @@ export class ClaudeEventAdapter extends BaseEventAdapter {
     }
 
     return this.withCurrentTurnId(event)
+  }
+
+  /**
+   * 把明显是文件读取的 Bash tool_start 归一为 Read，方便下游复用统一工具语义。
+   */
+  private enrichToolStart(event: ToolStartAgentEvent): ToolStartAgentEvent {
+    const command = event.input?.command
+
+    if (event.toolName !== 'Bash' || typeof command !== 'string') {
+      return event
+    }
+
+    const readInfo = this.classifyReadCommand(event.toolUseId, command)
+
+    return readInfo === null
+      ? event
+      : this.createReadToolStart(event.toolUseId, readInfo, event.parentToolUseId)
   }
 
   /**
@@ -452,18 +471,22 @@ export class ClaudeEventAdapter extends BaseEventAdapter {
    * 用同 turn 内已知的 tool_start 元数据补全 tool_result，并消费权限阻止原因。
    */
   private enrichToolResult(event: ToolResultAgentEvent): ToolResultAgentEvent {
+    const readInfo = this.consumeReadCommand(event.toolUseId)
     const indexedTool = this.toolIndex.get(event.toolUseId)
     const blockReason = this.consumeBlockReason(event.toolUseId, `perm-${event.toolUseId}`)
     const accumulatedOutput = this.consumeOutput(event.toolUseId)
+    const readInput = readInfo === undefined ? undefined : this.createReadToolInput(readInfo)
+    const indexedInput = readInput ?? indexedTool?.input
+    const indexedToolName = readInfo === undefined ? indexedTool?.toolName : 'Read'
 
     return {
       ...event,
-      ...(event.toolName !== undefined || indexedTool === undefined
+      ...(event.toolName !== undefined || indexedToolName === undefined
         ? {}
-        : { toolName: indexedTool.toolName }),
-      ...(event.input !== undefined || indexedTool?.input === undefined
+        : { toolName: indexedToolName }),
+      ...(event.input !== undefined || indexedInput === undefined
         ? {}
-        : { input: indexedTool.input }),
+        : { input: indexedInput }),
       ...(event.parentToolUseId !== undefined || indexedTool?.parentToolUseId === undefined
         ? {}
         : { parentToolUseId: indexedTool.parentToolUseId }),

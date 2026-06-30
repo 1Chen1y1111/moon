@@ -4,6 +4,7 @@
  */
 
 import type { AgentEvent } from './types'
+import { parseReadCommand, type ReadCommandInfo } from './read-patterns'
 
 type TurnScopedAgentEvent = Extract<
   AgentEvent,
@@ -19,6 +20,7 @@ type TurnScopedAgentEvent = Extract<
       | 'typed_error'
   }
 >
+type ToolStartAgentEvent = Extract<AgentEvent, { type: 'tool_start' }>
 
 /**
  * provider 事件适配器的最小公共基类。
@@ -26,6 +28,7 @@ type TurnScopedAgentEvent = Extract<
 export abstract class BaseEventAdapter {
   protected readonly blockReasons = new Map<string, string>()
   protected readonly commandOutput = new Map<string, string>()
+  protected readonly readCommands = new Map<string, ReadCommandInfo>()
   protected turnIndex = 0
   protected currentTurnId: string | null = null
 
@@ -37,6 +40,7 @@ export abstract class BaseEventAdapter {
     this.currentTurnId = turnId ?? null
     this.blockReasons.clear()
     this.commandOutput.clear()
+    this.readCommands.clear()
     this.onTurnStart()
   }
 
@@ -83,6 +87,69 @@ export abstract class BaseEventAdapter {
     }
 
     return output
+  }
+
+  /**
+   * 尝试把 Bash 命令归类为 Read 工具，并把结果记录到当前 turn 的工具索引状态中。
+   */
+  protected classifyReadCommand(id: string, command: string): ReadCommandInfo | null {
+    const readInfo = parseReadCommand(command)
+
+    if (readInfo !== null) {
+      this.readCommands.set(id, readInfo)
+    }
+
+    return readInfo
+  }
+
+  /**
+   * 取出并清理某个工具调用对应的 Read 归类结果，避免跨结果或跨 turn 复用。
+   */
+  protected consumeReadCommand(id: string): ReadCommandInfo | undefined {
+    const readInfo = this.readCommands.get(id)
+
+    if (readInfo !== undefined) {
+      this.readCommands.delete(id)
+    }
+
+    return readInfo
+  }
+
+  /**
+   * 根据 Read 归类结果构造统一的 Read 工具开始事件。
+   */
+  protected createReadToolStart(
+    toolUseId: string,
+    readInfo: ReadCommandInfo,
+    parentToolUseId?: string
+  ): ToolStartAgentEvent {
+    return {
+      type: 'tool_start',
+      toolUseId,
+      toolName: 'Read',
+      input: this.createReadToolInput(readInfo),
+      ...(parentToolUseId === undefined ? {} : { parentToolUseId })
+    }
+  }
+
+  /**
+   * 把 Read 归类信息转成 Moon 现有 AgentEvent input 结构。
+   */
+  protected createReadToolInput(readInfo: ReadCommandInfo): Record<string, unknown> {
+    const input: Record<string, unknown> = {
+      file_path: readInfo.filePath,
+      _command: readInfo.originalCommand
+    }
+
+    if (readInfo.startLine !== undefined) {
+      input.offset = readInfo.startLine
+    }
+
+    if (readInfo.startLine !== undefined && readInfo.endLine !== undefined) {
+      input.limit = readInfo.endLine - readInfo.startLine + 1
+    }
+
+    return input
   }
 
   /**
