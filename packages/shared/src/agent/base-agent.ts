@@ -305,6 +305,16 @@ export abstract class BaseAgent implements AgentBackend {
   protected checkClaudeToolUse(
     input: ClaudeToolUsePermissionInput
   ): AgentToolPermissionCheckResult {
+    const sourceActivation = this.sourceManager.checkInactiveMcpSourceTool(input.toolName)
+
+    if (sourceActivation !== null) {
+      return {
+        type: 'source_activation_needed',
+        sourceSlug: sourceActivation.sourceSlug,
+        sourceExists: sourceActivation.sourceExists
+      }
+    }
+
     if (this.permissionManager === undefined) {
       return {
         type: 'block',

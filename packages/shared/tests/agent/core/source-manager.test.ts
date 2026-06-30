@@ -143,6 +143,43 @@ describe('SourceManager', () => {
     expect(sourceManager.listActiveSources()).toEqual([sources[0]])
   })
 
+  it('detects known inactive MCP source tools that need activation', () => {
+    const sourceManager = new SourceManager({ sources })
+
+    expect(sourceManager.checkInactiveMcpSourceTool('mcp__docs__search')).toEqual({
+      sourceSlug: 'docs',
+      sourceExists: true
+    })
+    expect(sourceManager.checkInactiveMcpSourceTool('mcp__slack__list_channels')).toEqual({
+      sourceSlug: 'slack',
+      sourceExists: true
+    })
+    expect(sourceManager.checkInactiveMcpSourceTool('mcp__linear__createIssue')).toEqual({
+      sourceSlug: 'linear',
+      sourceExists: true
+    })
+  })
+
+  it('does not intercept active MCP source tools', () => {
+    const sourceManager = new SourceManager({ sources })
+
+    expect(sourceManager.checkInactiveMcpSourceTool('mcp__github__list_issues')).toBeNull()
+  })
+
+  it('does not create source state for unknown MCP source tools', () => {
+    const sourceManager = new SourceManager({ sources })
+
+    expect(sourceManager.checkInactiveMcpSourceTool('mcp__missing__search')).toBeNull()
+    expect(sourceManager.listSources()).toEqual(sources)
+  })
+
+  it('ignores non-MCP tool names for source activation checks', () => {
+    const sourceManager = new SourceManager({ sources })
+
+    expect(sourceManager.checkInactiveMcpSourceTool('Read')).toBeNull()
+    expect(sourceManager.checkInactiveMcpSourceTool('mcp__docs')).toBeNull()
+  })
+
   it('reflects runtime status changes in the prompt context block', () => {
     const sourceManager = new SourceManager({
       sources: [sources[0], sources[3]]

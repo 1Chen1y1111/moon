@@ -19,6 +19,14 @@ export type SourceManagerInput = {
   sources?: AgentSourceRecord[]
 }
 
+/**
+ * 描述一次 MCP source 工具调用是否需要先激活对应 source。
+ */
+export type SourceToolActivationCheckResult = {
+  sourceSlug: string
+  sourceExists: boolean
+}
+
 const sourceStatusOrder: AgentSourceStatus[] = ['active', 'needs_auth', 'failed', 'inactive']
 
 const sourceStatusLabels: Record<AgentSourceStatus, string> = {
@@ -148,6 +156,29 @@ export class SourceManager {
    */
   listActiveSources(): AgentSourceRecord[] {
     return this.listSources().filter((source) => source.status === 'active')
+  }
+
+  /**
+   * 判断 Claude MCP 工具名是否指向已知但尚未 active 的 source。
+   */
+  checkInactiveMcpSourceTool(toolName: string): SourceToolActivationCheckResult | null {
+    const parts = toolName.split('__')
+
+    if (parts.length < 3 || parts[0] !== 'mcp') {
+      return null
+    }
+
+    const sourceSlug = parts[1]
+    const source = sourceSlug === undefined ? undefined : this.sourcesBySlug.get(sourceSlug)
+
+    if (source === undefined || source.status === 'active') {
+      return null
+    }
+
+    return {
+      sourceSlug,
+      sourceExists: true
+    }
   }
 
   /**

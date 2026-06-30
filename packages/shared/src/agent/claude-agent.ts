@@ -202,7 +202,12 @@ export class ClaudeAgent extends BaseAgent {
                 checkToolUse: (input) => this.checkClaudeToolUse(input),
                 onToolUseBlocked: (input, reason) =>
                   this.eventAdapter.setBlockReason(input.toolUseId, reason),
-                requestPermission: (request) => this.requestPermission(request)
+                requestPermission: (request) => this.requestPermission(request),
+                requestSourceActivation:
+                  this.onSourceActivationRequest === null
+                    ? undefined
+                    : (sourceSlug) =>
+                        this.onSourceActivationRequest?.(sourceSlug) ?? Promise.resolve(false)
               }),
         model: this.getModel(),
         stderr: (data) => stderrBuffer.append(data),

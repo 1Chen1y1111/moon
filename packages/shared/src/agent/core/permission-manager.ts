@@ -15,6 +15,7 @@ export type AgentToolPermissionCheckResult =
   | { type: 'allow' }
   | { type: 'block'; reason: string }
   | { type: 'prompt'; request: AgentPermissionRequest }
+  | { type: 'source_activation_needed'; sourceSlug: string; sourceExists: boolean }
 
 export type ClaudeToolUsePermissionInput = {
   toolName: string

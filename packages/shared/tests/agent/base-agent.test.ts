@@ -11,6 +11,7 @@ import type {
   AgentEvent,
   PendingSourceActivationRestart,
   AgentSourceRecord,
+  ClaudeToolUsePermissionInput,
   MessageAttachment
 } from '../../src/agent'
 
@@ -91,6 +92,13 @@ class TestAgent extends BaseAgent {
       toolInput: { file_path: 'README.md', old_string: 'old', new_string: 'new' },
       toolUseId: 'edit-tool-1'
     })
+  }
+
+  /**
+   * 透出通用 Claude 工具权限检查，验证 BaseAgent 的 source activation 短路。
+   */
+  checkToolUseForTest(input: ClaudeToolUsePermissionInput) {
+    return this.checkClaudeToolUse(input)
   }
 
   /**
@@ -326,6 +334,60 @@ previous question`)
         path: 'README.md',
         type: 'file_write'
       }
+    })
+  })
+
+  it('reports source activation needs before regular Claude permission checks', () => {
+    const agent = new TestAgent({
+      model: 'claude-sonnet',
+      permissionMode: 'ask',
+      workspace: { path: '/workspace/moon' },
+      sources: [
+        {
+          slug: 'linear',
+          name: 'Linear',
+          description: 'Linear issues',
+          status: 'inactive'
+        }
+      ]
+    })
+
+    expect(
+      agent.checkToolUseForTest({
+        toolName: 'mcp__linear__createIssue',
+        toolInput: { title: 'Bug' },
+        toolUseId: 'source-tool-1'
+      })
+    ).toEqual({
+      type: 'source_activation_needed',
+      sourceSlug: 'linear',
+      sourceExists: true
+    })
+  })
+
+  it('keeps active source tools on the regular permission path', () => {
+    const agent = new TestAgent({
+      model: 'claude-sonnet',
+      permissionMode: 'ask',
+      workspace: { path: '/workspace/moon' },
+      sources: [
+        {
+          slug: 'linear',
+          name: 'Linear',
+          status: 'active'
+        }
+      ]
+    })
+
+    expect(
+      agent.checkToolUseForTest({
+        toolName: 'mcp__linear__createIssue',
+        toolInput: { title: 'Bug' },
+        toolUseId: 'source-tool-1'
+      })
+    ).toMatchObject({
+      type: 'block',
+      reason: 'Moon 当前阶段只允许 Claude Code SDK 只读工具、Bash 和文件写入审批，已阻止 mcp__linear__createIssue。'
     })
   })
 

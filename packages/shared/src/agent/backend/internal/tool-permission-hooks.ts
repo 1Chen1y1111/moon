@@ -21,6 +21,11 @@ export type ClaudeToolPermissionRequester = (
 ) => Promise<AgentPermissionDecision>
 
 /**
+ * 负责请求宿主会话激活某个 source；成功后工具会在下一轮重新可用。
+ */
+export type ClaudeSourceActivationRequester = (sourceSlug: string) => Promise<boolean>
+
+/**
  * 负责执行 Claude 工具权限规则，通常由 BaseAgent 绑定 PermissionManager 后传入。
  */
 export type ClaudeToolUseChecker = (
@@ -39,6 +44,7 @@ export type ClaudePreToolUseHooksInput = {
   checkToolUse: ClaudeToolUseChecker
   onToolUseBlocked?: ClaudeToolUseBlockedReporter
   requestPermission?: ClaudeToolPermissionRequester
+  requestSourceActivation?: ClaudeSourceActivationRequester
 }
 
 /**
@@ -67,7 +73,8 @@ function createClaudeToolUsePermissionInput(
 export function createClaudePreToolUseHooks({
   checkToolUse,
   onToolUseBlocked,
-  requestPermission
+  requestPermission,
+  requestSourceActivation
 }: ClaudePreToolUseHooksInput): Options['hooks'] {
   return {
     PreToolUse: [
@@ -118,6 +125,37 @@ export function createClaudePreToolUseHooks({
                 continue: false,
                 decision: 'block',
                 reason: checkResult.reason
+              }
+            }
+
+            if (checkResult.type === 'source_activation_needed') {
+              const { sourceExists, sourceSlug } = checkResult
+              let reason: string
+
+              if (!sourceExists) {
+                reason = `Source "${sourceSlug}" 不在当前会话可用 sources 中，已阻止工具调用。`
+              } else if (requestSourceActivation === undefined) {
+                reason = `Source "${sourceSlug}" 当前未激活，且本会话没有可用的 source activation 回调。`
+              } else {
+                try {
+                  const activated = await requestSourceActivation(sourceSlug)
+
+                  reason = activated
+                    ? `Source "${sourceSlug}" 已激活，相关工具会在下一轮可用。请结束当前工具调用并等待重试。`
+                    : `Source "${sourceSlug}" 激活失败，可能需要鉴权或连接配置。`
+                } catch (error) {
+                  const message = error instanceof Error ? error.message : 'Unknown error'
+
+                  reason = `Source "${sourceSlug}" 激活请求失败：${message}`
+                }
+              }
+
+              onToolUseBlocked?.(permissionInput, reason)
+
+              return {
+                continue: false,
+                decision: 'block',
+                reason
               }
             }
 

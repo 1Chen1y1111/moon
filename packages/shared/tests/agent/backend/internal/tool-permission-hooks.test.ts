@@ -71,6 +71,17 @@ function createPermissionChecker(
   return (input) => permissionManager.checkClaudeToolUse(input)
 }
 
+/**
+ * 创建 source activation 结果 checker，模拟 BaseAgent 在 PermissionManager 前的 source 短路。
+ */
+function createSourceActivationChecker(sourceExists = true): ClaudeToolUseChecker {
+  return () => ({
+    type: 'source_activation_needed',
+    sourceSlug: 'linear',
+    sourceExists
+  })
+}
+
 describe('ClaudeToolUseChecker with PermissionManager', () => {
   it('prompts for file writes in ask mode with path and risk metadata', () => {
     expect(
@@ -244,6 +255,127 @@ describe('createClaudePreToolUseHooks', () => {
         toolUseId: 'edit-tool-1'
       },
       'No'
+    )
+  })
+
+  it('requests source activation and blocks the current tool when activation succeeds', async () => {
+    const onToolUseBlocked = vi.fn()
+    const requestSourceActivation = vi.fn(async () => true)
+    const hook = resolvePreToolUseHook({
+      checkToolUse: createSourceActivationChecker(),
+      onToolUseBlocked,
+      requestSourceActivation
+    })
+
+    const result = await runPreToolUseHook(
+      hook,
+      createPreToolUseInput({
+        tool_name: 'mcp__linear__createIssue',
+        tool_input: { title: 'Bug' },
+        tool_use_id: 'source-tool-1'
+      })
+    )
+
+    expect(result).toMatchObject({
+      continue: false,
+      decision: 'block',
+      reason: expect.stringContaining('已激活')
+    })
+    expect(requestSourceActivation).toHaveBeenCalledWith('linear')
+    expect(onToolUseBlocked).toHaveBeenCalledWith(
+      {
+        toolName: 'mcp__linear__createIssue',
+        toolInput: { title: 'Bug' },
+        toolUseId: 'source-tool-1'
+      },
+      expect.stringContaining('下一轮可用')
+    )
+  })
+
+  it('blocks source activation checks when activation fails', async () => {
+    const onToolUseBlocked = vi.fn()
+    const requestSourceActivation = vi.fn(async () => false)
+    const hook = resolvePreToolUseHook({
+      checkToolUse: createSourceActivationChecker(),
+      onToolUseBlocked,
+      requestSourceActivation
+    })
+
+    await expect(
+      runPreToolUseHook(
+        hook,
+        createPreToolUseInput({
+          tool_name: 'mcp__linear__createIssue',
+          tool_input: { title: 'Bug' },
+          tool_use_id: 'source-tool-1'
+        })
+      )
+    ).resolves.toMatchObject({
+      continue: false,
+      decision: 'block',
+      reason: expect.stringContaining('激活失败')
+    })
+    expect(onToolUseBlocked).toHaveBeenCalledWith(
+      expect.objectContaining({ toolName: 'mcp__linear__createIssue' }),
+      expect.stringContaining('激活失败')
+    )
+  })
+
+  it('blocks source activation checks when no requester is available', async () => {
+    const onToolUseBlocked = vi.fn()
+    const hook = resolvePreToolUseHook({
+      checkToolUse: createSourceActivationChecker(),
+      onToolUseBlocked
+    })
+
+    await expect(
+      runPreToolUseHook(
+        hook,
+        createPreToolUseInput({
+          tool_name: 'mcp__linear__createIssue',
+          tool_input: { title: 'Bug' },
+          tool_use_id: 'source-tool-1'
+        })
+      )
+    ).resolves.toMatchObject({
+      continue: false,
+      decision: 'block',
+      reason: expect.stringContaining('没有可用的 source activation 回调')
+    })
+    expect(onToolUseBlocked).toHaveBeenCalledWith(
+      expect.objectContaining({ toolName: 'mcp__linear__createIssue' }),
+      expect.stringContaining('没有可用的 source activation 回调')
+    )
+  })
+
+  it('blocks source activation checks when the requester throws', async () => {
+    const onToolUseBlocked = vi.fn()
+    const requestSourceActivation = vi.fn(async () => {
+      throw new Error('activation crashed')
+    })
+    const hook = resolvePreToolUseHook({
+      checkToolUse: createSourceActivationChecker(),
+      onToolUseBlocked,
+      requestSourceActivation
+    })
+
+    await expect(
+      runPreToolUseHook(
+        hook,
+        createPreToolUseInput({
+          tool_name: 'mcp__linear__createIssue',
+          tool_input: { title: 'Bug' },
+          tool_use_id: 'source-tool-1'
+        })
+      )
+    ).resolves.toMatchObject({
+      continue: false,
+      decision: 'block',
+      reason: expect.stringContaining('activation crashed')
+    })
+    expect(onToolUseBlocked).toHaveBeenCalledWith(
+      expect.objectContaining({ toolName: 'mcp__linear__createIssue' }),
+      expect.stringContaining('activation crashed')
     )
   })
 })
