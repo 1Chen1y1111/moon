@@ -7,7 +7,20 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Options } from '@anthropic-ai/claude-agent-sdk'
 
 import { ClaudeAgent } from '../../src/agent'
-import type { AgentEvent, AgentSourceRecord } from '../../src/agent'
+import type {
+  AgentEvent,
+  AgentSourceRecord,
+  PendingSourceActivationRestart
+} from '../../src/agent'
+
+/**
+ * 暴露 BaseAgent 的 pending source activation 写入能力，供 ClaudeAgent 链路测试模拟未来触发器。
+ */
+class SourceActivationTestClaudeAgent extends ClaudeAgent {
+  setPendingSourceActivationRestartForTest(pending: PendingSourceActivationRestart): void {
+    this.setPendingSourceActivationRestart(pending)
+  }
+}
 
 /**
  * 创建返回单条 assistant 消息的 Claude SDK query mock。
@@ -73,6 +86,63 @@ function createTurnScopedQueryClaudeMock() {
       message: {
         content: []
       }
+    }
+  })
+}
+
+/**
+ * 创建会产出工具开始和工具结果的 Claude SDK query mock。
+ */
+function createToolResultQueryClaudeMock(onBeforeToolResult?: () => void) {
+  return vi.fn(async function* () {
+    yield {
+      type: 'assistant',
+      message: {
+        content: [
+          {
+            type: 'tool_use',
+            id: 'tool-1',
+            name: 'Read',
+            input: { file_path: 'README.md' }
+          },
+          {
+            type: 'tool_use',
+            id: 'tool-2',
+            name: 'Read',
+            input: { file_path: 'package.json' }
+          }
+        ]
+      }
+    }
+
+    onBeforeToolResult?.()
+
+    yield {
+      type: 'user',
+      isSynthetic: true,
+      message: {
+        content: [
+          {
+            type: 'tool_result',
+            tool_use_id: 'tool-1',
+            content: 'readme content',
+            is_error: false
+          },
+          {
+            type: 'tool_result',
+            tool_use_id: 'tool-2',
+            content: 'package content',
+            is_error: false
+          }
+        ]
+      }
+    }
+
+    yield {
+      type: 'result',
+      subtype: 'success',
+      is_error: false,
+      session_id: 'sdk-session-1'
     }
   })
 }
@@ -414,6 +484,90 @@ inspect repo`
         { type: 'error', message: 'assistant failed', turnId: 'operation-1' }
       ])
     )
+  })
+
+  it('emits source activation after draining the current tool result batch', async () => {
+    let agent!: SourceActivationTestClaudeAgent
+    const queryClaude = createToolResultQueryClaudeMock(() => {
+      agent.setPendingSourceActivationRestartForTest({
+        sourceSlug: 'workspace',
+        originalMessage: 'inspect repo'
+      })
+    })
+    agent = new SourceActivationTestClaudeAgent({
+      model: 'claude-sonnet',
+      messages: [],
+      queryClaude: queryClaude as never
+    })
+    const events: AgentEvent[] = []
+
+    for await (const event of agent.chat('inspect repo', undefined, { turnId: 'operation-1' })) {
+      events.push(event)
+    }
+
+    expect(events).toEqual([
+      {
+        type: 'tool_start',
+        toolUseId: 'tool-1',
+        toolName: 'Read',
+        input: { file_path: 'README.md' },
+        turnId: 'operation-1'
+      },
+      {
+        type: 'tool_start',
+        toolUseId: 'tool-2',
+        toolName: 'Read',
+        input: { file_path: 'package.json' },
+        turnId: 'operation-1'
+      },
+      {
+        type: 'source_activated',
+        sourceSlug: 'workspace',
+        originalMessage: 'inspect repo',
+        turnId: 'operation-1'
+      }
+    ])
+    expect(events.some((event) => event.type === 'tool_result')).toBe(false)
+    expect(events.some((event) => event.type === 'complete')).toBe(false)
+  })
+
+  it('keeps normal tool result and completion behavior without pending source activation', async () => {
+    const queryClaude = createToolResultQueryClaudeMock()
+    const agent = new ClaudeAgent({
+      model: 'claude-sonnet',
+      messages: [],
+      queryClaude: queryClaude as never
+    })
+    const events: AgentEvent[] = []
+
+    for await (const event of agent.chat('inspect repo', undefined, { turnId: 'operation-1' })) {
+      events.push(event)
+    }
+
+    expect(events).toEqual(
+      expect.arrayContaining([
+        {
+          type: 'tool_result',
+          toolUseId: 'tool-1',
+          toolName: 'Read',
+          input: { file_path: 'README.md' },
+          isError: false,
+          result: 'readme content',
+          turnId: 'operation-1'
+        },
+        {
+          type: 'tool_result',
+          toolUseId: 'tool-2',
+          toolName: 'Read',
+          input: { file_path: 'package.json' },
+          isError: false,
+          result: 'package content',
+          turnId: 'operation-1'
+        },
+        { type: 'complete' }
+      ])
+    )
+    expect(events.some((event) => event.type === 'source_activated')).toBe(false)
   })
 
   it('uses Claude SDK stderr details when result error is unknown', async () => {

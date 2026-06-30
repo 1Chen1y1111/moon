@@ -10,6 +10,7 @@ import { ClaudeEventAdapter } from './backend/claude/event-adapter'
 import { createClaudeQueryOptions } from './backend/internal/runtime-resolver'
 import { createClaudePreToolUseHooks } from './backend/internal/tool-permission-hooks'
 import type { AgentSourceRecord } from './core/source-manager'
+import { SourceActivationDrainController } from './source-activation-drain'
 import type { ThinkingLevel } from '../config'
 import type {
   AgentBackendMessage,
@@ -210,6 +211,7 @@ export class ClaudeAgent extends BaseAgent {
       })
       runtimeSummary = createClaudeRuntimeSummary(queryOptions)
       let hasCompleteEvent = false
+      const sourceActivationDrain = new SourceActivationDrainController('batch-boundary')
       const sdkEvents = this.queryClaude({ prompt, options: queryOptions })
       const queuedEvents = eventQueue.drain()
       let sdkEventResultPromise = sdkEvents.next()
@@ -254,21 +256,39 @@ export class ClaudeAgent extends BaseAgent {
         sdkEventResultPromise = sdkEvents.next()
 
         for (const agentEvent of this.eventAdapter.adapt(result.result.value)) {
-          if (agentEvent.type === 'complete') {
+          const normalizedEvent =
+            agentEvent.type === 'error'
+              ? {
+                  ...agentEvent,
+                  message: createClaudeSdkErrorMessage(
+                    agentEvent.message,
+                    stderrBuffer.read(),
+                    this.apiKey,
+                    runtimeSummary
+                  )
+                }
+              : agentEvent
+
+          if (normalizedEvent.type === 'complete') {
             hasCompleteEvent = true
           }
 
-          yield agentEvent.type === 'error'
-            ? {
-                ...agentEvent,
-                message: createClaudeSdkErrorMessage(
-                  agentEvent.message,
-                  stderrBuffer.read(),
-                  this.apiKey,
-                  runtimeSummary
-                )
-              }
-            : agentEvent
+          if (
+            sourceActivationDrain.observe(normalizedEvent, () =>
+              this.consumePendingSourceActivationRestart()
+            )
+          ) {
+            continue
+          }
+
+          yield normalizedEvent
+        }
+
+        const sourceActivatedEvent = sourceActivationDrain.shouldFireAtBoundary()
+
+        if (sourceActivatedEvent !== null) {
+          yield this.eventAdapter.withCurrentTurnId(sourceActivatedEvent)
+          return
         }
       }
 

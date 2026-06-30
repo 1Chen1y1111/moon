@@ -154,9 +154,9 @@ export abstract class BaseEventAdapter {
   }
 
   /**
-   * 给属于当前 turn 的事件补充 turnId；非 turn 内容事件保持原样。
+   * 给属于当前 turn 的事件补充 turnId，供 backend event loop 处理 synthetic event 时复用。
    */
-  protected withCurrentTurnId(event: AgentEvent): AgentEvent {
+  withCurrentTurnId(event: AgentEvent): AgentEvent {
     if (this.currentTurnId === null || !this.supportsTurnId(event)) {
       return event
     }
