@@ -15,6 +15,7 @@ import { bootstrapDatabase } from '@moon/server/db/bootstrap'
 import { createDatabaseConnection, type AppDatabaseConnection } from '@moon/server/db/connection'
 import { AgentOperationsRepository } from '@moon/server/repositories/agent-operations-repository'
 import { MessagesRepository } from '@moon/server/repositories/messages-repository'
+import { ProjectsRepository } from '@moon/server/repositories/projects-repository'
 import { SessionsRepository } from '@moon/server/repositories/sessions-repository'
 import { SettingsRepository } from '@moon/server/repositories/settings-repository'
 import { ThreadsRepository } from '@moon/server/repositories/threads-repository'
@@ -22,7 +23,13 @@ import { ToolInvocationsRepository } from '@moon/server/repositories/tool-invoca
 import { TopicsRepository } from '@moon/server/repositories/topics-repository'
 import { ChatService } from '@moon/server/services/chat-service'
 import { SettingsService } from '@main/services/settings-service'
-import type { AgentBackend, AgentBackendConfig } from '@moon/shared/agent'
+import type {
+  AgentBackend,
+  AgentBackendConfig,
+  AgentChatOptions,
+  AgentEvent,
+  MessageAttachment
+} from '@moon/shared/agent'
 import type { ProviderModel } from '@moon/shared/domain/provider'
 
 const pgliteTestTimeout = 30_000
@@ -320,6 +327,174 @@ describe('ChatService integration', () => {
           })
         ])
         expect(createAgentBackend).not.toHaveBeenCalled()
+      } finally {
+        await connection.close()
+      }
+    },
+    pgliteTestTimeout
+  )
+
+  it(
+    'runs default workspace source activation and auto-retry through ChatService',
+    async () => {
+      const directoryPath = mkdtempSync(join(tmpdir(), 'moon-chat-service-'))
+      const databasePath = join(directoryPath, 'moon-pglite')
+      const projectPath = mkdtempSync(join(directoryPath, 'workspace-'))
+      tempDirectories.push(directoryPath)
+
+      const connection = await createBootstrappedConnection(databasePath)
+      const settingsRepository = new SettingsRepository(connection)
+      const projectsRepository = new ProjectsRepository(connection)
+      const sessionsRepository = new SessionsRepository(connection)
+      const agentOperationsRepository = new AgentOperationsRepository(connection)
+      const messagesRepository = new MessagesRepository(connection)
+      const chatMessages: string[] = []
+      const backendConfigs: AgentBackendConfig[] = []
+      let backendIndex = 0
+      const createAgentBackend = vi.fn((config: AgentBackendConfig): AgentBackend => {
+        backendConfigs.push(config)
+        backendIndex += 1
+
+        const currentBackendIndex = backendIndex
+        const backend: AgentBackend = {
+          async *chat(
+            message: string,
+            _attachments?: MessageAttachment[],
+            options?: AgentChatOptions
+          ): AsyncGenerator<AgentEvent, void, void> {
+            void _attachments
+            chatMessages.push(message)
+
+            if (currentBackendIndex === 1) {
+              const activated = await backend.onSourceActivationRequest?.('workspace')
+
+              if (activated) {
+                yield {
+                  type: 'source_activated',
+                  sourceSlug: 'workspace',
+                  originalMessage: message,
+                  ...(options?.turnId === undefined ? {} : { turnId: options.turnId })
+                }
+                return
+              }
+
+              yield {
+                type: 'text_delta',
+                text: 'inactive',
+                ...(options?.turnId === undefined ? {} : { turnId: options.turnId })
+              }
+              return
+            }
+
+            yield {
+              type: 'text_delta',
+              text: 'retried',
+              ...(options?.turnId === undefined ? {} : { turnId: options.turnId })
+            }
+          },
+          abort: vi.fn(async () => {}),
+          destroy: vi.fn(),
+          getModel: vi.fn(() => 'test-model'),
+          isProcessing: vi.fn(() => false),
+          respondToPermission: vi.fn(),
+          setPendingSourceActivationRestart: vi.fn(),
+          setModel: vi.fn()
+        }
+
+        return backend
+      })
+      const chatService = new ChatService({
+        agentOperationsRepository,
+        attachmentsDirectory: join(directoryPath, 'attachments'),
+        createAgentBackend,
+        messagesRepository,
+        projectsRepository,
+        sessionsRepository,
+        settingsRepository,
+        threadsRepository: new ThreadsRepository(connection),
+        toolInvocationsRepository: new ToolInvocationsRepository(connection),
+        topicsRepository: new TopicsRepository(connection)
+      })
+
+      try {
+        await settingsRepository.saveProvider('claude', {
+          apiKey: 'sk-claude-demo',
+          enabled: true,
+          model: 'claude-sonnet-4-5'
+        })
+
+        const project = await projectsRepository.upsertByPath({
+          name: 'Moon',
+          path: projectPath
+        })
+
+        await projectsRepository.setActiveProjectId(project.id)
+
+        const events: unknown[] = []
+        const result = await chatService.sendMessage({ content: 'hello' }, (event) => {
+          events.push(event)
+        })
+        const messages = await messagesRepository.listBySession(result.session.id)
+        const operationIds = Array.from(
+          new Set(messages.map((message) => message.operationId).filter(Boolean))
+        )
+        const operations = await Promise.all(
+          operationIds.map((operationId) => agentOperationsRepository.findById(operationId))
+        )
+        const sourceEvent = events.find(
+          (
+            event
+          ): event is {
+            type: 'source-activated'
+            operationId: string
+            sourceSlug: string
+            originalMessage?: string
+            turnId?: string
+          } => (event as { type?: string }).type === 'source-activated'
+        )
+
+        expect(createAgentBackend).toHaveBeenCalledTimes(2)
+        expect(backendConfigs).toEqual([
+          expect.objectContaining({
+            sources: [
+              expect.objectContaining({
+                slug: 'workspace',
+                name: 'Moon',
+                description: `Workspace at ${projectPath}`,
+                status: 'active'
+              })
+            ]
+          }),
+          expect.objectContaining({
+            sources: [
+              expect.objectContaining({
+                slug: 'workspace',
+                name: 'Moon',
+                description: `Workspace at ${projectPath}`,
+                status: 'active'
+              })
+            ]
+          })
+        ])
+        expect(chatMessages).toEqual(['hello', 'hello\n\n[workspace activated]'])
+        expect(result.operation.status).toBe('done')
+        expect(sourceEvent).toMatchObject({
+          type: 'source-activated',
+          operationId: result.operation.id,
+          sourceSlug: 'workspace',
+          originalMessage: 'hello',
+          turnId: result.operation.id
+        })
+        expect(operations).toEqual([
+          expect.objectContaining({ status: 'done' }),
+          expect.objectContaining({ status: 'done' })
+        ])
+        expect(messages.map((message) => [message.role, message.content])).toEqual([
+          ['user', 'hello'],
+          ['assistant', ''],
+          ['user', 'hello\n\n[workspace activated]'],
+          ['assistant', 'retried']
+        ])
       } finally {
         await connection.close()
       }
