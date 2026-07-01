@@ -4,21 +4,21 @@
  */
 
 import type { Options } from '@anthropic-ai/claude-agent-sdk'
-import { existsSync, mkdirSync, readdirSync } from 'node:fs'
-import { createRequire } from 'node:module'
+import { mkdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { dirname, join, parse, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { dirname, join } from 'node:path'
 
 import type { ThinkingLevel } from '../../../config'
 import type { AgentPermissionMode } from '../../core/types'
 import type { AgentSourceRecord } from '../../core/source-manager'
-import type {
-  AgentBackendConfig,
-  AgentBackendMessage,
-  AgentBackendWorkspace
-} from '../types'
+import type { AgentBackendConfig, AgentBackendMessage, AgentBackendWorkspace } from '../types'
+import { resolveClaudeCodeExecutablePath } from './claude-code-executable'
 import type { ProviderRuntimeResolution } from './driver-types'
+
+export {
+  createClaudeCodeExecutableDiagnostic,
+  resolveClaudeCodeExecutablePath
+} from './claude-code-executable'
 
 const thinkingLevelTokenBudgets: Record<ThinkingLevel, number> = {
   low: 1024,
@@ -55,18 +55,6 @@ export type ResolvedBackendContext = {
 }
 
 const claudeCodeUnsupportedTools = ['EnterPlanMode', 'ExitPlanMode', 'AskUserQuestion', 'Skill']
-const claudeCodeExecutableEnvKeys = [
-  'MOON_CLAUDE_CODE_EXECUTABLE',
-  'CLAUDE_CODE_EXECUTABLE'
-] as const
-const claudeAgentSdkCliRelativePath = join(
-  'node_modules',
-  '@anthropic-ai',
-  'claude-agent-sdk',
-  'cli.js'
-)
-const claudeAgentSdkPnpmPackagePrefix = '@anthropic-ai+claude-agent-sdk@'
-const claudeAgentSdkNativePnpmPackagePrefix = '@anthropic-ai+'
 const claudeManagedEnvKeys = [
   'ANTHROPIC_API_KEY',
   'ANTHROPIC_AUTH_TOKEN',
@@ -80,10 +68,6 @@ const claudeManagedEnvKeys = [
   'CLAUDE_CODE_OAUTH_TOKEN',
   'CLAUDE_CONFIG_DIR'
 ] as const
-
-function pathExists(path: string | undefined): path is string {
-  return path !== undefined && existsSync(path)
-}
 
 /**
  * 判断当前 Claude SDK 调用是否走自定义 Claude-compatible endpoint。
@@ -131,228 +115,6 @@ function resolveMoonClaudeDebugFile(baseEnv: NodeJS.ProcessEnv): string {
 
   mkdirSync(dirname(debugFile), { recursive: true })
   return debugFile
-}
-
-/**
- * 解析当前平台对应的 Claude Agent SDK 原生二进制包名。
- */
-function resolveClaudeAgentSdkNativePackageName(): string | undefined {
-  const architecture = process.arch === 'arm64' ? 'arm64' : 'x64'
-
-  if (process.platform === 'darwin') {
-    return `claude-agent-sdk-darwin-${architecture}`
-  }
-
-  if (process.platform === 'win32') {
-    return `claude-agent-sdk-win32-${architecture}`
-  }
-
-  if (process.platform === 'linux') {
-    return `claude-agent-sdk-linux-${architecture}`
-  }
-
-  return undefined
-}
-
-/**
- * 返回当前平台的 Claude Agent SDK 原生可执行文件名。
- */
-function resolveClaudeAgentSdkNativeBinaryName(): string {
-  return process.platform === 'win32' ? 'claude.exe' : 'claude'
-}
-
-/**
- * 从起点目录逐级向上枚举候选目录，用于兼容 Electron bundle 和 monorepo cwd。
- */
-function listAncestorDirectories(startDirectory: string): string[] {
-  const directories: string[] = []
-  let currentDirectory = resolve(startDirectory)
-  const rootDirectory = parse(currentDirectory).root
-
-  while (true) {
-    directories.push(currentDirectory)
-
-    if (currentDirectory === rootDirectory) {
-      return directories
-    }
-
-    currentDirectory = dirname(currentDirectory)
-  }
-}
-
-/**
- * 在 pnpm 虚拟 store 中查找新版 Claude Agent SDK 的原生可执行文件。
- */
-function findPnpmClaudeAgentSdkNativeBinary(directory: string): string | undefined {
-  const packageName = resolveClaudeAgentSdkNativePackageName()
-
-  if (packageName === undefined) {
-    return undefined
-  }
-
-  const pnpmDirectory = join(directory, 'node_modules', '.pnpm')
-
-  if (!existsSync(pnpmDirectory)) {
-    return undefined
-  }
-
-  const packagePrefix = `${claudeAgentSdkNativePnpmPackagePrefix}${packageName}@`
-  const binaryName = resolveClaudeAgentSdkNativeBinaryName()
-
-  for (const entry of readdirSync(pnpmDirectory)) {
-    if (!entry.startsWith(packagePrefix)) {
-      continue
-    }
-
-    const candidate = join(
-      pnpmDirectory,
-      entry,
-      'node_modules',
-      '@anthropic-ai',
-      packageName,
-      binaryName
-    )
-
-    if (existsSync(candidate)) {
-      return candidate
-    }
-  }
-
-  return undefined
-}
-
-/**
- * 在 pnpm 虚拟 store 中查找旧版 Claude Agent SDK 自带的 CLI 文件。
- */
-function findPnpmClaudeAgentSdkCli(directory: string): string | undefined {
-  const pnpmDirectory = join(directory, 'node_modules', '.pnpm')
-
-  if (!existsSync(pnpmDirectory)) {
-    return undefined
-  }
-
-  for (const entry of readdirSync(pnpmDirectory)) {
-    if (!entry.startsWith(claudeAgentSdkPnpmPackagePrefix)) {
-      continue
-    }
-
-    const candidate = join(pnpmDirectory, entry, claudeAgentSdkCliRelativePath)
-
-    if (existsSync(candidate)) {
-      return candidate
-    }
-  }
-
-  return undefined
-}
-
-/**
- * 用 Node 解析规则查找新版 SDK optional dependency 里的原生可执行文件。
- */
-function resolveClaudeAgentSdkNativeBinaryFromRequire(directory: string): string | undefined {
-  const packageName = resolveClaudeAgentSdkNativePackageName()
-
-  if (packageName === undefined) {
-    return undefined
-  }
-
-  try {
-    const sdkEntry = createRequire(join(directory, 'package.json')).resolve(
-      '@anthropic-ai/claude-agent-sdk'
-    )
-
-    return createRequire(sdkEntry).resolve(
-      `@anthropic-ai/${packageName}/${resolveClaudeAgentSdkNativeBinaryName()}`
-    )
-  } catch {
-    return undefined
-  }
-}
-
-/**
- * 用 Node 解析规则查找旧版 SDK 包内 CLI；Electron bundle 下失败时再由文件系统兜底。
- */
-function resolveClaudeAgentSdkCliFromRequire(directory: string): string | undefined {
-  try {
-    return createRequire(join(directory, 'package.json')).resolve(
-      '@anthropic-ai/claude-agent-sdk/cli.js'
-    )
-  } catch {
-    return undefined
-  }
-}
-
-/**
- * 解析传给 Claude Agent SDK 的 Claude Code 可执行路径，优先兼容新版原生二进制。
- */
-export function resolveClaudeCodeExecutablePath(
-  baseEnv: NodeJS.ProcessEnv = process.env
-): string | undefined {
-  for (const envKey of claudeCodeExecutableEnvKeys) {
-    if (pathExists(baseEnv[envKey])) {
-      return baseEnv[envKey]
-    }
-  }
-
-  const moduleDirectory = dirname(fileURLToPath(import.meta.url))
-  const searchRoots = new Set([
-    process.cwd(),
-    moduleDirectory,
-    ...listAncestorDirectories(process.cwd()),
-    ...listAncestorDirectories(moduleDirectory)
-  ])
-
-  for (const directory of searchRoots) {
-    const resolvedNativeByRequire = resolveClaudeAgentSdkNativeBinaryFromRequire(directory)
-
-    if (pathExists(resolvedNativeByRequire)) {
-      return resolvedNativeByRequire
-    }
-
-    const nativePackageName = resolveClaudeAgentSdkNativePackageName()
-
-    if (nativePackageName !== undefined) {
-      const directNativeCandidate = join(
-        directory,
-        'node_modules',
-        '@anthropic-ai',
-        nativePackageName,
-        resolveClaudeAgentSdkNativeBinaryName()
-      )
-
-      if (existsSync(directNativeCandidate)) {
-        return directNativeCandidate
-      }
-    }
-
-    const pnpmNativeCandidate = findPnpmClaudeAgentSdkNativeBinary(directory)
-
-    if (pnpmNativeCandidate !== undefined) {
-      return pnpmNativeCandidate
-    }
-  }
-
-  for (const directory of searchRoots) {
-    const resolvedCliByRequire = resolveClaudeAgentSdkCliFromRequire(directory)
-
-    if (pathExists(resolvedCliByRequire)) {
-      return resolvedCliByRequire
-    }
-
-    const directCandidate = join(directory, claudeAgentSdkCliRelativePath)
-
-    if (existsSync(directCandidate)) {
-      return directCandidate
-    }
-
-    const pnpmCandidate = findPnpmClaudeAgentSdkCli(directory)
-
-    if (pnpmCandidate !== undefined) {
-      return pnpmCandidate
-    }
-  }
-
-  return undefined
 }
 
 /**

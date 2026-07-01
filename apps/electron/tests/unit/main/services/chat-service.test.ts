@@ -19,6 +19,7 @@ import {
 } from '@moon/server-core/sessions'
 import type {
   AgentOperationRecord,
+  ChatOperationEvent,
   MessageRecord,
   ThreadRecord,
   ToolInvocationRecord,
@@ -2183,6 +2184,262 @@ describe('SessionManager two-stage operations', () => {
       'user',
       'assistant'
     ])
+  })
+
+  it('runs a project-bound two-stage Claude main chain acceptance loop', async () => {
+    const project: ProjectRecord = {
+      id: 'project-main-chain',
+      name: 'moon',
+      path: '/workspace/moon',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:00.000Z'
+    }
+    const sources: AgentSourceRecord[] = [
+      {
+        slug: 'workspace',
+        name: 'Workspace',
+        description: 'Local workspace source',
+        guidePath: '/workspace/moon/AGENTS.md',
+        instructions: 'Claude-first only. Pi and MCP are deferred.',
+        status: 'active'
+      }
+    ]
+    const sourceProvider: SessionSourceProvider = {
+      resolveSources: vi.fn(async (scope) => {
+        expect(scope.project).toMatchObject({ id: project.id, path: project.path })
+        expect(scope.session.projectId).toBe(project.id)
+
+        return sources
+      })
+    }
+    const capturedConfigs: AgentBackendConfig[] = []
+    const chatCalls: Array<{ message: string; options?: AgentChatOptions }> = []
+    const permissionDecisions: AgentPermissionDecision[] = []
+    let resolvePermission: ((decision: AgentPermissionDecision) => void) | null = null
+    const respondToPermission = vi.fn(
+      (requestId: string, allowed: boolean, alwaysAllow: boolean = false): void => {
+        const decision: AgentPermissionDecision = allowed
+          ? {
+              requestId,
+              approved: true,
+              ...(alwaysAllow ? { alwaysAllow } : {})
+            }
+          : {
+              requestId,
+              approved: false
+            }
+
+        permissionDecisions.push(decision)
+        resolvePermission?.(decision)
+      }
+    )
+    const agentBackend: AgentBackend = {
+      async *chat(
+        message: string,
+        _attachments?: MessageAttachment[],
+        options?: AgentChatOptions
+      ): AsyncGenerator<AgentEvent, void, void> {
+        void _attachments
+
+        chatCalls.push({ message, options })
+        const turnId = options?.turnId
+        const withTurnId = turnId === undefined ? {} : { turnId }
+        const permissionDecisionPromise = new Promise<AgentPermissionDecision>((resolve) => {
+          resolvePermission = resolve
+        })
+
+        yield { type: 'text_delta', text: 'hello ', ...withTurnId }
+        yield { type: 'reasoning_delta', text: 'thinking ', ...withTurnId }
+        yield {
+          type: 'tool_start',
+          toolUseId: 'tool-read-agents',
+          toolName: 'Read',
+          input: { file_path: '/workspace/moon/AGENTS.md' },
+          ...withTurnId
+        }
+        yield {
+          type: 'tool_result',
+          toolUseId: 'tool-read-agents',
+          toolName: 'Read',
+          input: { file_path: '/workspace/moon/AGENTS.md' },
+          result: 'loaded AGENTS.md',
+          isError: false,
+          ...withTurnId
+        }
+        yield {
+          type: 'permission_request',
+          request: {
+            requestId: 'permission-bash-test',
+            toolName: 'Bash',
+            description: '需要运行 focused test',
+            command:
+              'pnpm --filter @moon/electron exec vitest run tests/unit/main/services/chat-service.test.ts',
+            type: 'bash',
+            reason: '验证 Claude 主链路权限闭环'
+          },
+          ...withTurnId
+        }
+
+        const decision = await permissionDecisionPromise
+
+        yield {
+          type: 'text_delta',
+          text: decision.approved ? 'world' : 'blocked',
+          ...withTurnId
+        }
+        yield { type: 'source_activated', sourceSlug: 'workspace', ...withTurnId }
+        yield { type: 'complete' }
+      },
+      abort: vi.fn(async () => {}),
+      destroy: vi.fn(),
+      getModel: vi.fn(() => 'claude-sonnet-4-5'),
+      isProcessing: vi.fn(() => false),
+      respondToPermission,
+      setModel: vi.fn()
+    }
+    const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
+      capturedConfigs.push(config)
+
+      return agentBackend
+    })
+    const { agentOperationsRepository, messagesRepository, service, toolInvocationsRepository } =
+      createService({
+        activeProjectId: project.id,
+        createAgentBackend,
+        projects: [project],
+        sourceProvider,
+        settings: createClaudeSettings()
+      })
+
+    const turn = await service.createMessageTurn({ content: 'build main chain' })
+
+    expect(createAgentBackend).not.toHaveBeenCalled()
+    expect(turn.session.projectId).toBe(project.id)
+    expect(turn.operation.status).toBe('idle')
+
+    const events: ChatOperationEvent[] = []
+    const result = await service.runOperation({ operationId: turn.operation.id }, (event) => {
+      events.push(event)
+
+      if (event.type === 'tool-waiting-approval') {
+        void service.approveToolCall({ toolInvocationId: event.toolInvocation.id })
+      }
+    })
+
+    expect(sourceProvider.resolveSources).toHaveBeenCalledTimes(1)
+    expect(capturedConfigs).toHaveLength(1)
+    expect(capturedConfigs[0]).toMatchObject({
+      apiKey: 'stored-key',
+      baseUrl: 'https://api.anthropic.com',
+      messages: [{ role: 'user', content: 'build main chain' }],
+      model: 'claude-sonnet-4-5',
+      permissionMode: 'ask',
+      provider: 'anthropic',
+      sources,
+      workspace: {
+        name: project.name,
+        path: project.path
+      }
+    })
+    expect(chatCalls).toEqual([
+      expect.objectContaining({
+        message: 'build main chain',
+        options: expect.objectContaining({
+          turnId: turn.operation.id,
+          abortSignal: expect.any(AbortSignal)
+        })
+      })
+    ])
+    expect(events.map((event) => event.type)).toEqual([
+      'operation-started',
+      'message-delta',
+      'reasoning-delta',
+      'tool-start',
+      'tool-finish',
+      'tool-waiting-approval',
+      'tool-finish',
+      'message-delta',
+      'source-activated',
+      'operation-done'
+    ])
+    expect(events.filter((event) => 'turnId' in event).map((event) => event.turnId)).toEqual([
+      turn.operation.id,
+      turn.operation.id,
+      turn.operation.id,
+      turn.operation.id,
+      turn.operation.id,
+      turn.operation.id,
+      turn.operation.id,
+      turn.operation.id
+    ])
+    expect(permissionDecisions).toEqual([{ requestId: 'permission-bash-test', approved: true }])
+    expect(respondToPermission).toHaveBeenCalledWith('permission-bash-test', true, false)
+
+    const assistantMessage = messagesRepository.messages.find(
+      (message) => message.role === 'assistant'
+    )
+    expect(assistantMessage).toMatchObject({
+      content: 'hello world',
+      reasoning: 'thinking ',
+      status: 'complete'
+    })
+    expect(toolInvocationsRepository.invocations).toEqual([
+      expect.objectContaining({
+        id: 'tool-read-agents',
+        arguments: { file_path: '/workspace/moon/AGENTS.md' },
+        result: { value: 'loaded AGENTS.md' },
+        status: 'done'
+      }),
+      expect.objectContaining({
+        id: 'permission-bash-test',
+        result: { approved: true },
+        status: 'done'
+      })
+    ])
+    expect(
+      agentOperationsRepository.operations.find((operation) => operation.id === turn.operation.id)
+    ).toMatchObject({
+      status: 'done',
+      completionReason: 'done',
+      humanInterventions: 1
+    })
+    expect(result.operation).toMatchObject({
+      id: turn.operation.id,
+      status: 'done',
+      completionReason: 'done'
+    })
+  })
+
+  it('maps two-stage backend errors to operation and message error state', async () => {
+    const settings = createClaudeSettings()
+    const createAgentBackend = vi.fn(() =>
+      createMockAgentBackend([{ type: 'error', message: 'backend failed' }])
+    )
+    const { agentOperationsRepository, messagesRepository, service } = createService({
+      createAgentBackend,
+      settings
+    })
+    const turn = await service.createMessageTurn({ content: 'fail main chain' })
+    const events: ChatOperationEvent[] = []
+
+    await expect(
+      service.runOperation({ operationId: turn.operation.id }, (event) => events.push(event))
+    ).rejects.toThrow('backend failed')
+
+    expect(events.map((event) => event.type)).toEqual(['operation-started', 'operation-error'])
+    expect(
+      messagesRepository.messages.find((message) => message.role === 'assistant')
+    ).toMatchObject({
+      error: 'backend failed',
+      status: 'error'
+    })
+    expect(
+      agentOperationsRepository.operations.find((operation) => operation.id === turn.operation.id)
+    ).toMatchObject({
+      error: { message: 'backend failed' },
+      completionReason: 'error',
+      status: 'error'
+    })
   })
 
   it('returns a clear error when running an unknown operation', async () => {

@@ -12,7 +12,6 @@ import { describe, expect, it } from 'vitest'
 import {
   createClaudeQueryOptions,
   resolveBackendContext,
-  resolveClaudeCodeExecutablePath,
   resolveClaudeThinkingTokenBudget,
   resolveClaudeRuntimeEnv
 } from '../../../../src/agent/backend/internal/runtime-resolver'
@@ -145,33 +144,6 @@ describe('resolveBackendContext', () => {
   })
 })
 
-describe('resolveClaudeCodeExecutablePath', () => {
-  it('uses an existing explicit Claude Code executable path from env', () => {
-    const directoryPath = mkdtempSync(join(tmpdir(), 'moon-claude-cli-'))
-    const executablePath = join(directoryPath, 'claude-cli.js')
-
-    try {
-      writeFileSync(executablePath, '#!/usr/bin/env node\n')
-
-      expect(
-        resolveClaudeCodeExecutablePath({
-          MOON_CLAUDE_CODE_EXECUTABLE: executablePath
-        })
-      ).toBe(executablePath)
-    } finally {
-      rmSync(directoryPath, { recursive: true, force: true })
-    }
-  })
-
-  it('prefers the installed native Claude Code executable when available', () => {
-    const executablePath = resolveClaudeCodeExecutablePath()
-
-    expect(basename(executablePath ?? '')).toBe(
-      process.platform === 'win32' ? 'claude.exe' : 'claude'
-    )
-  })
-})
-
 describe('createClaudeQueryOptions', () => {
   it('creates standard Claude SDK query options without env when credentials are omitted', () => {
     const abortController = new AbortController()
@@ -288,7 +260,7 @@ describe('createClaudeQueryOptions', () => {
     ).toMatchObject({ stderr })
   })
 
-  it('passes prebuilt hooks through only when workspace options are active', () => {
+  it('configures Claude Code workspace preset and hooks when workspace options are active', () => {
     const hooks = {
       PreToolUse: [{ hooks: [async (): Promise<{ continue: true }> => ({ continue: true })] }]
     }
@@ -298,8 +270,20 @@ describe('createClaudeQueryOptions', () => {
         abortController: new AbortController(),
         hooks,
         model: 'claude-sonnet',
-        workspace: { path: '/workspace/moon' }
+        workspace: { name: 'moon', path: '/workspace/moon' }
       })
-    ).toMatchObject({ hooks })
+    ).toMatchObject({
+      allowDangerouslySkipPermissions: true,
+      cwd: '/workspace/moon',
+      disallowedTools: ['EnterPlanMode', 'ExitPlanMode', 'AskUserQuestion', 'Skill'],
+      hooks,
+      permissionMode: 'bypassPermissions',
+      systemPrompt: {
+        type: 'preset',
+        preset: 'claude_code',
+        append: expect.stringContaining('项目根目录：/workspace/moon')
+      },
+      tools: { type: 'preset', preset: 'claude_code' }
+    })
   })
 })
