@@ -22,6 +22,7 @@ import {
   type AgentToolPermissionCheckResult,
   type ClaudeToolUsePermissionInput
 } from './core/permission-manager'
+import { runPreToolUseChecks } from './core/pre-tool-use'
 import { PromptBuilder } from './core/prompt-builder'
 import { SourceManager, type AgentSourceRecord } from './core/source-manager'
 import type { ThinkingLevel } from '../config'
@@ -307,22 +308,15 @@ export abstract class BaseAgent implements AgentBackend {
   ): AgentToolPermissionCheckResult {
     const sourceActivation = this.sourceManager.checkInactiveMcpSourceTool(input.toolName)
 
-    if (sourceActivation !== null) {
-      return {
-        type: 'source_activation_needed',
-        sourceSlug: sourceActivation.sourceSlug,
-        sourceExists: sourceActivation.sourceExists
-      }
-    }
-
     if (this.permissionManager === undefined) {
-      return {
-        type: 'block',
-        reason: 'No active workspace is available for Claude Code tool permissions.'
-      }
+      return runPreToolUseChecks({
+        ...input,
+        permissionMode: this.permissionMode,
+        sourceActivation
+      })
     }
 
-    return this.permissionManager.checkClaudeToolUse(input)
+    return this.permissionManager.checkClaudeToolUse(input, { sourceActivation })
   }
 
   /**

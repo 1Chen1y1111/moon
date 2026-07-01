@@ -4,6 +4,7 @@
  */
 
 export * from './permission-manager'
+export * from './pre-tool-use'
 export * from './prompt-builder'
 export * from './source-manager'
 export * from './types'
