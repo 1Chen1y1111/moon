@@ -75,6 +75,7 @@ import {
 import type { AppSettings, ProviderSettings } from '@moon/shared/domain/settings'
 import type { ProviderId } from '@moon/shared/domain/provider'
 import type { SessionEventRouteHint } from './handlers'
+import { SessionScopedToolCallbackRegistry } from './session-scoped-tool-callback-registry'
 
 const newChatTitle = '新聊天'
 const defaultTopicTitle = '默认话题'
@@ -533,6 +534,7 @@ export class SessionManager {
   private readonly pendingToolPermissions = new Map<string, PendingToolPermission>()
   private readonly projectsRepository?: ProjectsRepositoryPort
   private readonly sessionsRepository: SessionsRepositoryPort
+  private readonly sessionScopedToolCallbacks = new SessionScopedToolCallbackRegistry()
   private readonly settingsRepository: SettingsRepositoryPort
   private readonly sourceActivator?: SessionSourceActivator
   private readonly sourceProvider?: SessionSourceProvider
@@ -1119,7 +1121,7 @@ export class SessionManager {
       )
     )
 
-    this.configureSourceActivationRequest(agentBackend, eventScope, currentUserMessage)
+    this.configureSessionScopedToolCallbacks(agentBackend, eventScope, currentUserMessage)
     this.activeAgentBackends.set(operation.id, agentBackend)
 
     if (onEvent !== undefined) {
@@ -1247,37 +1249,49 @@ export class SessionManager {
     } finally {
       this.activeAgentBackends.delete(operation.id)
       this.operationEventListeners.delete(operation.id)
+      this.sessionScopedToolCallbacks.unregister(eventScope.session.id)
     }
   }
 
   /**
-   * 给 backend 注入 source activation 请求桥；真实激活能力由宿主 sourceActivator 提供。
+   * 注册当前会话的 session-scoped tool 回调，并给 backend 注入 source activation 请求桥。
    */
-  private configureSourceActivationRequest(
+  private configureSessionScopedToolCallbacks(
     agentBackend: AgentBackend,
     scope: ConversationScope,
     originalMessage: string
   ): void {
+    const sessionId = scope.session.id
+
+    this.sessionScopedToolCallbacks.register(sessionId, {
+      activateSourceInSessionFn: async (sourceSlug: string): Promise<boolean> => {
+        if (
+          this.sourceActivator === undefined ||
+          agentBackend.setPendingSourceActivationRestart === undefined
+        ) {
+          return false
+        }
+
+        const activated = await this.sourceActivator.activateSource(scope, sourceSlug)
+
+        if (!activated) {
+          return false
+        }
+
+        agentBackend.setPendingSourceActivationRestart({
+          sourceSlug,
+          originalMessage
+        })
+
+        return true
+      }
+    })
+
     agentBackend.onSourceActivationRequest = async (sourceSlug: string): Promise<boolean> => {
-      if (
-        this.sourceActivator === undefined ||
-        agentBackend.setPendingSourceActivationRestart === undefined
-      ) {
-        return false
-      }
+      const activateSourceInSessionFn =
+        this.sessionScopedToolCallbacks.get(sessionId)?.activateSourceInSessionFn
 
-      const activated = await this.sourceActivator.activateSource(scope, sourceSlug)
-
-      if (!activated) {
-        return false
-      }
-
-      agentBackend.setPendingSourceActivationRestart({
-        sourceSlug,
-        originalMessage
-      })
-
-      return true
+      return activateSourceInSessionFn?.(sourceSlug) ?? false
     }
   }
 

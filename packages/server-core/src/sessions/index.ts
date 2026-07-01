@@ -4,4 +4,5 @@
  */
 
 export * from './session-manager'
+export * from './session-scoped-tool-callback-registry'
 export * from './handlers'

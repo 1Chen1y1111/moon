@@ -13,6 +13,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
   SessionManager,
+  SessionScopedToolCallbackRegistry,
   type SessionSourceActivator,
   type SessionSourceProvider
 } from '@moon/server-core/sessions'
@@ -557,6 +558,32 @@ function createService(input: {
   }
 }
 
+describe('SessionScopedToolCallbackRegistry', () => {
+  it('registers, merges, reads, and unregisters session callbacks', async () => {
+    const registry = new SessionScopedToolCallbackRegistry()
+    const inactiveCallback = vi.fn(async () => false)
+    const activeCallback = vi.fn(async () => true)
+
+    registry.register('session-1', {
+      activateSourceInSessionFn: inactiveCallback
+    })
+
+    expect(await registry.get('session-1')?.activateSourceInSessionFn?.('workspace')).toBe(false)
+
+    registry.merge('session-1', {
+      activateSourceInSessionFn: activeCallback
+    })
+
+    expect(await registry.get('session-1')?.activateSourceInSessionFn?.('workspace')).toBe(true)
+
+    registry.unregister('session-1')
+
+    expect(registry.get('session-1')).toBeUndefined()
+    expect(inactiveCallback).toHaveBeenCalledTimes(1)
+    expect(activeCallback).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('SessionManager provider resolution', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -771,6 +798,7 @@ describe('SessionManager.sendMessage', () => {
       updatedAt: '2026-05-09T00:00:00.000Z'
     }
     const pendingRestarts: unknown[] = []
+    let capturedBackend: AgentBackend | null = null
     const sourceActivator: SessionSourceActivator = {
       activateSource: vi.fn(async (scope, sourceSlug) => {
         expect(scope.project).toMatchObject({ id: project.id, path: project.path })
@@ -800,6 +828,8 @@ describe('SessionManager.sendMessage', () => {
         })
       }
 
+      capturedBackend = backend
+
       return backend
     })
     const { service } = createService({
@@ -814,6 +844,8 @@ describe('SessionManager.sendMessage', () => {
 
     expect(sourceActivator.activateSource).toHaveBeenCalledTimes(1)
     expect(pendingRestarts).toEqual([{ sourceSlug: 'workspace', originalMessage: 'hello' }])
+    expect(await capturedBackend?.onSourceActivationRequest?.('workspace')).toBe(false)
+    expect(sourceActivator.activateSource).toHaveBeenCalledTimes(1)
   })
 
   it('does not write pending source activation when activation fails', async () => {
@@ -883,6 +915,40 @@ describe('SessionManager.sendMessage', () => {
     await service.sendMessage({ content: 'hello' })
 
     expect(pendingRestarts).toEqual([])
+  })
+
+  it('does not request source activation when backend cannot record pending restart', async () => {
+    let activationResult: boolean | undefined
+    const sourceActivator: SessionSourceActivator = {
+      activateSource: vi.fn(async () => true)
+    }
+    const createAgentBackend = vi.fn((): AgentBackend => {
+      const backend: AgentBackend = {
+        async *chat(): AsyncGenerator<AgentEvent, void, void> {
+          activationResult = await backend.onSourceActivationRequest?.('workspace')
+
+          yield { type: 'text_delta', text: activationResult === true ? 'activated' : 'inactive' }
+        },
+        abort: vi.fn(async () => {}),
+        destroy: vi.fn(),
+        getModel: vi.fn(() => 'test-model'),
+        isProcessing: vi.fn(() => false),
+        respondToPermission: vi.fn(),
+        setModel: vi.fn()
+      }
+
+      return backend
+    })
+    const { service } = createService({
+      createAgentBackend,
+      sourceActivator,
+      settings: createClaudeSettings()
+    })
+
+    await service.sendMessage({ content: 'hello' })
+
+    expect(activationResult).toBe(false)
+    expect(sourceActivator.activateSource).not.toHaveBeenCalled()
   })
 
   it('passes operation id as agent turn id when running a backend', async () => {
