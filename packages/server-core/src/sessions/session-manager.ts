@@ -12,6 +12,7 @@ import {
   assertProviderReadyForAgent,
   createBackend,
   createConnectionAgentBackendConfig,
+  createAgentSessionRuntimeState,
   createAgentBackendMessage,
   createProviderLlmConnection,
   resolveAgentBackendProvider,
@@ -22,6 +23,7 @@ import {
   type AgentEvent,
   type AgentPermissionMode,
   type AgentPermissionDecision,
+  type AgentSessionRuntimeState,
   type AgentSourceRecord
 } from '@moon/shared/agent'
 import type { NormalizedLlmConnection } from '@moon/shared/config'
@@ -533,6 +535,7 @@ export class SessionManager {
   private readonly operationEventListeners = new Map<string, OperationEventListenerRegistration>()
   private readonly pendingToolPermissions = new Map<string, PendingToolPermission>()
   private readonly projectsRepository?: ProjectsRepositoryPort
+  private readonly agentSessionRuntimeStates = new Map<string, AgentSessionRuntimeState>()
   private readonly sessionsRepository: SessionsRepositoryPort
   private readonly sessionScopedToolCallbacks = new SessionScopedToolCallbackRegistry()
   private readonly settingsRepository: SettingsRepositoryPort
@@ -573,6 +576,23 @@ export class SessionManager {
     this.threadsRepository = threadsRepository
     this.toolInvocationsRepository = toolInvocationsRepository
     this.topicsRepository = topicsRepository
+  }
+
+  /**
+   * 返回指定 thread 的内存态 agent session runtime state；同一 thread 后续 operation 复用。
+   */
+  private resolveAgentSessionRuntimeState(threadId: string): AgentSessionRuntimeState {
+    const existing = this.agentSessionRuntimeStates.get(threadId)
+
+    if (existing !== undefined) {
+      return existing
+    }
+
+    const state = createAgentSessionRuntimeState()
+
+    this.agentSessionRuntimeStates.set(threadId, state)
+
+    return state
   }
 
   /**
@@ -1112,6 +1132,7 @@ export class SessionManager {
 
     // 取出这次会话可用的上下文来源 比如项目/技能/上下文材料
     const sources = await this.resolveSourcesForScope(scope)
+    const agentSessionState = this.resolveAgentSessionRuntimeState(scope.thread.id)
 
     // 创建 agentBackend
     const agentBackend = this.createAgentBackend(
@@ -1121,7 +1142,8 @@ export class SessionManager {
         backendMessages,
         workspace,
         defaultAgentPermissionMode,
-        sources
+        sources,
+        agentSessionState
       )
     )
 

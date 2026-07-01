@@ -6,6 +6,8 @@
 import type { AgentPermissionRequest } from '@moon/core/types'
 import { isAbsolute, relative, resolve } from 'node:path'
 
+import type { AgentPermissionGrant } from './session-runtime-state'
+import { hasPermissionGrant } from './session-runtime-state'
 import type { AgentPermissionMode, AgentWorkspaceContext } from './types'
 
 const claudeReadOnlyTools = new Set(['Read', 'Glob', 'Grep', 'LS'])
@@ -33,6 +35,7 @@ export type ClaudeToolUsePermissionInput = {
 
 export type PreToolUseCheckInput = ClaudeToolUsePermissionInput & {
   permissionMode?: AgentPermissionMode
+  permissionGrants?: readonly AgentPermissionGrant[]
   sourceActivation?: PreToolUseSourceActivation | null
   workspace?: AgentWorkspaceContext
 }
@@ -165,6 +168,7 @@ function hasWorkspaceBoundaryViolation(
  */
 export function runPreToolUseChecks({
   permissionMode = 'ask',
+  permissionGrants = [],
   sourceActivation,
   toolInput = {},
   toolName,
@@ -187,9 +191,15 @@ export function runPreToolUseChecks({
   }
 
   if (toolName === 'Bash') {
+    const request = createBashToolPermissionRequest(toolName, toolUseId, toolInput)
+
+    if (hasPermissionGrant(permissionGrants, request)) {
+      return { type: 'allow' }
+    }
+
     return {
       type: 'prompt',
-      request: createBashToolPermissionRequest(toolName, toolUseId, toolInput)
+      request
     }
   }
 
@@ -212,9 +222,15 @@ export function runPreToolUseChecks({
       }
     }
 
+    const request = createWritableToolPermissionRequest(toolName, toolUseId, toolInput)
+
+    if (hasPermissionGrant(permissionGrants, request)) {
+      return { type: 'allow' }
+    }
+
     return {
       type: 'prompt',
-      request: createWritableToolPermissionRequest(toolName, toolUseId, toolInput)
+      request
     }
   }
 

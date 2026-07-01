@@ -53,6 +53,21 @@ describe('ToolInvocationList', () => {
     )
   })
 
+  it('approves a waiting tool invocation for the current session from the message card', async () => {
+    const { user } = renderWithProviders(
+      <ToolInvocationList toolInvocations={[createToolInvocation()]} />
+    )
+
+    await user.click(screen.getByRole('button', { name: '本会话总是允许' }))
+
+    await waitFor(() =>
+      expect(api.sessions.approveToolCall).toHaveBeenCalledWith({
+        toolInvocationId: 'permission-tool-1',
+        alwaysAllow: true
+      })
+    )
+  })
+
   it('rejects a waiting tool invocation from the message card', async () => {
     const { user } = renderWithProviders(
       <ToolInvocationList toolInvocations={[createToolInvocation()]} />
@@ -103,6 +118,7 @@ describe('ToolInvocationList', () => {
 
     expect(screen.getByText('已允许')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '允许' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '本会话总是允许' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: '拒绝' })).not.toBeInTheDocument()
   })
 

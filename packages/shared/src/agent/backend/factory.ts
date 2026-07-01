@@ -37,6 +37,7 @@ function getProviderDriver(provider: AgentBackendConfig['provider']): ProviderDr
 function createBackendFromResolvedContext(context: ResolvedBackendContext): AgentBackend {
   if (context.provider === 'anthropic') {
     return new ClaudeAgent({
+      agentSessionState: context.agentSessionState,
       apiKey: context.apiKey,
       baseUrl: context.baseUrl,
       messages: context.messages,

@@ -8,6 +8,7 @@ import type {
   MessageAttachment as CoreMessageAttachment
 } from '@moon/core/types'
 import type { AgentBackendProvider, CustomEndpointApi, ThinkingLevel } from '../../config'
+import type { AgentSessionRuntimeState } from '../core/session-runtime-state'
 import type { AgentSourceRecord } from '../core/source-manager'
 import type { AgentPermissionMode } from '../core/types'
 
@@ -38,6 +39,7 @@ export type AgentBackendWorkspace = {
 }
 
 export type AgentBackendConfig = {
+  agentSessionState?: AgentSessionRuntimeState
   provider: AgentBackendProvider
   model: string
   apiKey?: string

@@ -159,6 +159,32 @@ describe('createConnectionAgentBackendConfig', () => {
       sources
     })
   })
+
+  it('adds agent session runtime state when provided by the session scope', () => {
+    const connection = llmConnectionSchema.parse({
+      id: 'anthropic-main',
+      name: 'Claude Main',
+      backend: 'anthropic',
+      model: 'claude-sonnet-4-5',
+      apiKey: 'stored-key'
+    })
+    const agentSessionState = {
+      permissionGrants: [{ type: 'bash' as const, toolName: 'Bash', command: 'pnpm test' }]
+    }
+
+    expect(
+      createConnectionAgentBackendConfig(
+        connection,
+        [],
+        undefined,
+        undefined,
+        undefined,
+        agentSessionState
+      )
+    ).toMatchObject({
+      agentSessionState
+    })
+  })
 })
 
 describe('assertLlmConnectionReadyForAgent', () => {

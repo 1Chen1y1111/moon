@@ -40,7 +40,11 @@ describe('agent backend factory', () => {
   })
 
   it('passes resolved backend context into the Claude backend', () => {
+    const agentSessionState = {
+      permissionGrants: [{ type: 'bash' as const, toolName: 'Bash', command: 'pnpm test' }]
+    }
     const backend = createBackend({
+      agentSessionState,
       provider: 'anthropic',
       model: 'claude-sonnet-4-5',
       apiKey: 'test-key',
@@ -51,6 +55,7 @@ describe('agent backend factory', () => {
       thinkingLevel: 'high',
       workspace: { name: 'moon', path: '/workspace/moon' }
     }) as unknown as {
+      agentSessionState?: unknown
       apiKey?: string
       baseUrl?: string
       messages: unknown[]
@@ -60,6 +65,7 @@ describe('agent backend factory', () => {
       workspace?: { name?: string; path: string }
     }
 
+    expect(backend.agentSessionState).toBe(agentSessionState)
     expect(backend.apiKey).toBe('test-key')
     expect(backend.baseUrl).toBe('https://api.example.com')
     expect(backend.messages).toEqual([{ role: 'user', content: 'hello' }])

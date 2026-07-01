@@ -9,6 +9,7 @@ import type {
   AgentBackendMessage,
   AgentBackendWorkspace
 } from './backend/types'
+import type { AgentSessionRuntimeState } from './core/session-runtime-state'
 import type { AgentSourceRecord } from './core/source-manager'
 import type { AgentPermissionMode } from './core/types'
 
@@ -53,7 +54,8 @@ export function createConnectionAgentBackendConfig(
   messages: AgentBackendMessage[],
   workspace?: AgentBackendWorkspace,
   permissionMode?: AgentPermissionMode,
-  sources?: AgentSourceRecord[]
+  sources?: AgentSourceRecord[],
+  agentSessionState?: AgentSessionRuntimeState
 ): AgentBackendConfig {
   const apiKey = connection.apiKey?.trim()
   const provider = resolveConnectionAgentBackendProvider(connection)
@@ -68,6 +70,7 @@ export function createConnectionAgentBackendConfig(
       : { customEndpoint: connection.customEndpoint }),
     ...(apiKey === undefined ? {} : { apiKey }),
     ...(connection.baseUrl === undefined ? {} : { baseUrl: connection.baseUrl }),
+    ...(agentSessionState === undefined ? {} : { agentSessionState }),
     ...(permissionMode === undefined ? {} : { permissionMode }),
     ...(sources === undefined ? {} : { sources }),
     ...(workspace === undefined ? {} : { workspace })

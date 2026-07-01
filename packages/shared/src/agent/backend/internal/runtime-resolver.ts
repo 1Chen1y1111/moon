@@ -9,6 +9,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 
 import type { ThinkingLevel } from '../../../config'
+import type { AgentSessionRuntimeState } from '../../core/session-runtime-state'
 import type { AgentPermissionMode } from '../../core/types'
 import type { AgentSourceRecord } from '../../core/source-manager'
 import type { AgentBackendConfig, AgentBackendMessage, AgentBackendWorkspace } from '../types'
@@ -43,6 +44,7 @@ export type ClaudeQueryOptionsInput = ClaudeRuntimeEnvInput & {
 }
 
 export type ResolvedBackendContext = {
+  agentSessionState?: AgentSessionRuntimeState
   provider: ProviderRuntimeResolution['provider']
   model: string
   apiKey?: string
@@ -184,6 +186,9 @@ export function resolveBackendContext(
 ): ResolvedBackendContext {
   return {
     provider: providerRuntime.provider,
+    ...(config.agentSessionState === undefined
+      ? {}
+      : { agentSessionState: config.agentSessionState }),
     apiKey: providerRuntime.apiKey,
     baseUrl: providerRuntime.baseUrl,
     messages: config.messages ?? [],

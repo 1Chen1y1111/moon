@@ -105,7 +105,11 @@ describe('resolveClaudeThinkingTokenBudget', () => {
 
 describe('resolveBackendContext', () => {
   it('combines provider runtime fields with shared backend runtime config', () => {
+    const agentSessionState = {
+      permissionGrants: [{ type: 'bash' as const, toolName: 'Bash', command: 'pnpm test' }]
+    }
     const config = {
+      agentSessionState,
       provider: 'anthropic' as const,
       model: 'claude-sonnet-4-5',
       apiKey: 'test-key',
@@ -118,6 +122,7 @@ describe('resolveBackendContext', () => {
     }
 
     expect(resolveBackendContext(config, anthropicDriver.resolve(config))).toEqual({
+      agentSessionState,
       provider: 'anthropic',
       apiKey: 'test-key',
       baseUrl: 'https://api.example.com',

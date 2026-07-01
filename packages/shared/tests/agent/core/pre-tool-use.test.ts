@@ -80,6 +80,33 @@ describe('runPreToolUseChecks', () => {
     })
   })
 
+  it('allows Bash when a session permission grant matches the command', () => {
+    expect(
+      checkPreToolUse({
+        permissionGrants: [{ type: 'bash', toolName: 'Bash', command: 'pnpm test' }],
+        toolName: 'Bash',
+        toolInput: { command: 'pnpm test' }
+      })
+    ).toEqual({ type: 'allow' })
+  })
+
+  it('keeps prompting Bash when the session permission grant command differs', () => {
+    expect(
+      checkPreToolUse({
+        permissionGrants: [{ type: 'bash', toolName: 'Bash', command: 'pnpm test' }],
+        toolName: 'Bash',
+        toolUseId: 'bash-tool-2',
+        toolInput: { command: 'pnpm typecheck' }
+      })
+    ).toMatchObject({
+      type: 'prompt',
+      request: {
+        requestId: 'perm-bash-tool-2',
+        command: 'pnpm typecheck'
+      }
+    })
+  })
+
   it('prompts for write tools in ask mode', () => {
     expect(
       checkPreToolUse({
@@ -96,6 +123,33 @@ describe('runPreToolUseChecks', () => {
         path: 'README.md',
         type: 'file_write',
         impact: '写操作会改变当前项目工作区文件。'
+      }
+    })
+  })
+
+  it('allows write tools when a session permission grant matches the path', () => {
+    expect(
+      checkPreToolUse({
+        permissionGrants: [{ type: 'file_write', toolName: 'Edit', path: 'README.md' }],
+        toolName: 'Edit',
+        toolInput: { file_path: 'README.md', old_string: 'old', new_string: 'new' }
+      })
+    ).toEqual({ type: 'allow' })
+  })
+
+  it('keeps prompting write tools when the session permission grant path differs', () => {
+    expect(
+      checkPreToolUse({
+        permissionGrants: [{ type: 'file_write', toolName: 'Edit', path: 'README.md' }],
+        toolName: 'Edit',
+        toolUseId: 'edit-tool-2',
+        toolInput: { file_path: 'package.json', old_string: 'old', new_string: 'new' }
+      })
+    ).toMatchObject({
+      type: 'prompt',
+      request: {
+        requestId: 'perm-edit-tool-2',
+        path: 'package.json'
       }
     })
   })

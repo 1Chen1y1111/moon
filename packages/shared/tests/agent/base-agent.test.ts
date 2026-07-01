@@ -590,7 +590,10 @@ previous question`)
   })
 
   it('passes alwaysAllow permission decisions through respondToPermission', async () => {
-    const agent = new TestAgent({ model: 'claude-sonnet' })
+    const agent = new TestAgent({
+      model: 'claude-sonnet',
+      workspace: { path: '/workspace/moon' }
+    })
     const events = agent.chat('permission')
 
     await events.next()
@@ -600,6 +603,44 @@ previous question`)
     await expect(events.next()).resolves.toMatchObject({
       value: { type: 'info', message: 'approved:always' },
       done: false
+    })
+
+    await events.next()
+
+    expect(
+      agent.checkToolUseForTest({
+        toolName: 'Bash',
+        toolInput: { command: 'pwd' },
+        toolUseId: 'bash-tool-1'
+      })
+    ).toEqual({ type: 'allow' })
+  })
+
+  it('does not add session permission grants for one-time approvals', async () => {
+    const agent = new TestAgent({
+      model: 'claude-sonnet',
+      workspace: { path: '/workspace/moon' }
+    })
+    const events = agent.chat('permission')
+
+    await events.next()
+
+    agent.respondToPermission('permission-1', true)
+
+    await events.next()
+    await events.next()
+
+    expect(
+      agent.checkToolUseForTest({
+        toolName: 'Bash',
+        toolInput: { command: 'pwd' },
+        toolUseId: 'bash-tool-1'
+      })
+    ).toMatchObject({
+      type: 'prompt',
+      request: {
+        command: 'pwd'
+      }
     })
   })
 

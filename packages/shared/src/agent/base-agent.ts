@@ -24,11 +24,17 @@ import {
 } from './core/permission-manager'
 import { runPreToolUseChecks } from './core/pre-tool-use'
 import { PromptBuilder } from './core/prompt-builder'
+import {
+  addPermissionGrantFromRequest,
+  createAgentSessionRuntimeState,
+  type AgentSessionRuntimeState
+} from './core/session-runtime-state'
 import { SourceManager, type AgentSourceRecord } from './core/source-manager'
 import type { ThinkingLevel } from '../config'
 import type { AgentPermissionMode } from './core/types'
 
 export type BaseAgentInput = {
+  agentSessionState?: AgentSessionRuntimeState
   model: string
   permissionMode?: AgentPermissionMode
   sources?: AgentSourceRecord[]
@@ -58,10 +64,12 @@ export abstract class BaseAgent implements AgentBackend {
   protected readonly permissionManager?: PermissionManager
   protected readonly permissionMode?: AgentPermissionMode
   protected readonly promptBuilder: PromptBuilder
+  protected readonly agentSessionState: AgentSessionRuntimeState
   protected readonly sourceManager: SourceManager
   protected readonly thinkingLevel?: ThinkingLevel
   protected readonly workspace?: AgentBackendWorkspace
   private readonly pendingPermissions = new Map<string, PendingAgentPermission>()
+  private readonly pendingPermissionRequests = new Map<string, AgentPermissionRequest>()
   private abortController: AbortController | null = null
   private currentTurnId: string | null = null
   private eventQueue: EventQueue | null = null
@@ -72,7 +80,15 @@ export abstract class BaseAgent implements AgentBackend {
   /**
    * 保存所有 backend 通用的运行时配置。
    */
-  constructor({ model, permissionMode, sources, thinkingLevel, workspace }: BaseAgentInput) {
+  constructor({
+    agentSessionState,
+    model,
+    permissionMode,
+    sources,
+    thinkingLevel,
+    workspace
+  }: BaseAgentInput) {
+    this.agentSessionState = agentSessionState ?? createAgentSessionRuntimeState()
     this.model = model
     this.permissionMode = permissionMode
     this.permissionManager =
@@ -100,6 +116,14 @@ export abstract class BaseAgent implements AgentBackend {
     }
 
     this.pendingPermissions.delete(requestId)
+    const request = this.pendingPermissionRequests.get(requestId)
+
+    this.pendingPermissionRequests.delete(requestId)
+
+    if (allowed && alwaysAllow === true && request !== undefined) {
+      addPermissionGrantFromRequest(this.agentSessionState, request)
+    }
+
     pendingPermission.resolve(
       allowed
         ? { requestId, approved: true, ...(alwaysAllow ? { alwaysAllow } : {}) }
@@ -220,6 +244,7 @@ export abstract class BaseAgent implements AgentBackend {
 
     const decisionPromise = new Promise<AgentPermissionDecision>((resolve) => {
       this.pendingPermissions.set(request.requestId, { resolve })
+      this.pendingPermissionRequests.set(request.requestId, request)
     })
 
     eventQueue.enqueue({
@@ -312,11 +337,15 @@ export abstract class BaseAgent implements AgentBackend {
       return runPreToolUseChecks({
         ...input,
         permissionMode: this.permissionMode,
+        permissionGrants: this.agentSessionState.permissionGrants,
         sourceActivation
       })
     }
 
-    return this.permissionManager.checkClaudeToolUse(input, { sourceActivation })
+    return this.permissionManager.checkClaudeToolUse(input, {
+      permissionGrants: this.agentSessionState.permissionGrants,
+      sourceActivation
+    })
   }
 
   /**
@@ -328,6 +357,7 @@ export abstract class BaseAgent implements AgentBackend {
     }
 
     this.pendingPermissions.clear()
+    this.pendingPermissionRequests.clear()
   }
 
   /**

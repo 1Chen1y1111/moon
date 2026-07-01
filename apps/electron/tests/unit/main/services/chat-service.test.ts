@@ -2329,6 +2329,59 @@ describe('SessionManager.sendMessage', () => {
     ])
   })
 
+  it('reuses agent session runtime state across operations in the same thread', async () => {
+    const capturedConfigs: AgentBackendConfig[] = []
+    const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
+      capturedConfigs.push(config)
+
+      return createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
+    })
+    const { service } = createService({
+      createAgentBackend,
+      settings: createClaudeSettings()
+    })
+
+    const firstResult = await service.sendMessage({ content: 'first message' })
+    await service.sendMessage({
+      sessionId: firstResult.session.id,
+      topicId: firstResult.topic.id,
+      threadId: firstResult.thread.id,
+      content: 'second message'
+    })
+
+    expect(capturedConfigs).toHaveLength(2)
+    expect(capturedConfigs[0]?.agentSessionState).toBeDefined()
+    expect(capturedConfigs[1]?.agentSessionState).toBe(capturedConfigs[0]?.agentSessionState)
+  })
+
+  it('does not share agent session runtime state across different threads', async () => {
+    const capturedConfigs: AgentBackendConfig[] = []
+    const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
+      capturedConfigs.push(config)
+
+      return createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
+    })
+    const { service } = createService({
+      createAgentBackend,
+      settings: createClaudeSettings()
+    })
+
+    const firstResult = await service.sendMessage({ content: 'first message' })
+    const secondTurn = await service.createMessageTurn({
+      sessionId: firstResult.session.id,
+      topicId: firstResult.topic.id,
+      threadId: 'new-thread',
+      content: 'second message'
+    })
+
+    await service.runOperation({ operationId: secondTurn.operation.id })
+
+    expect(capturedConfigs).toHaveLength(2)
+    expect(capturedConfigs[0]?.agentSessionState).toBeDefined()
+    expect(capturedConfigs[1]?.agentSessionState).toBeDefined()
+    expect(capturedConfigs[1]?.agentSessionState).not.toBe(capturedConfigs[0]?.agentSessionState)
+  })
+
   it('persists file write permission metadata for the approval card', async () => {
     const settings = createClaudeSettings()
     const decisions: AgentPermissionDecision[] = []

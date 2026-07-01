@@ -10,6 +10,7 @@ import { ClaudeEventAdapter } from './backend/claude/event-adapter'
 import { createClaudeQueryOptions } from './backend/internal/runtime-resolver'
 import { createClaudePreToolUseHooks } from './backend/internal/tool-permission-hooks'
 import type { AgentSourceRecord } from './core/source-manager'
+import type { AgentSessionRuntimeState } from './core/session-runtime-state'
 import { SourceActivationDrainController } from './source-activation-drain'
 import type { ThinkingLevel } from '../config'
 import type {
@@ -22,6 +23,7 @@ import type {
 import type { AgentPermissionMode } from './core/types'
 
 export type ClaudeAgentInput = {
+  agentSessionState?: AgentSessionRuntimeState
   apiKey?: string
   baseUrl?: string
   messages: AgentBackendMessage[]
@@ -154,6 +156,7 @@ export class ClaudeAgent extends BaseAgent {
    * 保存 Claude SDK 调用所需的模型、凭据和本轮上下文。
    */
   constructor({
+    agentSessionState,
     apiKey,
     baseUrl,
     messages,
@@ -164,7 +167,7 @@ export class ClaudeAgent extends BaseAgent {
     thinkingLevel,
     workspace
   }: ClaudeAgentInput) {
-    super({ model, permissionMode, sources, thinkingLevel, workspace })
+    super({ agentSessionState, model, permissionMode, sources, thinkingLevel, workspace })
 
     this.apiKey = apiKey
     this.baseUrl = baseUrl

@@ -5,7 +5,7 @@
 
 import { useState } from 'react'
 
-import { Check, Wrench, X } from 'lucide-react'
+import { Check, CheckCheck, Wrench, X } from 'lucide-react'
 
 import { useChatStore } from '@renderer/store/chat'
 import { cn } from '@moon/ui/lib/utils'
@@ -104,14 +104,16 @@ function getToolResultOutput(toolInvocation: ToolInvocationRecord): string | und
 function ToolApprovalActions({
   disabled,
   onApprove,
+  onApproveAlways,
   onReject
 }: {
   disabled: boolean
   onApprove: () => void
+  onApproveAlways: () => void
   onReject: () => void
 }): React.JSX.Element {
   return (
-    <div className="mt-2 flex items-center gap-1.5">
+    <div className="mt-2 flex flex-wrap items-center gap-1.5">
       <button
         type="button"
         className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-background px-2 text-[11px] font-medium leading-4 text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
@@ -120,6 +122,15 @@ function ToolApprovalActions({
       >
         <Check aria-hidden="true" className="size-3" />
         允许
+      </button>
+      <button
+        type="button"
+        className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border bg-background px-2 text-[11px] font-medium leading-4 text-foreground transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        disabled={disabled}
+        onClick={onApproveAlways}
+      >
+        <CheckCheck aria-hidden="true" className="size-3" />
+        本会话总是允许
       </button>
       <button
         type="button"
@@ -153,11 +164,14 @@ function ToolInvocationItem({
   const resultOutput = getToolResultOutput(toolInvocation)
   const isWaitingForHuman = toolInvocation.status === 'waiting_for_human'
 
-  const approveTool = async (): Promise<void> => {
+  const approveTool = async (alwaysAllow = false): Promise<void> => {
     setIsSubmittingDecision(true)
 
     try {
-      await approveChatToolCall({ toolInvocationId: toolInvocation.id })
+      await approveChatToolCall({
+        toolInvocationId: toolInvocation.id,
+        ...(alwaysAllow ? { alwaysAllow } : {})
+      })
     } finally {
       setIsSubmittingDecision(false)
     }
@@ -223,6 +237,9 @@ function ToolInvocationItem({
           disabled={isSubmittingDecision}
           onApprove={() => {
             void approveTool()
+          }}
+          onApproveAlways={() => {
+            void approveTool(true)
           }}
           onReject={() => {
             void rejectTool()
