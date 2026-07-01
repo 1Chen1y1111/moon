@@ -790,6 +790,111 @@ describe('SessionManager.sendMessage', () => {
     )
   })
 
+  it('passes project-bound history, workspace, and sources for prompt construction', async () => {
+    const project: ProjectRecord = {
+      id: 'project-prompt',
+      name: 'moon',
+      path: '/workspace/moon',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:00.000Z'
+    }
+    const session: SessionRecord = {
+      id: 'session-prompt',
+      projectId: project.id,
+      provider: 'claude',
+      title: 'Prompt contract',
+      status: 'active',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:00.000Z'
+    }
+    const topicId = `topic-${session.id}`
+    const threadId = `thread-${session.id}`
+    const sources: AgentSourceRecord[] = [
+      {
+        slug: 'workspace',
+        name: 'Workspace',
+        description: 'Local workspace source',
+        guidePath: '/workspace/moon/AGENTS.md',
+        instructions: 'Claude-first only. Pi and MCP are deferred.',
+        status: 'active'
+      }
+    ]
+    const sourceProvider: SessionSourceProvider = {
+      resolveSources: vi.fn(async (scope) => {
+        expect(scope.project).toMatchObject({ id: project.id, path: project.path })
+        expect(scope.session.projectId).toBe(project.id)
+
+        return sources
+      })
+    }
+    const capturedConfigs: AgentBackendConfig[] = []
+    const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
+      capturedConfigs.push(config)
+
+      return createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
+    })
+    const { service } = createService({
+      createAgentBackend,
+      messages: [
+        {
+          id: 'message-system-1',
+          sessionId: session.id,
+          topicId,
+          threadId,
+          role: 'system',
+          content: 'project system context',
+          status: 'complete',
+          createdAt: '2026-05-09T00:00:00.000Z',
+          updatedAt: '2026-05-09T00:00:00.000Z'
+        },
+        {
+          id: 'message-user-1',
+          sessionId: session.id,
+          topicId,
+          threadId,
+          role: 'user',
+          content: 'previous question',
+          status: 'complete',
+          createdAt: '2026-05-09T00:00:01.000Z',
+          updatedAt: '2026-05-09T00:00:01.000Z'
+        },
+        {
+          id: 'message-assistant-1',
+          sessionId: session.id,
+          topicId,
+          threadId,
+          role: 'assistant',
+          content: 'previous answer',
+          status: 'complete',
+          createdAt: '2026-05-09T00:00:02.000Z',
+          updatedAt: '2026-05-09T00:00:02.000Z'
+        }
+      ],
+      projects: [project],
+      sessions: [session],
+      sourceProvider,
+      settings: createClaudeSettings()
+    })
+
+    await service.sendMessage({ sessionId: session.id, content: 'current question' })
+
+    expect(sourceProvider.resolveSources).toHaveBeenCalledTimes(1)
+    expect(capturedConfigs).toHaveLength(1)
+    expect(capturedConfigs[0]).toMatchObject({
+      messages: [
+        { role: 'system', content: 'project system context' },
+        { role: 'user', content: 'previous question' },
+        { role: 'assistant', content: 'previous answer' },
+        { role: 'user', content: 'current question' }
+      ],
+      sources,
+      workspace: {
+        name: project.name,
+        path: project.path
+      }
+    })
+  })
+
   it('wires source activation requests to the session source activator', async () => {
     const project = {
       id: 'project-1',
@@ -1731,6 +1836,43 @@ describe('SessionManager.sendMessage', () => {
     ])
   })
 
+  it('maps reasoning deltas and text_complete events to message state and renderer events', async () => {
+    const settings = createClaudeSettings()
+    const events: ChatOperationEvent[] = []
+    const { messagesRepository, service } = createService({
+      settings,
+      agentEvents: [
+        { type: 'reasoning_delta', text: 'thinking' },
+        { type: 'text_complete', text: 'final answer' }
+      ]
+    })
+
+    const result = await service.sendMessage({ content: '测试 complete text' }, (event) =>
+      events.push(event)
+    )
+    const assistantMessage = messagesRepository.messages.find(
+      (message) => message.role === 'assistant'
+    )
+
+    expect(result.messages.map((message) => message.content)).toEqual([
+      '测试 complete text',
+      'final answer'
+    ])
+    expect(assistantMessage).toMatchObject({
+      content: 'final answer',
+      reasoning: 'thinking',
+      status: 'complete'
+    })
+    expect(events.map((event) => event.type)).toEqual([
+      'message-created',
+      'message-created',
+      'operation-started',
+      'reasoning-delta',
+      'message-delta',
+      'operation-done'
+    ])
+  })
+
   it('persists provider session ids and usage updates on operations', async () => {
     const settings = createClaudeSettings()
     const { service } = createService({
@@ -1871,6 +2013,94 @@ describe('SessionManager.sendMessage', () => {
     ])
     expect(events.map((event) => (event as { type: string }).type)).toContain('tool-start')
     expect(events.map((event) => (event as { type: string }).type)).toContain('tool-finish')
+  })
+
+  it('persists errored tool_result events on tool invocations', async () => {
+    const settings = createClaudeSettings()
+    const events: ChatOperationEvent[] = []
+    const { service, toolInvocationsRepository } = createService({
+      settings,
+      agentEvents: [
+        {
+          type: 'tool_start',
+          toolUseId: 'tool-error',
+          toolName: 'Bash',
+          input: { command: 'exit 1' }
+        },
+        {
+          type: 'tool_result',
+          toolUseId: 'tool-error',
+          toolName: 'Bash',
+          result: 'command failed',
+          isError: true
+        },
+        { type: 'text_delta', text: 'handled' }
+      ]
+    })
+
+    await service.sendMessage({ content: '跑失败工具' }, (event) => events.push(event))
+    const finishEvent = events.find(
+      (event): event is Extract<ChatOperationEvent, { type: 'tool-finish' }> =>
+        event.type === 'tool-finish'
+    )
+
+    expect(toolInvocationsRepository.invocations).toEqual([
+      expect.objectContaining({
+        id: 'tool-error',
+        name: 'Bash',
+        arguments: { command: 'exit 1' },
+        error: 'command failed',
+        result: null,
+        status: 'error'
+      })
+    ])
+    expect(finishEvent?.toolInvocation).toMatchObject({
+      id: 'tool-error',
+      error: 'command failed',
+      result: null,
+      status: 'error'
+    })
+  })
+
+  it('maps typed_error events to operation and message error state', async () => {
+    const settings = createClaudeSettings()
+    const events: ChatOperationEvent[] = []
+    const { agentOperationsRepository, messagesRepository, service } = createService({
+      settings,
+      agentEvents: [
+        {
+          type: 'typed_error',
+          error: {
+            code: 'claude_auth_status_error',
+            title: 'Claude auth failed',
+            message: 'login expired',
+            canRetry: true
+          }
+        }
+      ]
+    })
+
+    await expect(
+      service.sendMessage({ content: '测试 typed error' }, (event) => events.push(event))
+    ).rejects.toThrow('login expired')
+
+    expect(events.map((event) => event.type)).toEqual([
+      'message-created',
+      'message-created',
+      'operation-started',
+      'operation-error'
+    ])
+    expect(
+      messagesRepository.messages.find((message) => message.role === 'assistant')
+    ).toMatchObject({
+      error: 'login expired',
+      status: 'error'
+    })
+    expect(agentOperationsRepository.operations[0]).toMatchObject({
+      error: { message: 'login expired' },
+      completionReason: 'error',
+      status: 'error'
+    })
   })
 
   it('rejects command-like requests for Pi-compatible connections before backend creation', async () => {

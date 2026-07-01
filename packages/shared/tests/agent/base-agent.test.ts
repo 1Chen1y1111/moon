@@ -85,6 +85,16 @@ class TestAgent extends BaseAgent {
   }
 
   /**
+   * 使用指定历史消息构造 provider prompt，验证 workspace/source prompt 合同。
+   */
+  buildProviderPromptWithMessages(
+    message: string,
+    messages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>
+  ): string {
+    return this.buildPrompt(message, messages)
+  }
+
+  /**
    * 通过 BaseAgent 持有的 PermissionManager 检查 Claude 工具权限。
    */
   checkEditPermission() {
@@ -258,6 +268,66 @@ Active:
 
 USER:
 previous question`)
+  })
+
+  it('builds workspace prompts from sources and non-system history only', () => {
+    const agent = new TestAgent({
+      model: 'claude-sonnet',
+      sources: [
+        {
+          slug: 'workspace',
+          name: 'Workspace',
+          description: 'Local workspace source',
+          guidePath: '/workspace/moon/AGENTS.md',
+          instructions: 'Claude-first only. Pi and MCP are deferred.',
+          status: 'active'
+        }
+      ],
+      workspace: {
+        name: 'moon',
+        path: '/workspace/moon'
+      }
+    })
+
+    expect(
+      agent.buildProviderPromptWithMessages('current question', [
+        { role: 'system', content: 'project system context' },
+        { role: 'user', content: 'previous question' },
+        { role: 'assistant', content: 'previous answer' },
+        { role: 'user', content: 'current question' }
+      ])
+    ).toBe(`<sources>
+Active:
+- workspace (Workspace): Local workspace source
+  Guide: /workspace/moon/AGENTS.md
+  Instructions:
+Claude-first only. Pi and MCP are deferred.
+</sources>
+
+USER:
+previous question
+
+ASSISTANT:
+previous answer
+
+USER:
+current question`)
+  })
+
+  it('uses the current message as fallback when workspace filtering removes history', () => {
+    const agent = new TestAgent({
+      model: 'claude-sonnet',
+      workspace: {
+        name: 'moon',
+        path: '/workspace/moon'
+      }
+    })
+
+    expect(
+      agent.buildProviderPromptWithMessages('inspect workspace', [
+        { role: 'system', content: 'project system context' }
+      ])
+    ).toBe('inspect workspace')
   })
 
   it('builds prompts from the latest source runtime state', () => {

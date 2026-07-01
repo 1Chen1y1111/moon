@@ -297,23 +297,35 @@ function readAuthStatusEvents(message: SDKMessage): AgentEvent[] {
 }
 
 /**
- * 从 Claude SDK stream_event 中提取文本增量。
+ * 从 Claude SDK stream_event 中提取文本或 reasoning 增量。
  */
-function readStreamTextDelta(message: SDKMessage): string {
+function readStreamDeltaEvents(message: SDKMessage): AgentEvent[] {
   if (message.type !== 'stream_event') {
-    return ''
+    return []
   }
 
   const event = message.event as {
     type?: unknown
-    delta?: { type?: unknown; text?: unknown }
+    delta?: { type?: unknown; text?: unknown; thinking?: unknown }
   }
 
-  return event.type === 'content_block_delta' &&
-    event.delta?.type === 'text_delta' &&
-    typeof event.delta.text === 'string'
-    ? event.delta.text
-    : ''
+  if (event.type !== 'content_block_delta') {
+    return []
+  }
+
+  if (event.delta?.type === 'text_delta' && typeof event.delta.text === 'string') {
+    return [{ type: 'text_delta', text: event.delta.text }]
+  }
+
+  if (event.delta?.type === 'thinking_delta' && typeof event.delta.thinking === 'string') {
+    return [{ type: 'reasoning_delta', text: event.delta.thinking }]
+  }
+
+  if (event.delta?.type === 'reasoning_delta' && typeof event.delta.text === 'string') {
+    return [{ type: 'reasoning_delta', text: event.delta.text }]
+  }
+
+  return []
 }
 
 /**
@@ -328,11 +340,7 @@ function adaptSdkMessage(message: SDKMessage): AgentEvent[] {
   }
 
   if (message.type === 'stream_event') {
-    const text = readStreamTextDelta(message)
-
-    if (text.length > 0) {
-      events.push({ type: 'text_delta', text })
-    }
+    events.push(...readStreamDeltaEvents(message))
 
     return events
   }
@@ -484,9 +492,7 @@ export class ClaudeEventAdapter extends BaseEventAdapter {
       ...(event.toolName !== undefined || indexedToolName === undefined
         ? {}
         : { toolName: indexedToolName }),
-      ...(event.input !== undefined || indexedInput === undefined
-        ? {}
-        : { input: indexedInput }),
+      ...(event.input !== undefined || indexedInput === undefined ? {} : { input: indexedInput }),
       ...(event.parentToolUseId !== undefined || indexedTool?.parentToolUseId === undefined
         ? {}
         : { parentToolUseId: indexedTool.parentToolUseId }),

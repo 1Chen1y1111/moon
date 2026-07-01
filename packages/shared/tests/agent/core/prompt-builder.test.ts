@@ -36,6 +36,23 @@ describe('PromptBuilder', () => {
     ).toBe('SYSTEM:\nfollow project rules\n\nUSER:\nhello\n\nASSISTANT:\nhi')
   })
 
+  it('keeps assistant history when workspace context is active', () => {
+    const promptBuilder = new PromptBuilder()
+
+    expect(
+      promptBuilder.build({
+        fallbackMessage: 'fallback',
+        messages: [
+          { role: 'system', content: 'project context' },
+          { role: 'user', content: 'previous question' },
+          { role: 'assistant', content: 'previous answer' },
+          { role: 'user', content: 'current question' }
+        ],
+        workspace
+      })
+    ).toBe('USER:\nprevious question\n\nASSISTANT:\nprevious answer\n\nUSER:\ncurrent question')
+  })
+
   it('filters system messages when workspace context is active', () => {
     const promptBuilder = new PromptBuilder()
 
@@ -73,6 +90,35 @@ describe('PromptBuilder', () => {
         sourceContextBlock: '<sources>\nActive:\n- github (GitHub)\n</sources>'
       })
     ).toBe('<sources>\nActive:\n- github (GitHub)\n</sources>\n\nUSER:\ninspect sources')
+  })
+
+  it('prepends source context before workspace-filtered history', () => {
+    const promptBuilder = new PromptBuilder()
+
+    expect(
+      promptBuilder.build({
+        fallbackMessage: 'fallback',
+        messages: [
+          { role: 'system', content: 'project context' },
+          { role: 'user', content: 'inspect workspace' }
+        ],
+        sourceContextBlock: '<sources>\nActive:\n- workspace (Workspace)\n</sources>',
+        workspace
+      })
+    ).toBe('<sources>\nActive:\n- workspace (Workspace)\n</sources>\n\nUSER:\ninspect workspace')
+  })
+
+  it('prepends source context before fallback messages when history is empty', () => {
+    const promptBuilder = new PromptBuilder()
+
+    expect(
+      promptBuilder.build({
+        fallbackMessage: 'current question',
+        messages: [],
+        sourceContextBlock: '<sources>\nActive:\n- workspace (Workspace)\n</sources>',
+        workspace
+      })
+    ).toBe('<sources>\nActive:\n- workspace (Workspace)\n</sources>\n\ncurrent question')
   })
 
   it('ignores blank source context so fallback behavior stays unchanged', () => {

@@ -7,11 +7,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Options } from '@anthropic-ai/claude-agent-sdk'
 
 import { ClaudeAgent } from '../../src/agent'
-import type {
-  AgentEvent,
-  AgentSourceRecord,
-  PendingSourceActivationRestart
-} from '../../src/agent'
+import type { AgentEvent, AgentSourceRecord, PendingSourceActivationRestart } from '../../src/agent'
 
 /**
  * 暴露 BaseAgent 的 pending source activation 写入能力，供 ClaudeAgent 链路测试模拟未来触发器。
@@ -412,7 +408,13 @@ describe('ClaudeAgent', () => {
 
     expect(queryClaude).toHaveBeenCalledWith(
       expect.objectContaining({
-        prompt: 'SYSTEM:\nfollow project rules\n\nUSER:\nprevious question'
+        prompt: 'SYSTEM:\nfollow project rules\n\nUSER:\nprevious question',
+        options: expect.objectContaining({
+          includePartialMessages: true,
+          model: 'claude-sonnet',
+          permissionMode: 'dontAsk',
+          tools: []
+        })
       })
     )
   })
@@ -438,6 +440,95 @@ Active:
 </sources>
 
 inspect repo`
+      })
+    )
+  })
+
+  it('passes workspace source context and filtered history to Claude SDK query', async () => {
+    const queryClaude = createQueryClaudeMock()
+    const agent = new ClaudeAgent({
+      model: 'claude-sonnet',
+      messages: [
+        { role: 'system', content: 'project system context' },
+        { role: 'user', content: 'previous question' },
+        { role: 'assistant', content: 'previous answer' },
+        { role: 'user', content: 'current question' }
+      ],
+      queryClaude: queryClaude as never,
+      sources: [
+        {
+          slug: 'workspace',
+          name: 'Workspace',
+          description: 'Local workspace source',
+          guidePath: '/workspace/moon/AGENTS.md',
+          instructions: 'Claude-first only. Pi and MCP are deferred.',
+          status: 'active'
+        }
+      ],
+      workspace: {
+        name: 'moon',
+        path: '/workspace/moon'
+      }
+    })
+
+    for await (const _event of agent.chat('current question')) {
+      // 消费事件流以触发 SDK query mock。
+    }
+
+    expect(queryClaude).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: `<sources>
+Active:
+- workspace (Workspace): Local workspace source
+  Guide: /workspace/moon/AGENTS.md
+  Instructions:
+Claude-first only. Pi and MCP are deferred.
+</sources>
+
+USER:
+previous question
+
+ASSISTANT:
+previous answer
+
+USER:
+current question`,
+        options: expect.objectContaining({
+          allowDangerouslySkipPermissions: true,
+          cwd: '/workspace/moon',
+          includePartialMessages: true,
+          model: 'claude-sonnet',
+          permissionMode: 'bypassPermissions',
+          systemPrompt: expect.objectContaining({
+            append: expect.stringContaining('项目根目录：/workspace/moon'),
+            preset: 'claude_code',
+            type: 'preset'
+          }),
+          tools: { type: 'preset', preset: 'claude_code' }
+        })
+      })
+    )
+  })
+
+  it('uses current user text as prompt fallback when workspace filters history out', async () => {
+    const queryClaude = createQueryClaudeMock()
+    const agent = new ClaudeAgent({
+      model: 'claude-sonnet',
+      messages: [{ role: 'system', content: 'project system context' }],
+      queryClaude: queryClaude as never,
+      workspace: {
+        name: 'moon',
+        path: '/workspace/moon'
+      }
+    })
+
+    for await (const _event of agent.chat('inspect workspace')) {
+      // 消费事件流以触发 SDK query mock。
+    }
+
+    expect(queryClaude).toHaveBeenCalledWith(
+      expect.objectContaining({
+        prompt: 'inspect workspace'
       })
     )
   })

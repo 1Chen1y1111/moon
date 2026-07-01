@@ -93,6 +93,33 @@ describe('ClaudeEventAdapter', () => {
     ).toEqual([{ type: 'text_delta', text: 'hello' }])
   })
 
+  it('converts stream thinking deltas to reasoning_delta events', () => {
+    expect(
+      adaptWithAdapter(
+        sdkMessage({
+          type: 'stream_event',
+          event: {
+            type: 'content_block_delta',
+            delta: { type: 'thinking_delta', thinking: 'let me inspect' }
+          }
+        }),
+        'turn-1'
+      )
+    ).toEqual([{ type: 'reasoning_delta', text: 'let me inspect', turnId: 'turn-1' }])
+
+    expect(
+      adaptWithAdapter(
+        sdkMessage({
+          type: 'stream_event',
+          event: {
+            type: 'content_block_delta',
+            delta: { type: 'reasoning_delta', text: 'alternate reasoning payload' }
+          }
+        })
+      )
+    ).toEqual([{ type: 'reasoning_delta', text: 'alternate reasoning payload' }])
+  })
+
   it('converts assistant text blocks to text_complete events', () => {
     expect(
       adaptWithAdapter(
@@ -617,6 +644,74 @@ describe('ClaudeEventAdapter', () => {
     ])
   })
 
+  it('uses permission-prefixed block reasons for blocked tool results', () => {
+    const adapter = new ClaudeEventAdapter()
+
+    adapter.startTurn('turn-1')
+    adapter.setBlockReason('perm-tool-1', 'Permission hook blocked this tool')
+
+    expect(
+      adapter.adapt(
+        sdkMessage({
+          type: 'user',
+          isSynthetic: true,
+          message: {
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: 'tool-1',
+                content: 'fallback text',
+                is_error: false
+              }
+            ]
+          }
+        })
+      )
+    ).toEqual([
+      {
+        type: 'tool_result',
+        toolUseId: 'tool-1',
+        isError: true,
+        result: 'Permission hook blocked this tool',
+        turnId: 'turn-1'
+      }
+    ])
+  })
+
+  it('uses accumulated command output when tool_result omits content', () => {
+    const adapter = new ClaudeEventAdapter()
+
+    adapter.startTurn('turn-1')
+    adapter.accumulateOutput('tool-1', 'first chunk\n')
+    adapter.accumulateOutput('tool-1', 'second chunk')
+
+    expect(
+      adapter.adapt(
+        sdkMessage({
+          type: 'user',
+          isSynthetic: true,
+          message: {
+            content: [
+              {
+                type: 'tool_result',
+                tool_use_id: 'tool-1',
+                is_error: false
+              }
+            ]
+          }
+        })
+      )
+    ).toEqual([
+      {
+        type: 'tool_result',
+        toolUseId: 'tool-1',
+        isError: false,
+        result: 'first chunk\nsecond chunk',
+        turnId: 'turn-1'
+      }
+    ])
+  })
+
   it('converts system status messages to status events', () => {
     expect(
       adaptWithAdapter(
@@ -716,6 +811,33 @@ describe('ClaudeEventAdapter', () => {
           message: 'login expired',
           canRetry: true
         }
+      }
+    ])
+  })
+
+  it('only attaches turn ids to turn-scoped typed error events', () => {
+    expect(
+      adaptWithAdapter(
+        sdkMessage({
+          type: 'auth_status',
+          session_id: 'sdk-session-1',
+          isAuthenticating: false,
+          output: [],
+          error: 'login expired'
+        }),
+        'turn-1'
+      )
+    ).toEqual([
+      { type: 'session_id_update', sessionId: 'sdk-session-1' },
+      {
+        type: 'typed_error',
+        error: {
+          code: 'claude_auth_status_error',
+          title: 'Claude authentication failed',
+          message: 'login expired',
+          canRetry: true
+        },
+        turnId: 'turn-1'
       }
     ])
   })
