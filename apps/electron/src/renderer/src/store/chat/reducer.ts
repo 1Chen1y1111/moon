@@ -349,6 +349,15 @@ function removePendingToolInvocation(
   return pendingToolInvocations.filter((toolInvocation) => toolInvocation.id !== toolInvocationId)
 }
 
+function removePendingToolInvocationsForOperation(
+  pendingToolInvocations: ToolInvocationRecord[],
+  operationId: string
+): ToolInvocationRecord[] {
+  return pendingToolInvocations.filter(
+    (toolInvocation) => toolInvocation.operationId !== operationId
+  )
+}
+
 function withOperationStatus(
   state: ChatState,
   operationId: string,
@@ -558,6 +567,14 @@ function applyChatOperationEvent(state: ChatState, event: ChatOperationEvent): C
     return state
   }
 
+  const existingOperation = state.operationsById[event.operationId]
+
+  if (existingOperation?.status === 'succeeded' || existingOperation?.status === 'cancelled') {
+    return state
+  }
+
+  const isInterruptedOperation = event.operation.status === 'interrupted'
+
   return updateMessageById(
     {
       ...state,
@@ -571,12 +588,16 @@ function applyChatOperationEvent(state: ChatState, event: ChatOperationEvent): C
           userMessageId: state.operationsById[event.operationId]?.userMessageId
         })
       },
-      error: event.error
+      pendingToolInvocations: removePendingToolInvocationsForOperation(
+        state.pendingToolInvocations,
+        event.operationId
+      ),
+      error: isInterruptedOperation ? null : event.error
     },
     event.messageId ?? '',
     (message) => ({
       ...message,
-      status: 'error',
+      status: isInterruptedOperation ? 'cancelled' : 'error',
       error: event.error
     })
   )
@@ -1026,13 +1047,18 @@ export function chatReducer(state: ChatState, action: ChatReducerAction): ChatSt
           ? null
           : state.streamingAssistantMessageId,
       sendStatus: action.operation.status === 'interrupted' ? 'failed' : state.sendStatus,
+      error: action.operation.status === 'interrupted' ? null : state.error,
       operationsById: {
         ...state.operationsById,
         [action.operation.id]: toChatOperationState(action.operation, {
           assistantMessageId: existingOperation?.assistantMessageId,
           userMessageId: existingOperation?.userMessageId
         })
-      }
+      },
+      pendingToolInvocations: removePendingToolInvocationsForOperation(
+        state.pendingToolInvocations,
+        action.operation.id
+      )
     }
 
     if (existingOperation?.assistantMessageId === undefined) {
