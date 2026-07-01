@@ -24,14 +24,19 @@ describe('workspace path helpers', () => {
 describe('PermissionManager', () => {
   const workspace = { path: '/workspace/moon' }
 
-  it('allows Claude read-only tools inside the workspace', () => {
+  it.each([
+    ['Read', { file_path: 'README.md' }],
+    ['Glob', { pattern: '*.ts', path: 'src' }],
+    ['Grep', { pattern: 'Moon', path: 'src' }],
+    ['LS', { directory: 'src' }]
+  ])('allows Claude read-only tool %s inside the workspace', (toolName, toolInput) => {
     const permissionManager = new PermissionManager({ workspace })
 
     expect(
       permissionManager.checkClaudeToolUse({
-        toolName: 'Read',
-        toolUseId: 'read-tool-1',
-        toolInput: { file_path: 'README.md' }
+        toolName,
+        toolUseId: `${toolName.toLowerCase()}-tool-1`,
+        toolInput
       })
     ).toEqual({ type: 'allow' })
   })
@@ -121,6 +126,21 @@ describe('PermissionManager', () => {
     })
   })
 
+  it('blocks read-only Claude tools outside the workspace', () => {
+    const permissionManager = new PermissionManager({ workspace })
+
+    expect(
+      permissionManager.checkClaudeToolUse({
+        toolName: 'Grep',
+        toolUseId: 'grep-tool-1',
+        toolInput: { pattern: 'secret', path: '../other-project' }
+      })
+    ).toMatchObject({
+      type: 'block',
+      reason: '工具路径超出当前项目 workspace，已被 Moon 阻止。'
+    })
+  })
+
   it('blocks unsupported Claude tools while Moon only exposes the approved tool set', () => {
     const permissionManager = new PermissionManager({ workspace })
 
@@ -132,7 +152,8 @@ describe('PermissionManager', () => {
       })
     ).toMatchObject({
       type: 'block',
-      reason: 'Moon 当前阶段只允许 Claude Code SDK 只读工具、Bash 和文件写入审批，已阻止 NotebookEdit。'
+      reason:
+        'Moon 当前阶段只允许 Claude Code SDK 只读工具、Bash 和文件写入审批，已阻止 NotebookEdit。'
     })
   })
 })

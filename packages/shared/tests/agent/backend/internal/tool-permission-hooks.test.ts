@@ -141,6 +141,26 @@ describe('ClaudeToolUseChecker with PermissionManager', () => {
 })
 
 describe('createClaudePreToolUseHooks', () => {
+  it('continues read-only Claude tools inside the workspace', async () => {
+    const requestPermission = vi.fn()
+    const hook = resolvePreToolUseHook({
+      checkToolUse: createPermissionChecker('ask'),
+      requestPermission
+    })
+
+    await expect(
+      runPreToolUseHook(
+        hook,
+        createPreToolUseInput({
+          tool_name: 'Grep',
+          tool_input: { pattern: 'Moon', path: 'src' },
+          tool_use_id: 'grep-tool-1'
+        })
+      )
+    ).resolves.toEqual({ continue: true })
+    expect(requestPermission).not.toHaveBeenCalled()
+  })
+
   it('continues allowed tool calls without asking for UI permission', async () => {
     const requestPermission = vi.fn()
     const hook = resolvePreToolUseHook({
@@ -159,6 +179,35 @@ describe('createClaudePreToolUseHooks', () => {
       )
     ).resolves.toEqual({ continue: true })
     expect(requestPermission).not.toHaveBeenCalled()
+  })
+
+  it('sends Bash prompt decisions through the UI permission requester', async () => {
+    const requestPermission = vi.fn(async () => ({
+      requestId: 'perm-bash-tool-1',
+      approved: true
+    }))
+    const hook = resolvePreToolUseHook({
+      checkToolUse: createPermissionChecker('ask'),
+      requestPermission
+    })
+
+    await expect(
+      runPreToolUseHook(
+        hook,
+        createPreToolUseInput({
+          tool_name: 'Bash',
+          tool_input: { command: 'pnpm test' },
+          tool_use_id: 'bash-tool-1'
+        })
+      )
+    ).resolves.toEqual({ continue: true })
+    expect(requestPermission).toHaveBeenCalledWith({
+      requestId: 'perm-bash-tool-1',
+      toolName: 'Bash',
+      description: '需要在项目目录执行命令：pnpm test',
+      command: 'pnpm test',
+      type: 'bash'
+    })
   })
 
   it('translates blocked permission checks into Claude SDK block output', async () => {
@@ -189,6 +238,38 @@ describe('createClaudePreToolUseHooks', () => {
         toolUseId: 'write-tool-1'
       },
       '安全模式禁止 Claude Code SDK 修改项目文件。'
+    )
+  })
+
+  it('reports unsupported Claude tools as blocked with the original tool payload', async () => {
+    const onToolUseBlocked = vi.fn()
+    const hook = resolvePreToolUseHook({
+      checkToolUse: createPermissionChecker('ask'),
+      onToolUseBlocked
+    })
+
+    await expect(
+      runPreToolUseHook(
+        hook,
+        createPreToolUseInput({
+          tool_name: 'NotebookEdit',
+          tool_input: { notebook_path: 'analysis.ipynb' },
+          tool_use_id: 'notebook-tool-1'
+        })
+      )
+    ).resolves.toMatchObject({
+      continue: false,
+      decision: 'block',
+      reason:
+        'Moon 当前阶段只允许 Claude Code SDK 只读工具、Bash 和文件写入审批，已阻止 NotebookEdit。'
+    })
+    expect(onToolUseBlocked).toHaveBeenCalledWith(
+      {
+        toolName: 'NotebookEdit',
+        toolInput: { notebook_path: 'analysis.ipynb' },
+        toolUseId: 'notebook-tool-1'
+      },
+      'Moon 当前阶段只允许 Claude Code SDK 只读工具、Bash 和文件写入审批，已阻止 NotebookEdit。'
     )
   })
 

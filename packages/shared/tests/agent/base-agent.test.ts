@@ -9,6 +9,7 @@ import { BaseAgent } from '../../src/agent'
 import type {
   AgentChatOptions,
   AgentEvent,
+  AgentPermissionDecision,
   PendingSourceActivationRestart,
   AgentSourceRecord,
   ClaudeToolUsePermissionInput,
@@ -102,6 +103,24 @@ class TestAgent extends BaseAgent {
   }
 
   /**
+   * 创建一个权限请求后立即结束 turn，用于验证 endTurn 会拒绝未决权限。
+   */
+  requestPermissionThenEndTurnForTest(): Promise<AgentPermissionDecision> {
+    const turn = this.startTurn({ turnId: 'operation-1' })
+    const decision = this.requestPermission({
+      requestId: 'permission-1',
+      toolName: 'Bash',
+      description: '运行命令',
+      command: 'pwd',
+      type: 'bash'
+    })
+
+    this.endTurn(turn)
+
+    return decision
+  }
+
+  /**
    * 用不同 message 触发测试所需的最小行为。
    */
   async *chat(
@@ -134,7 +153,11 @@ class TestAgent extends BaseAgent {
 
         yield {
           type: 'info',
-          message: result.approved ? 'approved' : `rejected:${result.reason ?? 'none'}`
+          message: result.approved
+            ? result.alwaysAllow === true
+              ? 'approved:always'
+              : 'approved'
+            : `rejected:${result.reason ?? 'none'}`
         }
         return
       }
@@ -387,7 +410,8 @@ previous question`)
       })
     ).toMatchObject({
       type: 'block',
-      reason: 'Moon 当前阶段只允许 Claude Code SDK 只读工具、Bash 和文件写入审批，已阻止 mcp__linear__createIssue。'
+      reason:
+        'Moon 当前阶段只允许 Claude Code SDK 只读工具、Bash 和文件写入审批，已阻止 mcp__linear__createIssue。'
     })
   })
 
@@ -462,6 +486,35 @@ previous question`)
     })
   })
 
+  it('passes alwaysAllow permission decisions through respondToPermission', async () => {
+    const agent = new TestAgent({ model: 'claude-sonnet' })
+    const events = agent.chat('permission')
+
+    await events.next()
+
+    agent.respondToPermission('permission-1', true, true)
+
+    await expect(events.next()).resolves.toMatchObject({
+      value: { type: 'info', message: 'approved:always' },
+      done: false
+    })
+  })
+
+  it('rejects pending permission requests when aborted', async () => {
+    const agent = new TestAgent({ model: 'claude-sonnet' })
+    const events = agent.chat('permission')
+
+    await events.next()
+
+    await agent.abort('stop')
+
+    await expect(events.next()).resolves.toMatchObject({
+      value: { type: 'info', message: 'rejected:stop' },
+      done: false
+    })
+    expect(agent.isProcessing()).toBe(false)
+  })
+
   it('rejects pending permission requests when destroyed', async () => {
     const agent = new TestAgent({ model: 'claude-sonnet' })
     const events = agent.chat('permission')
@@ -473,6 +526,17 @@ previous question`)
     await expect(events.next()).resolves.toMatchObject({
       value: { type: 'info', message: 'rejected:Agent destroyed.' },
       done: false
+    })
+    expect(agent.isProcessing()).toBe(false)
+  })
+
+  it('rejects pending permission requests when the turn ends', async () => {
+    const agent = new TestAgent({ model: 'claude-sonnet' })
+
+    await expect(agent.requestPermissionThenEndTurnForTest()).resolves.toEqual({
+      requestId: 'permission-1',
+      approved: false,
+      reason: 'Agent turn ended.'
     })
     expect(agent.isProcessing()).toBe(false)
   })

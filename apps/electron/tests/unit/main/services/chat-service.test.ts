@@ -1971,6 +1971,37 @@ describe('SessionManager.sendMessage', () => {
     ])
   })
 
+  it('passes alwaysAllow permission approvals through respondToPermission', async () => {
+    const settings = createClaudeSettings()
+    const decisions: AgentPermissionDecision[] = []
+    const agentBackend = createPermissionAgentBackend(decisions)
+    const { service, toolInvocationsRepository } = createService({
+      createAgentBackend: vi.fn(() => agentBackend),
+      settings
+    })
+
+    await service.sendMessage({ content: '始终允许这个工具' }, (event) => {
+      if (event.type === 'tool-waiting-approval') {
+        void service.approveToolCall({
+          toolInvocationId: event.toolInvocation.id,
+          alwaysAllow: true
+        })
+      }
+    })
+
+    expect(decisions).toEqual([
+      { requestId: 'permission-tool-1', approved: true, alwaysAllow: true }
+    ])
+    expect(agentBackend.respondToPermission).toHaveBeenCalledWith('permission-tool-1', true, true)
+    expect(toolInvocationsRepository.invocations).toEqual([
+      expect.objectContaining({
+        id: 'permission-tool-1',
+        result: { approved: true },
+        status: 'done'
+      })
+    ])
+  })
+
   it('persists file write permission metadata for the approval card', async () => {
     const settings = createClaudeSettings()
     const decisions: AgentPermissionDecision[] = []
@@ -2018,6 +2049,7 @@ describe('SessionManager.sendMessage', () => {
   it('sends rejected permission decisions back through respondToPermission', async () => {
     const settings = createClaudeSettings()
     const decisions: AgentPermissionDecision[] = []
+    const events: ChatOperationEvent[] = []
     const agentBackend = createPermissionAgentBackend(decisions)
     const { service, toolInvocationsRepository } = createService({
       createAgentBackend: vi.fn(() => agentBackend),
@@ -2025,6 +2057,8 @@ describe('SessionManager.sendMessage', () => {
     })
 
     const result = await service.sendMessage({ content: '拒绝工具权限' }, (event) => {
+      events.push(event)
+
       if (event.type === 'tool-waiting-approval') {
         void service.rejectToolCall({
           toolInvocationId: event.toolInvocation.id,
@@ -2036,6 +2070,25 @@ describe('SessionManager.sendMessage', () => {
     expect(decisions).toEqual([{ requestId: 'permission-tool-1', approved: false }])
     expect(agentBackend.respondToPermission).toHaveBeenCalledWith('permission-tool-1', false, false)
     expect(result.messages.map((message) => message.content)).toEqual(['拒绝工具权限', 'rejected'])
+    expect(events.map((event) => event.type)).toEqual([
+      'message-created',
+      'message-created',
+      'operation-started',
+      'tool-waiting-approval',
+      'tool-finish',
+      'message-delta',
+      'operation-done'
+    ])
+    expect(
+      events.find(
+        (event): event is Extract<ChatOperationEvent, { type: 'tool-finish' }> =>
+          event.type === 'tool-finish'
+      )?.toolInvocation
+    ).toMatchObject({
+      id: 'permission-tool-1',
+      error: '不允许执行测试命令',
+      status: 'rejected'
+    })
     expect(toolInvocationsRepository.invocations).toEqual([
       expect.objectContaining({
         id: 'permission-tool-1',
