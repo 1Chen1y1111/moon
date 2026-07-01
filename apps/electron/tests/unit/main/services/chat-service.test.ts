@@ -2062,6 +2062,103 @@ describe('SessionManager.sendMessage', () => {
     })
   })
 
+  it('maps streaming cancellation to interrupted operation and cancelled assistant message', async () => {
+    const settings = createClaudeSettings()
+    const events: ChatOperationEvent[] = []
+    let observedAbortSignal: AbortSignal | undefined
+    const createAgentBackend = vi.fn(
+      (): AgentBackend => ({
+        async *chat(
+          _message: string,
+          _attachments?: MessageAttachment[],
+          options?: AgentChatOptions
+        ): AsyncGenerator<AgentEvent, void, void> {
+          void _message
+          void _attachments
+          observedAbortSignal = options?.abortSignal
+
+          yield { type: 'text_delta', text: 'partial ' }
+
+          if (options?.abortSignal?.aborted === true) {
+            throw new Error('Cancelled by user.')
+          }
+
+          yield { type: 'text_delta', text: 'should not continue' }
+        },
+        abort: vi.fn(async () => {}),
+        destroy: vi.fn(),
+        getModel: vi.fn(() => 'test-model'),
+        isProcessing: vi.fn(() => false),
+        respondToPermission: vi.fn(),
+        setModel: vi.fn()
+      })
+    )
+    const { agentOperationsRepository, messagesRepository, service } = createService({
+      createAgentBackend,
+      settings
+    })
+
+    await expect(
+      service.sendMessage({ content: '取消 streaming' }, (event) => {
+        events.push(event)
+
+        if (event.type === 'message-delta') {
+          void service.cancelOperation({ operationId: event.operationId })
+        }
+      })
+    ).rejects.toThrow('Cancelled by user.')
+
+    expect(observedAbortSignal?.aborted).toBe(true)
+    expect(events.map((event) => event.type)).toEqual([
+      'message-created',
+      'message-created',
+      'operation-started',
+      'message-delta',
+      'operation-error'
+    ])
+    expect(events.map((event) => event.type)).not.toContain('operation-done')
+    expect(
+      messagesRepository.messages.find((message) => message.role === 'assistant')
+    ).toMatchObject({
+      content: 'partial ',
+      error: 'Cancelled by user.',
+      status: 'cancelled'
+    })
+    expect(agentOperationsRepository.operations[0]).toMatchObject({
+      error: null,
+      completionReason: 'interrupted',
+      status: 'interrupted'
+    })
+  })
+
+  it('keeps completed operations unchanged when cancellation arrives late', async () => {
+    const settings = createClaudeSettings()
+    const { agentOperationsRepository, messagesRepository, service } = createService({
+      settings,
+      agentEvents: [{ type: 'text_delta', text: 'done' }]
+    })
+
+    const result = await service.sendMessage({ content: '已经完成' })
+    const cancelledResult = await service.cancelOperation({ operationId: result.operation.id })
+
+    expect(cancelledResult).toMatchObject({
+      id: result.operation.id,
+      completionReason: 'done',
+      status: 'done'
+    })
+    expect(agentOperationsRepository.operations[0]).toMatchObject({
+      completionReason: 'done',
+      status: 'done'
+    })
+    expect(
+      messagesRepository.messages.find((message) => message.role === 'assistant')
+    ).toMatchObject({
+      content: 'done',
+      error: null,
+      status: 'complete'
+    })
+  })
+
   it('maps typed_error events to operation and message error state', async () => {
     const settings = createClaudeSettings()
     const events: ChatOperationEvent[] = []
@@ -2332,14 +2429,17 @@ describe('SessionManager.sendMessage', () => {
   it('rejects pending permissions when cancelling an operation', async () => {
     const settings = createClaudeSettings()
     const decisions: AgentPermissionDecision[] = []
+    const events: ChatOperationEvent[] = []
     const agentBackend = createPermissionAgentBackend(decisions, { throwWhenAborted: true })
-    const { service, toolInvocationsRepository } = createService({
+    const { agentOperationsRepository, service, toolInvocationsRepository } = createService({
       createAgentBackend: vi.fn(() => agentBackend),
       settings
     })
 
     await expect(
       service.sendMessage({ content: '取消工具权限' }, (event) => {
+        events.push(event)
+
         if (event.type === 'tool-waiting-approval') {
           void service.cancelOperation({ operationId: event.operationId })
         }
@@ -2348,6 +2448,19 @@ describe('SessionManager.sendMessage', () => {
 
     expect(decisions).toEqual([{ requestId: 'permission-tool-1', approved: false }])
     expect(agentBackend.respondToPermission).toHaveBeenCalledWith('permission-tool-1', false, false)
+    expect(agentBackend.respondToPermission).toHaveBeenCalledTimes(1)
+    expect(events.map((event) => event.type)).toEqual([
+      'message-created',
+      'message-created',
+      'operation-started',
+      'tool-waiting-approval',
+      'operation-error'
+    ])
+    expect(agentOperationsRepository.operations[0]).toMatchObject({
+      error: null,
+      completionReason: 'interrupted',
+      status: 'interrupted'
+    })
     expect(toolInvocationsRepository.invocations).toEqual([
       expect.objectContaining({
         id: 'permission-tool-1',
@@ -2356,6 +2469,18 @@ describe('SessionManager.sendMessage', () => {
         status: 'rejected'
       })
     ])
+
+    const eventCountAfterCancel = events.length
+    const approvalAfterCancel = await service.approveToolCall({
+      toolInvocationId: 'permission-tool-1'
+    })
+
+    expect(approvalAfterCancel).toMatchObject({
+      id: 'permission-tool-1',
+      status: 'rejected'
+    })
+    expect(agentBackend.respondToPermission).toHaveBeenCalledTimes(1)
+    expect(events).toHaveLength(eventCountAfterCancel)
   })
 
   it('sends stored attachments as model message parts', async () => {

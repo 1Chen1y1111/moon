@@ -391,6 +391,31 @@ describe('ClaudeAgent', () => {
     )
   })
 
+  it('passes active turn cancellation into Claude SDK query options', async () => {
+    const queryClaude = createQueryClaudeMock()
+    const abortController = new AbortController()
+    const agent = new ClaudeAgent({
+      model: 'claude-sonnet',
+      messages: [],
+      queryClaude: queryClaude as never
+    })
+
+    abortController.abort('cancelled')
+
+    for await (const _event of agent.chat('hello', undefined, {
+      abortSignal: abortController.signal
+    })) {
+      // 消费事件流以触发 SDK query mock。
+    }
+
+    const queryCalls = queryClaude.mock.calls as unknown as Array<[{ options?: Options }]>
+    const queryOptions = queryCalls.at(0)?.[0].options
+    const queryAbortController = queryOptions?.abortController
+
+    expect(queryAbortController).toBeInstanceOf(AbortController)
+    expect(queryAbortController?.signal.aborted).toBe(true)
+  })
+
   it('passes serialized history prompt to Claude SDK when no workspace is configured', async () => {
     const queryClaude = createQueryClaudeMock()
     const agent = new ClaudeAgent({

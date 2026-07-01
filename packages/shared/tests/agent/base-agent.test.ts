@@ -530,6 +530,39 @@ previous question`)
     await events.return(undefined)
   })
 
+  it('bridges an already-aborted external signal into the active turn', async () => {
+    const agent = new TestAgent({ model: 'claude-sonnet' })
+    const abortController = new AbortController()
+
+    abortController.abort('cancelled')
+
+    const events = agent.chat('status', undefined, {
+      abortSignal: abortController.signal
+    })
+
+    await events.next()
+
+    expect(agent.lastAbortSignal?.aborted).toBe(true)
+
+    await events.return(undefined)
+  })
+
+  it('bridges external aborts while a turn is active', async () => {
+    const agent = new TestAgent({ model: 'claude-sonnet' })
+    const abortController = new AbortController()
+    const events = agent.chat('status', undefined, {
+      abortSignal: abortController.signal
+    })
+
+    await events.next()
+
+    abortController.abort('cancelled')
+
+    expect(agent.lastAbortSignal?.aborted).toBe(true)
+
+    await events.return(undefined)
+  })
+
   it('resolves permission requests through respondToPermission', async () => {
     const agent = new TestAgent({ model: 'claude-sonnet' })
     const events = agent.chat('permission', undefined, { turnId: 'operation-1' })

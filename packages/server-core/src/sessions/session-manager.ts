@@ -874,6 +874,10 @@ export class SessionManager {
       throw new Error('Agent operation not found.')
     }
 
+    if (operation.status === 'done') {
+      return operation
+    }
+
     await this.rejectPendingToolPermissionsForOperation(operation.id, 'Cancelled by user.')
 
     const cancelledOperation = await this.agentOperationsRepository.save({
