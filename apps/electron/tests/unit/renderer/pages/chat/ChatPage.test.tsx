@@ -7,9 +7,15 @@ import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { ChatPage } from '@renderer/pages/chat'
+import type { ChatState } from '@renderer/store/chat'
 import { renderWithProviders } from '@tests/helpers/renderer/render-with-providers'
 import { installMockWindowApi, type MockMoonApi } from '@tests/helpers/renderer/mock-window-api'
-import type { MessageRecord } from '@moon/shared/domain/chat'
+import type {
+  AgentOperationRecord,
+  ChatOperationEvent,
+  MessageRecord,
+  ToolInvocationRecord
+} from '@moon/shared/domain/chat'
 import type { ProjectRecord } from '@moon/shared/domain/project'
 import { createDefaultAppSettings, type AppSettings } from '@moon/shared/domain/settings'
 
@@ -104,6 +110,118 @@ function createModelSwitchSettings(): AppSettings {
   }
 
   return settings
+}
+
+function createOperationRecord(
+  input: Partial<AgentOperationRecord> = {}
+): AgentOperationRecord {
+  return {
+    id: 'operation-1',
+    appContext: { sessionId: 'session-1' },
+    topicId: 'topic-1',
+    threadId: 'thread-1',
+    status: 'running',
+    createdAt: '2026-05-09T00:00:00.000Z',
+    updatedAt: '2026-05-09T00:00:01.000Z',
+    ...input
+  }
+}
+
+function createToolInvocation(
+  input: Partial<ToolInvocationRecord> = {}
+): ToolInvocationRecord {
+  return {
+    id: 'tool-1',
+    operationId: 'operation-1',
+    messageId: 'message-2',
+    name: 'Bash',
+    arguments: {
+      description: '需要执行测试命令',
+      command: 'pnpm test'
+    },
+    intervention: {
+      type: 'permission_request',
+      description: '需要执行测试命令',
+      command: 'pnpm test'
+    },
+    status: 'waiting_for_human',
+    createdAt: '2026-05-09T00:00:02.000Z',
+    updatedAt: '2026-05-09T00:00:02.000Z',
+    ...input
+  }
+}
+
+function toMessageState(
+  messages: MessageRecord[]
+): Pick<ChatState, 'messageIds' | 'messages' | 'messagesMap'> {
+  return {
+    messages,
+    messageIds: messages.map((message) => message.id),
+    messagesMap: Object.fromEntries(messages.map((message) => [message.id, message]))
+  }
+}
+
+function createStreamingAssistantMessage(input: Partial<MessageRecord> = {}): MessageRecord {
+  return {
+    ...assistantMessage,
+    operationId: 'operation-1',
+    content: '部分回复',
+    status: 'streaming',
+    ...input
+  }
+}
+
+function createRunningOperationState(): ChatState['operationsById'] {
+  return {
+    'operation-1': {
+      id: 'operation-1',
+      sessionId: 'session-1',
+      topicId: 'topic-1',
+      threadId: 'thread-1',
+      assistantMessageId: 'message-2',
+      userMessageId: 'message-1',
+      status: 'running',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:01.000Z'
+    }
+  }
+}
+
+function renderActiveChat(preloadedChat: Partial<ChatState> = {}) {
+  return renderWithProviders(<ChatPage />, {
+    preloadedChat: {
+      activeSessionId: 'session-1',
+      activeTopicId: 'topic-1',
+      activeThreadId: 'thread-1',
+      sessions: [session],
+      sessionsStatus: 'succeeded',
+      topics: [topic],
+      topicsStatus: 'succeeded',
+      threads: [thread],
+      threadsStatus: 'succeeded',
+      messagesStatus: 'succeeded',
+      ...preloadedChat
+    },
+    routeState: { activeChatId: 'session-1' }
+  })
+}
+
+async function getSessionEventListener(
+  api: MockMoonApi
+): Promise<(event: ChatOperationEvent) => void> {
+  await waitFor(() => expect(api.sessions.onSessionEvent).toHaveBeenCalled())
+  await act(async () => undefined)
+
+  return api.sessions.onSessionEvent.mock.calls[0][0]
+}
+
+function emitSessionEvent(
+  listener: (event: ChatOperationEvent) => void,
+  event: ChatOperationEvent
+) {
+  act(() => {
+    listener(event)
+  })
 }
 
 describe('ChatPage', () => {
@@ -697,6 +815,280 @@ describe('ChatPage', () => {
     })
 
     expect(await screen.findByText('正在回复完成')).toBeInTheDocument()
+  })
+
+  it('replays session events into visible completion state', async () => {
+    const { user } = renderActiveChat()
+    const listener = await getSessionEventListener(api)
+    const streamingAssistantMessage = createStreamingAssistantMessage({
+      content: '',
+      reasoning: ''
+    })
+    const waitingToolInvocation = createToolInvocation()
+    const finishedToolInvocation = createToolInvocation({
+      result: {
+        title: '命令输出',
+        output: 'tests passed'
+      },
+      status: 'done',
+      updatedAt: '2026-05-09T00:00:03.000Z'
+    })
+
+    emitSessionEvent(listener, {
+      type: 'message-created',
+      operationId: 'operation-1',
+      session,
+      topic,
+      thread,
+      message: userMessage
+    })
+    emitSessionEvent(listener, {
+      type: 'message-created',
+      operationId: 'operation-1',
+      session,
+      topic,
+      thread,
+      message: streamingAssistantMessage
+    })
+    emitSessionEvent(listener, {
+      type: 'operation-started',
+      operationId: 'operation-1',
+      operation: createOperationRecord()
+    })
+    emitSessionEvent(listener, {
+      type: 'message-delta',
+      operationId: 'operation-1',
+      sessionId: 'session-1',
+      topicId: 'topic-1',
+      threadId: 'thread-1',
+      messageId: 'message-2',
+      delta: '正在处理'
+    })
+    emitSessionEvent(listener, {
+      type: 'reasoning-delta',
+      operationId: 'operation-1',
+      sessionId: 'session-1',
+      topicId: 'topic-1',
+      threadId: 'thread-1',
+      messageId: 'message-2',
+      delta: '检查上下文'
+    })
+    emitSessionEvent(listener, {
+      type: 'tool-waiting-approval',
+      operationId: 'operation-1',
+      sessionId: 'session-1',
+      topicId: 'topic-1',
+      threadId: 'thread-1',
+      messageId: 'message-2',
+      toolInvocation: waitingToolInvocation
+    })
+
+    expect(await screen.findByText('正在处理')).toBeInTheDocument()
+    expect(screen.getByText('检查上下文')).toBeInTheDocument()
+    expect(screen.getByText('等待确认')).toBeInTheDocument()
+    expect(screen.getByText('pnpm test')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '允许' }))
+
+    await waitFor(() =>
+      expect(api.sessions.approveToolCall).toHaveBeenCalledWith({
+        toolInvocationId: 'tool-1'
+      })
+    )
+    expect(await screen.findByText('已允许')).toBeInTheDocument()
+
+    emitSessionEvent(listener, {
+      type: 'tool-finish',
+      operationId: 'operation-1',
+      sessionId: 'session-1',
+      topicId: 'topic-1',
+      threadId: 'thread-1',
+      messageId: 'message-2',
+      toolInvocation: finishedToolInvocation
+    })
+
+    expect(await screen.findByText('命令输出')).toBeInTheDocument()
+    expect(screen.getByText('tests passed')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '允许' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '拒绝' })).not.toBeInTheDocument()
+
+    emitSessionEvent(listener, {
+      type: 'operation-done',
+      operationId: 'operation-1',
+      session,
+      topic,
+      thread,
+      operation: createOperationRecord({
+        status: 'done',
+        completedAt: '2026-05-09T00:00:04.000Z',
+        updatedAt: '2026-05-09T00:00:04.000Z'
+      }),
+      messages: [
+        userMessage,
+        {
+          ...assistantMessage,
+          content: '处理完成',
+          reasoning: '检查上下文',
+          toolInvocations: [finishedToolInvocation]
+        }
+      ]
+    })
+
+    expect(await screen.findByText('处理完成')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '停止生成' })).not.toBeInTheDocument()
+  })
+
+  it('renders ordinary operation errors as visible failed state', async () => {
+    const streamingAssistantMessage = createStreamingAssistantMessage()
+
+    renderActiveChat({
+      ...toMessageState([userMessage, streamingAssistantMessage]),
+      activeOperationId: 'operation-1',
+      operationsById: createRunningOperationState(),
+      sendStatus: 'sending',
+      streamingAssistantMessageId: 'message-2'
+    })
+    const listener = await getSessionEventListener(api)
+
+    emitSessionEvent(listener, {
+      type: 'operation-error',
+      operationId: 'operation-1',
+      sessionId: 'session-1',
+      topicId: 'topic-1',
+      threadId: 'thread-1',
+      messageId: 'message-2',
+      error: 'backend failed',
+      operation: createOperationRecord({
+        status: 'error',
+        error: { message: 'backend failed' },
+        updatedAt: '2026-05-09T00:00:02.000Z'
+      })
+    })
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('backend failed')
+    expect(screen.getAllByText('backend failed').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: '停止生成' })).not.toBeInTheDocument()
+  })
+
+  it('renders interrupted operation errors as cancellation', async () => {
+    const streamingAssistantMessage = createStreamingAssistantMessage()
+
+    renderActiveChat({
+      ...toMessageState([userMessage, streamingAssistantMessage]),
+      activeOperationId: 'operation-1',
+      operationsById: createRunningOperationState(),
+      sendStatus: 'sending',
+      streamingAssistantMessageId: 'message-2'
+    })
+    const listener = await getSessionEventListener(api)
+
+    emitSessionEvent(listener, {
+      type: 'operation-error',
+      operationId: 'operation-1',
+      sessionId: 'session-1',
+      topicId: 'topic-1',
+      threadId: 'thread-1',
+      messageId: 'message-2',
+      error: 'Cancelled by user.',
+      operation: createOperationRecord({
+        status: 'interrupted',
+        interruption: {
+          canResume: false,
+          interruptedAt: '2026-05-09T00:00:02.000Z',
+          reason: 'Cancelled by user.'
+        },
+        updatedAt: '2026-05-09T00:00:02.000Z'
+      })
+    })
+
+    expect(await screen.findByText('Cancelled by user.')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '停止生成' })).not.toBeInTheDocument()
+  })
+
+  it('keeps visible cancellation stable when a late operation error arrives', async () => {
+    const streamingAssistantMessage = createStreamingAssistantMessage()
+
+    api.sessions.cancelOperation.mockResolvedValueOnce(
+      createOperationRecord({
+        status: 'interrupted',
+        interruption: {
+          canResume: false,
+          interruptedAt: '2026-05-09T00:00:02.000Z',
+          reason: 'Cancelled by user.'
+        },
+        updatedAt: '2026-05-09T00:00:02.000Z'
+      })
+    )
+    const { user } = renderActiveChat({
+      ...toMessageState([userMessage, streamingAssistantMessage]),
+      activeOperationId: 'operation-1',
+      operationsById: createRunningOperationState(),
+      sendStatus: 'sending',
+      streamingAssistantMessageId: 'message-2'
+    })
+    const listener = await getSessionEventListener(api)
+
+    await user.click(await screen.findByRole('button', { name: '停止生成' }))
+
+    await waitFor(() =>
+      expect(api.sessions.cancelOperation).toHaveBeenCalledWith({ operationId: 'operation-1' })
+    )
+    expect(await screen.findByText('Cancelled by user.')).toBeInTheDocument()
+
+    emitSessionEvent(listener, {
+      type: 'operation-error',
+      operationId: 'operation-1',
+      sessionId: 'session-1',
+      topicId: 'topic-1',
+      threadId: 'thread-1',
+      messageId: 'message-2',
+      error: 'late backend failure',
+      operation: createOperationRecord({
+        status: 'error',
+        error: { message: 'late backend failure' },
+        updatedAt: '2026-05-09T00:00:03.000Z'
+      })
+    })
+
+    expect(screen.getByText('Cancelled by user.')).toBeInTheDocument()
+    expect(screen.queryByText('late backend failure')).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it('keeps rejected permission cards visible after rejecting from ChatPage', async () => {
+    const { user } = renderActiveChat({
+      ...toMessageState([userMessage, createStreamingAssistantMessage({ content: '' })]),
+      activeOperationId: 'operation-1',
+      operationsById: createRunningOperationState(),
+      sendStatus: 'sending',
+      streamingAssistantMessageId: 'message-2'
+    })
+    const listener = await getSessionEventListener(api)
+
+    emitSessionEvent(listener, {
+      type: 'tool-waiting-approval',
+      operationId: 'operation-1',
+      sessionId: 'session-1',
+      topicId: 'topic-1',
+      threadId: 'thread-1',
+      messageId: 'message-2',
+      toolInvocation: createToolInvocation()
+    })
+
+    expect(await screen.findByText('等待确认')).toBeInTheDocument()
+
+    await user.click(screen.getByRole('button', { name: '拒绝' }))
+
+    await waitFor(() =>
+      expect(api.sessions.rejectToolCall).toHaveBeenCalledWith({
+        toolInvocationId: 'tool-1'
+      })
+    )
+    expect(await screen.findByText('已拒绝')).toBeInTheDocument()
+    expect(screen.getByText('Rejected by user.')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '允许' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: '拒绝' })).not.toBeInTheDocument()
   })
 
   it('loads the active session messages and sends with its session id', async () => {

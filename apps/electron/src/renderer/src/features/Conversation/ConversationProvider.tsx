@@ -61,14 +61,14 @@ function StoreUpdater({
     store.getState().setSkipFetch(skipFetch)
   }, [skipFetch, store])
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (messages !== undefined) {
-      store.getState().replaceMessages(messages, context)
+      store.getState().setMessages(messages, true)
       return
     }
 
     store.getState().setMessagesInit(skipFetch === true || hasInitMessages === true)
-  }, [context, hasInitMessages, messages, skipFetch, store])
+  }, [hasInitMessages, messages, skipFetch, store])
 
   useEffect(() => {
     if (operationState !== undefined) {
@@ -91,7 +91,7 @@ function StoreUpdater({
     })
 
     if (messages !== undefined) {
-      store.getState().replaceMessages(messages, context)
+      store.getState().setMessages(messages, true)
       return
     }
 

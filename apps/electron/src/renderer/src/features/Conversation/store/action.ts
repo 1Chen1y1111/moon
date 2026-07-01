@@ -30,15 +30,23 @@ function getTime(value: string): number {
   return Number.isNaN(time) ? 0 : time
 }
 
+/**
+ * 合并历史拉取结果和本地 live state，避免迟到的空/旧响应覆盖流式事件。
+ */
 function mergeFetchedMessagesWithLocalState(
   fetchedMessages: MessageRecord[],
   localMessages: MessageRecord[]
 ): MessageRecord[] {
-  if (localMessages.length === 0 || fetchedMessages.length === 0) {
+  if (localMessages.length === 0) {
     return fetchedMessages
   }
 
+  if (fetchedMessages.length === 0) {
+    return localMessages
+  }
+
   const localById = new Map(localMessages.map((message) => [message.id, message]))
+  const fetchedIds = new Set(fetchedMessages.map((message) => message.id))
   let changed = false
 
   const mergedMessages = fetchedMessages.map((message) => {
@@ -55,8 +63,13 @@ function mergeFetchedMessagesWithLocalState(
     changed = true
     return localMessage
   })
+  const localOnlyMessages = localMessages.filter((message) => !fetchedIds.has(message.id))
 
-  return changed ? mergedMessages : fetchedMessages
+  if (localOnlyMessages.length > 0) {
+    changed = true
+  }
+
+  return changed ? [...mergedMessages, ...localOnlyMessages] : fetchedMessages
 }
 
 export type SendConversationMessageParams = {

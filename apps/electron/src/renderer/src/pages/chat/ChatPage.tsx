@@ -159,7 +159,7 @@ export function ChatPage(): React.JSX.Element {
         hasInitMessages={hasInitMessages}
         messages={visibleMessages}
         operationState={operationState}
-        skipFetch={routeState.activeChatId === null}
+        skipFetch={routeState.activeChatId === null || hasInitializedActiveMessages}
         onMessagesChange={(nextMessages, context) => replaceChatMessages(context, nextMessages)}
       >
         {isEmptyChatEntry ? (
