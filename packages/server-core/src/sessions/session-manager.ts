@@ -152,6 +152,18 @@ export type SessionSourceProvider = {
   resolveSources: (scope: SessionSourceProviderScope) => Promise<AgentSourceRecord[]>
 }
 
+/**
+ * 为当前会话 turn 解析 agent 权限模式，具体来源可由 Electron main 或未来 runtime 注入。
+ */
+export type SessionPermissionModeResolver = {
+  resolvePermissionMode: (
+    scope: SessionSourceProviderScope
+  ) => AgentPermissionMode | Promise<AgentPermissionMode>
+}
+
+/**
+ * 激活当前会话 turn 需要的 source；当前只表达 runtime 边界，不实现具体连接协议。
+ */
 export type SessionSourceActivator = {
   activateSource: (scope: SessionSourceProviderScope, sourceSlug: string) => Promise<boolean>
 }
@@ -162,6 +174,7 @@ export type SessionManagerDependencies = {
   attachmentsDirectory?: string
   createAgentBackend?: AgentBackendFactory
   messagesRepository: MessagesRepositoryPort
+  permissionModeResolver?: SessionPermissionModeResolver
   projectsRepository?: ProjectsRepositoryPort
   sessionsRepository: SessionsRepositoryPort
   settingsRepository: SettingsRepositoryPort
@@ -564,6 +577,7 @@ export class SessionManager {
   private readonly messagesRepository: MessagesRepositoryPort
   private readonly operationEventListeners = new Map<string, OperationEventListenerRegistration>()
   private readonly pendingToolPermissions = new Map<string, PendingToolPermission>()
+  private readonly permissionModeResolver?: SessionPermissionModeResolver
   private readonly projectsRepository?: ProjectsRepositoryPort
   private readonly agentSessionRuntimeStates = new Map<string, AgentSessionRuntimeState>()
   private readonly sessionsRepository: SessionsRepositoryPort
@@ -584,6 +598,7 @@ export class SessionManager {
     attachmentsDirectory,
     createAgentBackend,
     messagesRepository,
+    permissionModeResolver,
     projectsRepository,
     sessionsRepository,
     settingsRepository,
@@ -598,6 +613,7 @@ export class SessionManager {
       createAgentBackend ?? ((config) => agentBackend ?? createBackend(config))
     this.attachmentsDirectory = attachmentsDirectory ?? join(process.cwd(), '.moon-attachments')
     this.messagesRepository = messagesRepository
+    this.permissionModeResolver = permissionModeResolver
     this.projectsRepository = projectsRepository
     this.sessionsRepository = sessionsRepository
     this.settingsRepository = settingsRepository
@@ -623,6 +639,19 @@ export class SessionManager {
     this.agentSessionRuntimeStates.set(threadId, state)
 
     return state
+  }
+
+  /**
+   * 解析当前会话 turn 使用的 agent 权限模式；未注入 resolver 时保持默认 ask 语义。
+   */
+  private async resolvePermissionModeForScope(
+    scope: ConversationScope
+  ): Promise<AgentPermissionMode> {
+    if (this.permissionModeResolver === undefined) {
+      return defaultAgentPermissionMode
+    }
+
+    return this.permissionModeResolver.resolvePermissionMode(scope)
   }
 
   /**
@@ -1161,6 +1190,7 @@ export class SessionManager {
           }
 
     const agentSessionState = this.resolveAgentSessionRuntimeState(scope.thread.id)
+    const permissionMode = await this.resolvePermissionModeForScope(scope)
     // 取出这次会话可用的上下文来源 比如项目/技能/上下文材料
     const sources = await this.resolveSourcesForScope(scope, agentSessionState)
 
@@ -1171,7 +1201,7 @@ export class SessionManager {
         connection,
         backendMessages,
         workspace,
-        defaultAgentPermissionMode,
+        permissionMode,
         sources,
         agentSessionState
       )

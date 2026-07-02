@@ -14,6 +14,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   SessionManager,
   SessionScopedToolCallbackRegistry,
+  type SessionPermissionModeResolver,
   type SessionSourceActivator,
   type SessionSourceProvider
 } from '@moon/server-core/sessions'
@@ -544,6 +545,7 @@ function createService(input: {
   activeProjectId?: string | null
   llmConnections?: NormalizedLlmConnection[]
   messages?: MessageRecord[]
+  permissionModeResolver?: SessionPermissionModeResolver
   projects?: ProjectRecord[]
   sessions?: SessionRecord[]
   sourceActivator?: SessionSourceActivator
@@ -614,6 +616,7 @@ function createService(input: {
       attachmentsDirectory: input.attachmentsDirectory,
       createAgentBackend: createAgentBackend as never,
       messagesRepository: messagesRepository as never,
+      permissionModeResolver: input.permissionModeResolver,
       projectsRepository: projectsRepository as never,
       sessionsRepository: sessionsRepository as never,
       settingsRepository: settingsRepository as never,
@@ -814,6 +817,49 @@ describe('SessionManager.sendMessage', () => {
       })
     )
   })
+
+  it.each(['safe', 'allow-all'] as const)(
+    'passes resolved %s permission mode to backend config',
+    async (permissionMode) => {
+      const project = {
+        id: 'project-1',
+        name: 'moon',
+        path: '/workspace/moon',
+        createdAt: '2026-05-09T00:00:00.000Z',
+        updatedAt: '2026-05-09T00:00:00.000Z'
+      }
+      const permissionModeResolver: SessionPermissionModeResolver = {
+        resolvePermissionMode: vi.fn(async (scope) => {
+          expect(scope.project).toMatchObject({ id: project.id, path: project.path })
+          expect(scope.session.projectId).toBe(project.id)
+          expect(scope.topic.sessionId).toBe(scope.session.id)
+          expect(scope.thread.topicId).toBe(scope.topic.id)
+
+          return permissionMode
+        })
+      }
+      const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
+        void config
+        return createMockAgentBackend([{ type: 'text_delta', text: 'ok' }])
+      })
+      const { service } = createService({
+        activeProjectId: project.id,
+        createAgentBackend,
+        permissionModeResolver,
+        projects: [project],
+        settings: createClaudeSettings()
+      })
+
+      await service.sendMessage({ content: 'hello' })
+
+      expect(permissionModeResolver.resolvePermissionMode).toHaveBeenCalledTimes(1)
+      expect(createAgentBackend).toHaveBeenCalledWith(
+        expect.objectContaining({
+          permissionMode
+        })
+      )
+    }
+  )
 
   it('passes sources resolved for the session scope to backend config', async () => {
     const project = {
