@@ -39,7 +39,7 @@ describe('agent backend factory', () => {
     expect(backend.getModel()).toBe('claude-sonnet-4-5')
   })
 
-  it('passes resolved backend context into the Claude backend', () => {
+  it('passes resolved runtime context into the Claude backend', () => {
     const agentSessionState = {
       activatedSourceSlugs: [],
       permissionGrants: [{ type: 'bash' as const, toolName: 'Bash', command: 'pnpm test' }],

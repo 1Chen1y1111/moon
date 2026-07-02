@@ -11,7 +11,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   createClaudeQueryOptions,
-  resolveBackendContext,
+  resolveAgentBackendRuntimeContext,
   resolveClaudeThinkingTokenBudget,
   resolveClaudeRuntimeEnv
 } from '../../../../src/agent/backend/internal/runtime-resolver'
@@ -103,7 +103,7 @@ describe('resolveClaudeThinkingTokenBudget', () => {
   })
 })
 
-describe('resolveBackendContext', () => {
+describe('resolveAgentBackendRuntimeContext', () => {
   it('combines provider runtime fields with shared backend runtime config', () => {
     const agentSessionState = {
       activatedSourceSlugs: [],
@@ -123,7 +123,12 @@ describe('resolveBackendContext', () => {
       workspace: { name: 'moon', path: '/workspace/moon' }
     }
 
-    expect(resolveBackendContext(config, anthropicDriver.resolve(config))).toEqual({
+    expect(
+      resolveAgentBackendRuntimeContext({
+        config,
+        providerRuntime: anthropicDriver.resolve(config)
+      })
+    ).toEqual({
       agentSessionState,
       provider: 'anthropic',
       apiKey: 'test-key',
@@ -143,7 +148,12 @@ describe('resolveBackendContext', () => {
       model: 'claude-sonnet-4-5'
     }
 
-    expect(resolveBackendContext(config, anthropicDriver.resolve(config))).toMatchObject({
+    expect(
+      resolveAgentBackendRuntimeContext({
+        config,
+        providerRuntime: anthropicDriver.resolve(config)
+      })
+    ).toMatchObject({
       provider: 'anthropic',
       messages: [],
       model: 'claude-sonnet-4-5'

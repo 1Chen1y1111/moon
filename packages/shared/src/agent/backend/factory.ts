@@ -9,7 +9,10 @@ import { anthropicDriver } from './internal/drivers/anthropic'
 import { piCompatDriver } from './internal/drivers/pi-compat'
 import { piDriver } from './internal/drivers/pi'
 import type { ProviderDriver } from './internal/driver-types'
-import { resolveBackendContext, type ResolvedBackendContext } from './internal/runtime-resolver'
+import {
+  resolveAgentBackendRuntimeContext,
+  type AgentBackendRuntimeContext
+} from './internal/runtime-resolver'
 import type { AgentBackend, AgentBackendConfig } from './types'
 
 const DRIVER_REGISTRY: Record<AgentBackendConfig['provider'], ProviderDriver> = {
@@ -32,9 +35,9 @@ function getProviderDriver(provider: AgentBackendConfig['provider']): ProviderDr
 }
 
 /**
- * 根据已解析 backend context 创建具体 backend，保证 provider 创建主入口收口在 factory。
+ * 根据已解析 runtime context 创建具体 backend，保证 provider 创建主入口收口在 factory。
  */
-function createBackendFromResolvedContext(context: ResolvedBackendContext): AgentBackend {
+function createBackendFromRuntimeContext(context: AgentBackendRuntimeContext): AgentBackend {
   if (context.provider === 'anthropic') {
     return new ClaudeAgent({
       agentSessionState: context.agentSessionState,
@@ -64,9 +67,12 @@ export function getAvailableAgentProviders(): AgentBackendConfig['provider'][] {
  */
 export function createBackend(config: AgentBackendConfig): AgentBackend {
   const driver = getProviderDriver(config.provider)
-  const context = resolveBackendContext(config, driver.resolve(config))
+  const context = resolveAgentBackendRuntimeContext({
+    config,
+    providerRuntime: driver.resolve(config)
+  })
 
-  return createBackendFromResolvedContext(context)
+  return createBackendFromRuntimeContext(context)
 }
 
 /**

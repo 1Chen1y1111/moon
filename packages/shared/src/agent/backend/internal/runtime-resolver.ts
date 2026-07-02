@@ -43,7 +43,10 @@ export type ClaudeQueryOptionsInput = ClaudeRuntimeEnvInput & {
   workspace?: AgentBackendWorkspace
 }
 
-export type ResolvedBackendContext = {
+/**
+ * 描述 provider driver 解析完成后，创建具体 agent backend 所需的统一运行时上下文。
+ */
+export type AgentBackendRuntimeContext = {
   agentSessionState?: AgentSessionRuntimeState
   provider: ProviderRuntimeResolution['provider']
   model: string
@@ -54,6 +57,14 @@ export type ResolvedBackendContext = {
   sources?: AgentSourceRecord[]
   thinkingLevel?: ThinkingLevel
   workspace?: AgentBackendWorkspace
+}
+
+/**
+ * 描述把 backend config 和 provider 专属解析结果合并为 runtime context 的输入。
+ */
+export type ResolveAgentBackendRuntimeContextInput = {
+  config: AgentBackendConfig
+  providerRuntime: ProviderRuntimeResolution
 }
 
 const claudeCodeUnsupportedTools = ['EnterPlanMode', 'ExitPlanMode', 'AskUserQuestion', 'Skill']
@@ -180,10 +191,10 @@ export function resolveClaudeThinkingTokenBudget(
 /**
  * 合并 provider driver 解析结果和统一 backend config，形成 factory 创建 backend 的单一上下文。
  */
-export function resolveBackendContext(
-  config: AgentBackendConfig,
-  providerRuntime: ProviderRuntimeResolution
-): ResolvedBackendContext {
+export function resolveAgentBackendRuntimeContext({
+  config,
+  providerRuntime
+}: ResolveAgentBackendRuntimeContextInput): AgentBackendRuntimeContext {
   return {
     provider: providerRuntime.provider,
     ...(config.agentSessionState === undefined
