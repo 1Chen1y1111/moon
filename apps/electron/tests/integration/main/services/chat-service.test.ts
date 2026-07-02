@@ -476,7 +476,7 @@ describe('ChatService integration', () => {
             ]
           })
         ])
-        expect(chatMessages).toEqual(['hello', 'hello\n\n[workspace activated]'])
+        expect(chatMessages).toEqual(['hello', 'hello'])
         expect(result.operation.status).toBe('done')
         expect(sourceEvent).toMatchObject({
           type: 'source-activated',
@@ -492,7 +492,7 @@ describe('ChatService integration', () => {
         expect(messages.map((message) => [message.role, message.content])).toEqual([
           ['user', 'hello'],
           ['assistant', ''],
-          ['user', 'hello\n\n[workspace activated]'],
+          ['user', 'hello'],
           ['assistant', 'retried']
         ])
       } finally {

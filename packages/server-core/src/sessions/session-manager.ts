@@ -1355,7 +1355,7 @@ export class SessionManager {
   }
 
   /**
-   * source_activated 结束当前 turn 后，复用同一会话作用域自动创建下一轮重发消息。
+   * source_activated 结束当前 turn 后，复用原始用户消息自动创建下一轮重发消息。
    */
   private async runSourceActivationAutoRetry({
     onEvent,
@@ -1368,9 +1368,9 @@ export class SessionManager {
     scope: ConversationScope
     signal: SourceActivationSignal | null
   }): Promise<void> {
-    const originalMessage = signal?.originalMessage?.trim()
+    const originalMessage = signal?.originalMessage
 
-    if (signal === null || originalMessage === undefined || originalMessage.length === 0) {
+    if (signal === null || originalMessage === undefined || originalMessage.trim().length === 0) {
       return
     }
 
@@ -1388,7 +1388,7 @@ export class SessionManager {
         projectId: scope.project?.id ?? null,
         provider,
         ...(llmConnectionId === undefined ? {} : { llmConnectionId }),
-        content: `${originalMessage}\n\n[${signal.sourceSlug} activated]`
+        content: originalMessage
       },
       onEvent
     )

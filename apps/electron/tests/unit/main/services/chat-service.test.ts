@@ -1360,7 +1360,7 @@ describe('SessionManager.sendMessage', () => {
     expect(result.operation.status).toBe('done')
   })
 
-  it('auto-retries in the same thread after source activation completes the current operation', async () => {
+  it('auto-retries in the same thread with the original message after source activation', async () => {
     const events: unknown[] = []
     const chatMessages: string[] = []
     let backendIndex = 0
@@ -1426,7 +1426,7 @@ describe('SessionManager.sendMessage', () => {
       turnId: result.operation.id
     })
     expect(createAgentBackend).toHaveBeenCalledTimes(2)
-    expect(chatMessages).toEqual(['hello', 'hello\n\n[workspace activated]'])
+    expect(chatMessages).toEqual(['hello', 'hello'])
     expect(agentOperationsRepository.operations.map((operation) => operation.status)).toEqual([
       'done',
       'done'
@@ -1437,7 +1437,7 @@ describe('SessionManager.sendMessage', () => {
     expect(messagesRepository.messages.map((message) => [message.role, message.content])).toEqual([
       ['user', 'hello'],
       ['assistant', ''],
-      ['user', 'hello\n\n[workspace activated]'],
+      ['user', 'hello'],
       ['assistant', 'retried']
     ])
   })
