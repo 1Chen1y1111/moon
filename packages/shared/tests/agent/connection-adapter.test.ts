@@ -169,7 +169,8 @@ describe('createConnectionAgentBackendConfig', () => {
       apiKey: 'stored-key'
     })
     const agentSessionState = {
-      permissionGrants: [{ type: 'bash' as const, toolName: 'Bash', command: 'pnpm test' }]
+      permissionGrants: [{ type: 'bash' as const, toolName: 'Bash', command: 'pnpm test' }],
+      sourceGuideReads: []
     }
 
     expect(

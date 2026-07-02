@@ -5,6 +5,7 @@
 
 export * from './permission-manager'
 export * from './pre-tool-use'
+export * from './prerequisite-manager'
 export * from './prompt-builder'
 export * from './session-runtime-state'
 export * from './source-manager'

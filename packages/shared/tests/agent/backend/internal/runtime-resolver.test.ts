@@ -106,7 +106,8 @@ describe('resolveClaudeThinkingTokenBudget', () => {
 describe('resolveBackendContext', () => {
   it('combines provider runtime fields with shared backend runtime config', () => {
     const agentSessionState = {
-      permissionGrants: [{ type: 'bash' as const, toolName: 'Bash', command: 'pnpm test' }]
+      permissionGrants: [{ type: 'bash' as const, toolName: 'Bash', command: 'pnpm test' }],
+      sourceGuideReads: []
     }
     const config = {
       agentSessionState,

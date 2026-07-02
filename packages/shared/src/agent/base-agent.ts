@@ -22,6 +22,7 @@ import {
   type AgentToolPermissionCheckResult,
   type ClaudeToolUsePermissionInput
 } from './core/permission-manager'
+import { PrerequisiteManager } from './core/prerequisite-manager'
 import { runPreToolUseChecks } from './core/pre-tool-use'
 import { PromptBuilder } from './core/prompt-builder'
 import {
@@ -63,6 +64,7 @@ export abstract class BaseAgent implements AgentBackend {
   onSourceActivationRequest: AgentSourceActivationCallback | null = null
   protected readonly permissionManager?: PermissionManager
   protected readonly permissionMode?: AgentPermissionMode
+  protected readonly prerequisiteManager: PrerequisiteManager
   protected readonly promptBuilder: PromptBuilder
   protected readonly agentSessionState: AgentSessionRuntimeState
   protected readonly sourceManager: SourceManager
@@ -93,6 +95,10 @@ export abstract class BaseAgent implements AgentBackend {
     this.permissionMode = permissionMode
     this.permissionManager =
       workspace === undefined ? undefined : new PermissionManager({ permissionMode, workspace })
+    this.prerequisiteManager = new PrerequisiteManager({
+      agentSessionState: this.agentSessionState,
+      workspace
+    })
     this.promptBuilder = new PromptBuilder()
     this.sourceManager = new SourceManager({ sources })
     this.thinkingLevel = thinkingLevel
@@ -331,21 +337,35 @@ export abstract class BaseAgent implements AgentBackend {
   protected checkClaudeToolUse(
     input: ClaudeToolUsePermissionInput
   ): AgentToolPermissionCheckResult {
+    const sources = this.sourceManager.listSources()
     const sourceActivation = this.sourceManager.checkInactiveMcpSourceTool(input.toolName)
+    const prerequisiteCheck = this.prerequisiteManager.checkClaudeToolUse(input, sources)
+
+    if (prerequisiteCheck.type === 'block') {
+      return prerequisiteCheck
+    }
+
+    let permissionResult: AgentToolPermissionCheckResult
 
     if (this.permissionManager === undefined) {
-      return runPreToolUseChecks({
+      permissionResult = runPreToolUseChecks({
         ...input,
         permissionMode: this.permissionMode,
         permissionGrants: this.agentSessionState.permissionGrants,
         sourceActivation
       })
+    } else {
+      permissionResult = this.permissionManager.checkClaudeToolUse(input, {
+        permissionGrants: this.agentSessionState.permissionGrants,
+        sourceActivation
+      })
     }
 
-    return this.permissionManager.checkClaudeToolUse(input, {
-      permissionGrants: this.agentSessionState.permissionGrants,
-      sourceActivation
-    })
+    if (permissionResult.type === 'allow') {
+      this.prerequisiteManager.trackClaudeToolUse(input, sources)
+    }
+
+    return permissionResult
   }
 
   /**

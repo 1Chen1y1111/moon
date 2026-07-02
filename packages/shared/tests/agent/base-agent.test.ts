@@ -440,6 +440,7 @@ previous question`)
           slug: 'linear',
           name: 'Linear',
           description: 'Linear issues',
+          guidePath: 'sources/linear/guide.md',
           status: 'inactive'
         }
       ]
@@ -455,6 +456,70 @@ previous question`)
       type: 'source_activation_needed',
       sourceSlug: 'linear',
       sourceExists: true
+    })
+  })
+
+  it('blocks active source tools until the source guide is read in the session', () => {
+    const agent = new TestAgent({
+      model: 'claude-sonnet',
+      permissionMode: 'ask',
+      workspace: { path: '/workspace/moon' },
+      sources: [
+        {
+          slug: 'linear',
+          name: 'Linear',
+          guidePath: 'sources/linear/guide.md',
+          status: 'active'
+        }
+      ]
+    })
+
+    expect(
+      agent.checkToolUseForTest({
+        toolName: 'mcp__linear__createIssue',
+        toolInput: { title: 'Bug' },
+        toolUseId: 'source-tool-1'
+      })
+    ).toEqual({
+      type: 'block',
+      reason:
+        '使用 source "linear" 的工具前，必须先用 Read 读取 source guide：sources/linear/guide.md。'
+    })
+  })
+
+  it('keeps active source tools on the regular permission path after the guide is read', () => {
+    const agent = new TestAgent({
+      model: 'claude-sonnet',
+      permissionMode: 'ask',
+      workspace: { path: '/workspace/moon' },
+      sources: [
+        {
+          slug: 'linear',
+          name: 'Linear',
+          guidePath: 'sources/linear/guide.md',
+          status: 'active'
+        }
+      ]
+    })
+
+    expect(
+      agent.checkToolUseForTest({
+        toolName: 'Read',
+        toolInput: { file_path: 'sources/linear/guide.md' },
+        toolUseId: 'read-tool-1'
+      })
+    ).toEqual({ type: 'allow' })
+
+    expect(
+      agent.checkToolUseForTest({
+        toolName: 'mcp__linear__createIssue',
+        toolInput: { title: 'Bug' },
+        toolUseId: 'source-tool-1'
+      })
+    ).toMatchObject({
+      type: 'block',
+      reason:
+        'Moon 当前阶段只允许 Claude Code SDK 只读工具、Bash 和文件写入审批，已阻止 mcp__linear__createIssue。'
     })
   })
 

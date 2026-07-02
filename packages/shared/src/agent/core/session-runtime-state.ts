@@ -1,6 +1,6 @@
 /**
  * 负责定义 agent 会话内的短生命周期运行时状态。
- * v1 只保存权限记忆，不做持久化、跨线程共享或 source/skill 状态管理。
+ * 当前只保存权限记忆和 source guide 阅读状态，不做持久化或跨线程共享。
  */
 
 import type { AgentPermissionRequest } from '@moon/core/types'
@@ -12,8 +12,14 @@ export type AgentPermissionGrant = {
   type?: AgentPermissionRequest['type']
 }
 
+export type AgentSourceGuideRead = {
+  guidePath: string
+  sourceSlug: string
+}
+
 export type AgentSessionRuntimeState = {
   permissionGrants: AgentPermissionGrant[]
+  sourceGuideReads: AgentSourceGuideRead[]
 }
 
 /**
@@ -21,7 +27,8 @@ export type AgentSessionRuntimeState = {
  */
 export function createAgentSessionRuntimeState(): AgentSessionRuntimeState {
   return {
-    permissionGrants: []
+    permissionGrants: [],
+    sourceGuideReads: []
   }
 }
 
@@ -87,4 +94,29 @@ export function addPermissionGrantFromRequest(
   }
 
   return grant
+}
+
+/**
+ * 判断当前会话是否已经读取过指定 source guide。
+ */
+export function hasSourceGuideRead(
+  reads: readonly AgentSourceGuideRead[],
+  sourceSlug: string,
+  guidePath: string
+): boolean {
+  return reads.some((read) => read.sourceSlug === sourceSlug && read.guidePath === guidePath)
+}
+
+/**
+ * 把 source guide 阅读记录写入会话状态；重复读取时保持幂等。
+ */
+export function addSourceGuideRead(
+  state: AgentSessionRuntimeState,
+  read: AgentSourceGuideRead
+): AgentSourceGuideRead {
+  if (!hasSourceGuideRead(state.sourceGuideReads, read.sourceSlug, read.guidePath)) {
+    state.sourceGuideReads.push(read)
+  }
+
+  return read
 }
