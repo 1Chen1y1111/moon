@@ -344,6 +344,7 @@ export abstract class BaseAgent implements AgentBackend {
   ): AgentToolPermissionCheckResult {
     const sources = this.sourceManager.listSources()
     const sourceActivation = this.sourceManager.checkInactiveMcpSourceTool(input.toolName)
+    const sourceTool = this.sourceManager.checkKnownMcpSourceTool(input.toolName)
     const prerequisiteCheck = this.prerequisiteManager.checkClaudeToolUse(input, sources)
     const prerequisite = prerequisiteCheck.type === 'block' ? prerequisiteCheck : null
 
@@ -355,13 +356,15 @@ export abstract class BaseAgent implements AgentBackend {
         permissionMode: this.permissionMode,
         permissionGrants: this.agentSessionState.permissionGrants,
         prerequisite,
-        sourceActivation
+        sourceActivation,
+        sourceTool
       })
     } else {
       permissionResult = this.permissionManager.checkClaudeToolUse(input, {
         permissionGrants: this.agentSessionState.permissionGrants,
         prerequisite,
-        sourceActivation
+        sourceActivation,
+        sourceTool
       })
     }
 

@@ -179,4 +179,28 @@ describe('PermissionManager', () => {
       reason: '必须先读取 source guide。'
     })
   })
+
+  it('passes known source tool context into the PreToolUse pipeline', () => {
+    const permissionManager = new PermissionManager({ workspace })
+
+    expect(
+      permissionManager.checkClaudeToolUse(
+        {
+          toolName: 'mcp__linear__createIssue',
+          toolUseId: 'source-tool-1',
+          toolInput: { title: 'Bug' }
+        },
+        {
+          sourceTool: {
+            sourceSlug: 'linear',
+            sourceExists: true
+          }
+        }
+      )
+    ).toEqual({
+      type: 'block',
+      reason:
+        'Moon 已识别 source "linear" 的工具 mcp__linear__createIssue，但当前阶段尚未接入 source tool execution，已阻止该工具调用。'
+    })
+  })
 })

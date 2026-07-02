@@ -505,7 +505,7 @@ previous question`)
     })
   })
 
-  it('keeps active source tools on the regular permission path after the guide is read', () => {
+  it('blocks active source tools with source policy after the guide is read', () => {
     const agent = new TestAgent({
       model: 'claude-sonnet',
       permissionMode: 'ask',
@@ -544,11 +544,11 @@ previous question`)
     ).toMatchObject({
       type: 'block',
       reason:
-        'Moon 当前阶段只允许 Claude Code SDK 只读工具、Bash 和文件写入审批，已阻止 mcp__linear__createIssue。'
+        'Moon 已识别 source "linear" 的工具 mcp__linear__createIssue，但当前阶段尚未接入 source tool execution，已阻止该工具调用。'
     })
   })
 
-  it('keeps active source tools on the regular permission path', () => {
+  it('blocks active source tools without guides with source policy text', () => {
     const agent = new TestAgent({
       model: 'claude-sonnet',
       permissionMode: 'ask',
@@ -571,7 +571,7 @@ previous question`)
     ).toMatchObject({
       type: 'block',
       reason:
-        'Moon 当前阶段只允许 Claude Code SDK 只读工具、Bash 和文件写入审批，已阻止 mcp__linear__createIssue。'
+        'Moon 已识别 source "linear" 的工具 mcp__linear__createIssue，但当前阶段尚未接入 source tool execution，已阻止该工具调用。'
     })
   })
 

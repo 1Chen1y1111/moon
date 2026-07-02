@@ -12,6 +12,8 @@ import {
 } from '../../../src/agent'
 
 const workspace = { path: '/workspace/moon' }
+const sourceToolPolicyBlockReason =
+  'Moon 已识别 source "linear" 的工具 mcp__linear__createIssue，但当前阶段尚未接入 source tool execution，已阻止该工具调用。'
 
 /**
  * 构造最小 Claude 工具输入，方便每个用例只声明关心的字段。
@@ -277,6 +279,27 @@ describe('runPreToolUseChecks', () => {
     })
   })
 
+  it('returns source activation before source tool policy blocks', () => {
+    expect(
+      checkPreToolUse({
+        sourceActivation: {
+          sourceSlug: 'linear',
+          sourceExists: true
+        },
+        sourceTool: {
+          sourceSlug: 'linear',
+          sourceExists: true
+        },
+        toolName: 'mcp__linear__createIssue',
+        toolInput: { title: 'Bug' }
+      })
+    ).toEqual({
+      type: 'source_activation_needed',
+      sourceSlug: 'linear',
+      sourceExists: true
+    })
+  })
+
   it('returns source activation before prerequisite blocks', () => {
     expect(
       checkPreToolUse({
@@ -314,6 +337,26 @@ describe('runPreToolUseChecks', () => {
     })
   })
 
+  it('returns prerequisite blocks before source tool policy blocks', () => {
+    expect(
+      checkPreToolUse({
+        prerequisite: {
+          type: 'block',
+          reason: '必须先读取 source guide。'
+        },
+        sourceTool: {
+          sourceSlug: 'linear',
+          sourceExists: true
+        },
+        toolName: 'mcp__linear__createIssue',
+        toolInput: { title: 'Bug' }
+      })
+    ).toEqual({
+      type: 'block',
+      reason: '必须先读取 source guide。'
+    })
+  })
+
   it('returns prerequisite blocks before unsupported tool blocks', () => {
     expect(
       checkPreToolUse({
@@ -327,6 +370,35 @@ describe('runPreToolUseChecks', () => {
     ).toEqual({
       type: 'block',
       reason: '必须先读取 source guide。'
+    })
+  })
+
+  it('blocks known source tools with source-specific policy text', () => {
+    expect(
+      checkPreToolUse({
+        sourceTool: {
+          sourceSlug: 'linear',
+          sourceExists: true
+        },
+        toolName: 'mcp__linear__createIssue',
+        toolInput: { title: 'Bug' }
+      })
+    ).toEqual({
+      type: 'block',
+      reason: sourceToolPolicyBlockReason
+    })
+  })
+
+  it('keeps unknown MCP source tools on the generic unsupported path', () => {
+    expect(
+      checkPreToolUse({
+        toolName: 'mcp__missing__search',
+        toolInput: { query: 'Bug' }
+      })
+    ).toEqual({
+      type: 'block',
+      reason:
+        'Moon 当前阶段只允许 Claude Code SDK 只读工具、Bash 和文件写入审批，已阻止 mcp__missing__search。'
     })
   })
 })

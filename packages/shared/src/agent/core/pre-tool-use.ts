@@ -24,6 +24,11 @@ export type PreToolUseSourceActivation = {
   sourceExists: boolean
 }
 
+export type PreToolUseSourceTool = {
+  sourceSlug: string
+  sourceExists: boolean
+}
+
 export type PreToolUsePrerequisite = {
   type: 'block'
   reason: string
@@ -49,6 +54,7 @@ export type PreToolUseCheckInput = ClaudeToolUsePermissionInput & {
   permissionGrants?: readonly AgentPermissionGrant[]
   prerequisite?: PreToolUsePrerequisite | null
   sourceActivation?: PreToolUseSourceActivation | null
+  sourceTool?: PreToolUseSourceTool | null
   workspace?: AgentWorkspaceContext
 }
 
@@ -229,6 +235,7 @@ export function runPreToolUseChecks({
   permissionGrants = [],
   prerequisite,
   sourceActivation,
+  sourceTool,
   toolInput = {},
   toolName,
   toolUseId,
@@ -246,6 +253,13 @@ export function runPreToolUseChecks({
     return {
       type: 'block',
       reason: prerequisite.reason
+    }
+  }
+
+  if (sourceTool !== undefined && sourceTool !== null) {
+    return {
+      type: 'block',
+      reason: `Moon 已识别 source "${sourceTool.sourceSlug}" 的工具 ${toolName}，但当前阶段尚未接入 source tool execution，已阻止该工具调用。`
     }
   }
 

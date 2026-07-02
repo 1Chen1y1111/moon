@@ -160,6 +160,36 @@ describe('SourceManager', () => {
     })
   })
 
+  it('detects known MCP source tools regardless of source runtime status', () => {
+    const sourceManager = new SourceManager({ sources })
+
+    expect(sourceManager.checkKnownMcpSourceTool('mcp__github__list_issues')).toEqual({
+      sourceSlug: 'github',
+      sourceExists: true
+    })
+    expect(sourceManager.checkKnownMcpSourceTool('mcp__docs__search')).toEqual({
+      sourceSlug: 'docs',
+      sourceExists: true
+    })
+    expect(sourceManager.checkKnownMcpSourceTool('mcp__slack__list_channels')).toEqual({
+      sourceSlug: 'slack',
+      sourceExists: true
+    })
+    expect(sourceManager.checkKnownMcpSourceTool('mcp__linear__createIssue')).toEqual({
+      sourceSlug: 'linear',
+      sourceExists: true
+    })
+  })
+
+  it('does not detect unknown or non-MCP tool names as source tools', () => {
+    const sourceManager = new SourceManager({ sources })
+
+    expect(sourceManager.checkKnownMcpSourceTool('mcp__missing__search')).toBeNull()
+    expect(sourceManager.checkKnownMcpSourceTool('Read')).toBeNull()
+    expect(sourceManager.checkKnownMcpSourceTool('mcp__docs')).toBeNull()
+    expect(sourceManager.listSources()).toEqual(sources)
+  })
+
   it('does not intercept active MCP source tools', () => {
     const sourceManager = new SourceManager({ sources })
 

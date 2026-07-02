@@ -28,6 +28,14 @@ export type SourceToolActivationCheckResult = {
 }
 
 /**
+ * 描述一次 MCP source 工具名是否指向当前 runtime 已知的 source。
+ */
+export type SourceToolCheckResult = {
+  sourceSlug: string
+  sourceExists: boolean
+}
+
+/**
  * 描述一次 tool_result 错误中识别出的未激活 source 工具调用。
  */
 export type InactiveSourceToolError = {
@@ -207,6 +215,22 @@ export class SourceManager {
     const source = this.sourcesBySlug.get(sourceSlug)
 
     if (source === undefined || source.status === 'active') {
+      return null
+    }
+
+    return {
+      sourceSlug,
+      sourceExists: true
+    }
+  }
+
+  /**
+   * 判断 Claude MCP 工具名是否指向当前 runtime 已知的 source，不改变 source 状态。
+   */
+  checkKnownMcpSourceTool(toolName: string): SourceToolCheckResult | null {
+    const sourceSlug = readMcpSourceSlug(toolName)
+
+    if (sourceSlug === null || !this.sourcesBySlug.has(sourceSlug)) {
       return null
     }
 
