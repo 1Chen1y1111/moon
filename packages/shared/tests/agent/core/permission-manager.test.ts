@@ -156,4 +156,27 @@ describe('PermissionManager', () => {
         'Moon 当前阶段只允许 Claude Code SDK 只读工具、Bash 和文件写入审批，已阻止 NotebookEdit。'
     })
   })
+
+  it('passes prerequisite blocks into the PreToolUse pipeline', () => {
+    const permissionManager = new PermissionManager({ workspace })
+
+    expect(
+      permissionManager.checkClaudeToolUse(
+        {
+          toolName: 'mcp__linear__createIssue',
+          toolUseId: 'source-tool-1',
+          toolInput: { title: 'Bug' }
+        },
+        {
+          prerequisite: {
+            type: 'block',
+            reason: '必须先读取 source guide。'
+          }
+        }
+      )
+    ).toEqual({
+      type: 'block',
+      reason: '必须先读取 source guide。'
+    })
+  })
 })

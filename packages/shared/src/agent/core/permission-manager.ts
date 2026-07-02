@@ -8,6 +8,7 @@ import {
   runPreToolUseChecks,
   type AgentToolPermissionCheckResult,
   type ClaudeToolUsePermissionInput,
+  type PreToolUsePrerequisite,
   type PreToolUseSourceActivation
 } from './pre-tool-use'
 import type { AgentPermissionGrant } from './session-runtime-state'
@@ -19,6 +20,7 @@ export type PermissionManagerInput = {
 
 export type PermissionManagerCheckOptions = {
   permissionGrants?: readonly AgentPermissionGrant[]
+  prerequisite?: PreToolUsePrerequisite | null
   sourceActivation?: PreToolUseSourceActivation | null
 }
 
@@ -57,6 +59,7 @@ export class PermissionManager {
     return runPreToolUseChecks({
       permissionMode: this.permissionMode,
       permissionGrants: options.permissionGrants,
+      prerequisite: options.prerequisite,
       sourceActivation: options.sourceActivation,
       toolInput,
       toolName,

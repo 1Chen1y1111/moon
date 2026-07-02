@@ -18,6 +18,11 @@ export type PreToolUseSourceActivation = {
   sourceExists: boolean
 }
 
+export type PreToolUsePrerequisite = {
+  type: 'block'
+  reason: string
+}
+
 export type PreToolUseCheckResult =
   | { type: 'allow' }
   | { type: 'block'; reason: string }
@@ -36,6 +41,7 @@ export type ClaudeToolUsePermissionInput = {
 export type PreToolUseCheckInput = ClaudeToolUsePermissionInput & {
   permissionMode?: AgentPermissionMode
   permissionGrants?: readonly AgentPermissionGrant[]
+  prerequisite?: PreToolUsePrerequisite | null
   sourceActivation?: PreToolUseSourceActivation | null
   workspace?: AgentWorkspaceContext
 }
@@ -169,6 +175,7 @@ function hasWorkspaceBoundaryViolation(
 export function runPreToolUseChecks({
   permissionMode = 'ask',
   permissionGrants = [],
+  prerequisite,
   sourceActivation,
   toolInput = {},
   toolName,
@@ -180,6 +187,13 @@ export function runPreToolUseChecks({
       type: 'source_activation_needed',
       sourceSlug: sourceActivation.sourceSlug,
       sourceExists: sourceActivation.sourceExists
+    }
+  }
+
+  if (prerequisite !== undefined && prerequisite !== null) {
+    return {
+      type: 'block',
+      reason: prerequisite.reason
     }
   }
 

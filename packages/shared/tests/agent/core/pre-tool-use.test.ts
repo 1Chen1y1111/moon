@@ -219,4 +219,57 @@ describe('runPreToolUseChecks', () => {
       sourceExists: true
     })
   })
+
+  it('returns source activation before prerequisite blocks', () => {
+    expect(
+      checkPreToolUse({
+        prerequisite: {
+          type: 'block',
+          reason: '必须先读取 source guide。'
+        },
+        sourceActivation: {
+          sourceSlug: 'linear',
+          sourceExists: true
+        },
+        toolName: 'mcp__linear__createIssue',
+        toolInput: { title: 'Bug' }
+      })
+    ).toEqual({
+      type: 'source_activation_needed',
+      sourceSlug: 'linear',
+      sourceExists: true
+    })
+  })
+
+  it('returns prerequisite blocks before regular permission checks', () => {
+    expect(
+      checkPreToolUse({
+        prerequisite: {
+          type: 'block',
+          reason: '必须先读取 source guide。'
+        },
+        toolName: 'Read',
+        toolInput: { file_path: 'README.md' }
+      })
+    ).toEqual({
+      type: 'block',
+      reason: '必须先读取 source guide。'
+    })
+  })
+
+  it('returns prerequisite blocks before unsupported tool blocks', () => {
+    expect(
+      checkPreToolUse({
+        prerequisite: {
+          type: 'block',
+          reason: '必须先读取 source guide。'
+        },
+        toolName: 'mcp__linear__createIssue',
+        toolInput: { title: 'Bug' }
+      })
+    ).toEqual({
+      type: 'block',
+      reason: '必须先读取 source guide。'
+    })
+  })
 })
