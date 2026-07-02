@@ -12,6 +12,12 @@ import type { AgentPermissionMode, AgentWorkspaceContext } from './types'
 
 const claudeReadOnlyTools = new Set(['Read', 'Glob', 'Grep', 'LS'])
 const claudeWritableTools = new Set(['Write', 'Edit', 'MultiEdit'])
+const claudeReadOnlyPathFields = new Map([
+  ['Read', 'file_path'],
+  ['Glob', 'path'],
+  ['Grep', 'path'],
+  ['LS', 'directory']
+])
 
 export type PreToolUseSourceActivation = {
   sourceSlug: string
@@ -78,6 +84,13 @@ function resolveBashCommand(input: Record<string, unknown>): string | undefined 
  */
 function resolveWritableToolPath(input: Record<string, unknown>): string | undefined {
   return readStringField(input, 'file_path')
+}
+
+/**
+ * 读取只读工具当前阶段允许规整的路径字段名。
+ */
+function resolveReadOnlyToolPathField(toolName: string): string | undefined {
+  return claudeReadOnlyPathFields.get(toolName)
 }
 
 /**
@@ -170,6 +183,45 @@ function hasWorkspaceBoundaryViolation(
 }
 
 /**
+ * 对只读工具的 workspace-relative 路径做最小规整；无变化时返回 null。
+ */
+function normalizeReadOnlyToolInputPath(
+  toolName: string,
+  toolInput: Record<string, unknown>,
+  workspace: AgentWorkspaceContext
+): Record<string, unknown> | null {
+  const pathField = resolveReadOnlyToolPathField(toolName)
+
+  if (pathField === undefined) {
+    return null
+  }
+
+  const inputPath = readStringField(toolInput, pathField)
+
+  if (inputPath === undefined) {
+    return null
+  }
+
+  const trimmedInputPath = inputPath.trim()
+
+  if (isAbsolute(trimmedInputPath)) {
+    return null
+  }
+
+  const targetPath = resolveWorkspacePath(workspace.path, trimmedInputPath)
+  const normalizedPath = relative(resolve(workspace.path), targetPath) || '.'
+
+  if (normalizedPath === inputPath) {
+    return null
+  }
+
+  return {
+    ...toolInput,
+    [pathField]: normalizedPath
+  }
+}
+
+/**
  * 执行 Moon Claude-first PreToolUse 管线，统一返回 allow/block/prompt/source activation 等结果。
  */
 export function runPreToolUseChecks({
@@ -259,6 +311,15 @@ export function runPreToolUseChecks({
     return {
       type: 'block',
       reason: '工具路径超出当前项目 workspace，已被 Moon 阻止。'
+    }
+  }
+
+  const modifiedToolInput = normalizeReadOnlyToolInputPath(toolName, toolInput, workspace)
+
+  if (modifiedToolInput !== null) {
+    return {
+      type: 'modify',
+      toolInput: modifiedToolInput
     }
   }
 

@@ -160,8 +160,13 @@ export function createClaudePreToolUseHooks({
             }
 
             if (checkResult.type === 'modify') {
-              // v1 只预留 modify 结果类型，当前 Claude hook 不改写 tool input。
-              return { continue: true }
+              return {
+                continue: true,
+                hookSpecificOutput: {
+                  hookEventName: 'PreToolUse',
+                  updatedInput: checkResult.toolInput
+                }
+              }
             }
 
             return { continue: true }

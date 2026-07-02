@@ -365,8 +365,13 @@ export abstract class BaseAgent implements AgentBackend {
       })
     }
 
-    if (permissionResult.type === 'allow') {
-      this.prerequisiteManager.trackClaudeToolUse(input, sources)
+    if (permissionResult.type === 'allow' || permissionResult.type === 'modify') {
+      this.prerequisiteManager.trackClaudeToolUse(
+        permissionResult.type === 'modify'
+          ? { ...input, toolInput: permissionResult.toolInput }
+          : input,
+        sources
+      )
     }
 
     return permissionResult

@@ -49,6 +49,33 @@ describe('runPreToolUseChecks', () => {
     expect(checkPreToolUse({ toolName, toolInput })).toEqual({ type: 'allow' })
   })
 
+  it('returns modify for Read workspace-relative paths with dot segments', () => {
+    expect(
+      checkPreToolUse({
+        toolName: 'Read',
+        toolInput: { file_path: './src/../README.md' }
+      })
+    ).toEqual({
+      type: 'modify',
+      toolInput: { file_path: 'README.md' }
+    })
+  })
+
+  it.each([
+    ['Glob', { pattern: '*.ts', path: './src/../src' }, { pattern: '*.ts', path: 'src' }],
+    ['Grep', { pattern: 'Moon', path: './src/../src' }, { pattern: 'Moon', path: 'src' }],
+    ['LS', { directory: './src/../src' }, { directory: 'src' }]
+  ])('returns modify for read-only tool %s relative path dot segments', (
+    toolName,
+    toolInput,
+    expectedToolInput
+  ) => {
+    expect(checkPreToolUse({ toolName, toolInput })).toEqual({
+      type: 'modify',
+      toolInput: expectedToolInput
+    })
+  })
+
   it('blocks read-only tools outside the workspace', () => {
     expect(
       checkPreToolUse({
@@ -76,6 +103,21 @@ describe('runPreToolUseChecks', () => {
         description: '需要在项目目录执行命令：pnpm test',
         command: 'pnpm test',
         type: 'bash'
+      }
+    })
+  })
+
+  it('does not return modify for Bash commands', () => {
+    expect(
+      checkPreToolUse({
+        toolName: 'Bash',
+        toolUseId: 'bash-tool-1',
+        toolInput: { command: 'cat ./src/../README.md' }
+      })
+    ).toMatchObject({
+      type: 'prompt',
+      request: {
+        command: 'cat ./src/../README.md'
       }
     })
   })
@@ -123,6 +165,21 @@ describe('runPreToolUseChecks', () => {
         path: 'README.md',
         type: 'file_write',
         impact: '写操作会改变当前项目工作区文件。'
+      }
+    })
+  })
+
+  it('does not return modify for write tool paths before prompting', () => {
+    expect(
+      checkPreToolUse({
+        toolName: 'Edit',
+        toolUseId: 'edit-tool-1',
+        toolInput: { file_path: './README.md', old_string: 'old', new_string: 'new' }
+      })
+    ).toMatchObject({
+      type: 'prompt',
+      request: {
+        path: './README.md'
       }
     })
   })

@@ -523,10 +523,13 @@ previous question`)
     expect(
       agent.checkToolUseForTest({
         toolName: 'Read',
-        toolInput: { file_path: 'sources/linear/guide.md' },
+        toolInput: { file_path: './sources/linear/../linear/guide.md' },
         toolUseId: 'read-tool-1'
       })
-    ).toEqual({ type: 'allow' })
+    ).toEqual({
+      type: 'modify',
+      toolInput: { file_path: 'sources/linear/guide.md' }
+    })
 
     expect(agent.buildProviderPrompt()).toContain(
       'sourceGuideReads:\n- sourceSlug="linear" guidePath="/workspace/moon/sources/linear/guide.md"'

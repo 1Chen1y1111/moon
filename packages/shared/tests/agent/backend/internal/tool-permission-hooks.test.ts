@@ -161,6 +161,29 @@ describe('createClaudePreToolUseHooks', () => {
     expect(requestPermission).not.toHaveBeenCalled()
   })
 
+  it('translates modify checks into Claude SDK updated input output', async () => {
+    const hook = resolvePreToolUseHook({
+      checkToolUse: createPermissionChecker('ask')
+    })
+
+    await expect(
+      runPreToolUseHook(
+        hook,
+        createPreToolUseInput({
+          tool_name: 'Read',
+          tool_input: { file_path: './src/../README.md' },
+          tool_use_id: 'read-tool-1'
+        })
+      )
+    ).resolves.toEqual({
+      continue: true,
+      hookSpecificOutput: {
+        hookEventName: 'PreToolUse',
+        updatedInput: { file_path: 'README.md' }
+      }
+    })
+  })
+
   it('continues allowed tool calls without asking for UI permission', async () => {
     const requestPermission = vi.fn()
     const hook = resolvePreToolUseHook({
