@@ -180,12 +180,27 @@ inspect sources`)
     ).toBe('hello')
   })
 
+  it('omits activated sources when the session list is empty', () => {
+    expect(
+      buildSessionContextBlock({
+        agentSessionState: {
+          activatedSourceSlugs: [],
+          permissionGrants: [],
+          sourceGuideReads: []
+        }
+      })
+    ).toBe(`<session_state>
+permissionMode: ask
+</session_state>`)
+  })
+
   it('builds compact session context from permission mode and workspace state', () => {
     expect(
       buildSessionContextBlock({
         permissionMode: 'safe',
         workspace,
         agentSessionState: {
+          activatedSourceSlugs: ['linear'],
           permissionGrants: [
             { type: 'bash', toolName: 'Bash', command: 'pnpm test' },
             { type: 'file_write', toolName: 'Edit', path: 'README.md' }
@@ -201,6 +216,8 @@ inspect sources`)
     ).toBe(`<session_state>
 permissionMode: safe
 workspacePath: /workspace/moon
+activatedSources:
+- sourceSlug="linear"
 permissionGrants:
 - type="bash" toolName="Bash" command="pnpm test"
 - type="file_write" toolName="Edit" path="README.md"

@@ -85,6 +85,13 @@ function serializeSourceGuideRead(
 }
 
 /**
+ * 拼接一条已激活 source 记录，供模型理解当前 thread session 的 source activation 事实。
+ */
+function serializeActivatedSourceSlug(sourceSlug: string): string {
+  return `- sourceSlug=${serializeContextValue(sourceSlug)}`
+}
+
+/**
  * 构造注入 provider prompt 的最小会话运行态上下文。
  */
 export function buildSessionContextBlock({
@@ -96,6 +103,13 @@ export function buildSessionContextBlock({
 
   if (workspace?.path !== undefined) {
     lines.push(`workspacePath: ${workspace.path}`)
+  }
+
+  if (agentSessionState !== undefined && agentSessionState.activatedSourceSlugs.length > 0) {
+    lines.push(
+      'activatedSources:',
+      ...agentSessionState.activatedSourceSlugs.map(serializeActivatedSourceSlug)
+    )
   }
 
   if (agentSessionState !== undefined && agentSessionState.permissionGrants.length > 0) {

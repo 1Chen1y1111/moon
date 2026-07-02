@@ -169,6 +169,7 @@ describe('createConnectionAgentBackendConfig', () => {
       apiKey: 'stored-key'
     })
     const agentSessionState = {
+      activatedSourceSlugs: [],
       permissionGrants: [{ type: 'bash' as const, toolName: 'Bash', command: 'pnpm test' }],
       sourceGuideReads: []
     }

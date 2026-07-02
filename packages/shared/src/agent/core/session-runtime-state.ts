@@ -1,6 +1,6 @@
 /**
  * 负责定义 agent 会话内的短生命周期运行时状态。
- * 当前只保存权限记忆和 source guide 阅读状态，不做持久化或跨线程共享。
+ * 当前保存权限记忆、source guide 阅读和 source 激活状态，不做持久化或跨线程共享。
  */
 
 import type { AgentPermissionRequest } from '@moon/core/types'
@@ -18,6 +18,7 @@ export type AgentSourceGuideRead = {
 }
 
 export type AgentSessionRuntimeState = {
+  activatedSourceSlugs: string[]
   permissionGrants: AgentPermissionGrant[]
   sourceGuideReads: AgentSourceGuideRead[]
 }
@@ -27,9 +28,34 @@ export type AgentSessionRuntimeState = {
  */
 export function createAgentSessionRuntimeState(): AgentSessionRuntimeState {
   return {
+    activatedSourceSlugs: [],
     permissionGrants: [],
     sourceGuideReads: []
   }
+}
+
+/**
+ * 判断当前会话是否已经激活指定 source。
+ */
+export function hasActivatedSourceSlug(
+  slugs: readonly string[],
+  sourceSlug: string
+): boolean {
+  return slugs.includes(sourceSlug)
+}
+
+/**
+ * 把 source 激活结果写入会话状态；重复激活时保持幂等。
+ */
+export function addActivatedSourceSlug(
+  state: AgentSessionRuntimeState,
+  sourceSlug: string
+): string {
+  if (!hasActivatedSourceSlug(state.activatedSourceSlugs, sourceSlug)) {
+    state.activatedSourceSlugs.push(sourceSlug)
+  }
+
+  return sourceSlug
 }
 
 /**

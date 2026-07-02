@@ -10,6 +10,7 @@ import { join } from 'node:path'
 import {
   assertLlmConnectionReadyForAgent,
   assertProviderReadyForAgent,
+  addActivatedSourceSlug,
   createBackend,
   createConnectionAgentBackendConfig,
   createAgentSessionRuntimeState,
@@ -17,6 +18,7 @@ import {
   createProviderLlmConnection,
   resolveAgentBackendProvider,
   resolveConnectionAgentBackendProvider,
+  hasActivatedSourceSlug,
   type AgentBackend,
   type AgentBackendConfig,
   type AgentBackendMessage,
@@ -216,6 +218,34 @@ export type AgentBackendFactory = (config: AgentBackendConfig) => AgentBackend
  */
 function createTimestamp(): string {
   return new Date().toISOString()
+}
+
+/**
+ * 将当前 thread session 记住的 source activation 应用到 provider 返回的 source 列表。
+ * 这里不创建未知 source，只把已知 slug 标记为 active，避免提前引入完整 MCP source registry。
+ */
+function applySessionActivatedSources(
+  sources: AgentSourceRecord[],
+  agentSessionState: AgentSessionRuntimeState
+): AgentSourceRecord[] {
+  if (agentSessionState.activatedSourceSlugs.length === 0) {
+    return sources
+  }
+
+  return sources.map((source) => {
+    if (!hasActivatedSourceSlug(agentSessionState.activatedSourceSlugs, source.slug)) {
+      return source
+    }
+
+    const activatedSource: AgentSourceRecord = {
+      ...source,
+      status: 'active'
+    }
+
+    delete activatedSource.error
+
+    return activatedSource
+  })
 }
 
 /**
@@ -1130,9 +1160,9 @@ export class SessionManager {
             path: scope.project.path
           }
 
-    // 取出这次会话可用的上下文来源 比如项目/技能/上下文材料
-    const sources = await this.resolveSourcesForScope(scope)
     const agentSessionState = this.resolveAgentSessionRuntimeState(scope.thread.id)
+    // 取出这次会话可用的上下文来源 比如项目/技能/上下文材料
+    const sources = await this.resolveSourcesForScope(scope, agentSessionState)
 
     // 创建 agentBackend
     const agentBackend = this.createAgentBackend(
@@ -1288,6 +1318,7 @@ export class SessionManager {
     originalMessage: string
   ): void {
     const sessionId = scope.session.id
+    const agentSessionState = this.resolveAgentSessionRuntimeState(scope.thread.id)
 
     this.sessionScopedToolCallbacks.register(sessionId, {
       activateSourceInSessionFn: async (sourceSlug: string): Promise<boolean> => {
@@ -1303,6 +1334,8 @@ export class SessionManager {
         if (!activated) {
           return false
         }
+
+        addActivatedSourceSlug(agentSessionState, sourceSlug)
 
         agentBackend.setPendingSourceActivationRestart({
           sourceSlug,
@@ -1424,6 +1457,11 @@ export class SessionManager {
     }
 
     if (event.type === 'source_activated') {
+      addActivatedSourceSlug(
+        this.resolveAgentSessionRuntimeState(scope.thread.id),
+        event.sourceSlug
+      )
+
       onEvent?.(
         {
           type: 'source-activated',
@@ -1676,15 +1714,17 @@ export class SessionManager {
    * 从可选 source provider 读取当前会话可见的 sources；空列表不写入 backend config。
    */
   private async resolveSourcesForScope(
-    scope: ConversationScope
+    scope: ConversationScope,
+    agentSessionState: AgentSessionRuntimeState
   ): Promise<AgentSourceRecord[] | undefined> {
     if (this.sourceProvider === undefined) {
       return undefined
     }
 
     const sources = await this.sourceProvider.resolveSources(scope)
+    const resolvedSources = applySessionActivatedSources(sources, agentSessionState)
 
-    return sources.length === 0 ? undefined : sources
+    return resolvedSources.length === 0 ? undefined : resolvedSources
   }
 
   /**

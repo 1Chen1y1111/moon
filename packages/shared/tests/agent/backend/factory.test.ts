@@ -41,6 +41,7 @@ describe('agent backend factory', () => {
 
   it('passes resolved backend context into the Claude backend', () => {
     const agentSessionState = {
+      activatedSourceSlugs: [],
       permissionGrants: [{ type: 'bash' as const, toolName: 'Bash', command: 'pnpm test' }],
       sourceGuideReads: []
     }

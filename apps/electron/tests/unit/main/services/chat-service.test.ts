@@ -466,6 +466,77 @@ function createPermissionAgentBackend(
   }
 }
 
+/**
+ * 创建固定返回 inactive source 的 provider fixture，便于验证 session runtime 是否会覆盖状态。
+ */
+function createInactiveSourceProvider(): SessionSourceProvider {
+  return {
+    resolveSources: vi.fn(async () => [
+      {
+        slug: 'linear',
+        name: 'Linear',
+        status: 'inactive' as const
+      }
+    ])
+  }
+}
+
+/**
+ * 创建首轮产出 source_activated、后续产出文本的 backend factory fixture。
+ */
+function createSourceActivationBackendFactory({
+  capturedConfigs,
+  originalMessage,
+  retryText = 'retried',
+  sourceSlug
+}: {
+  capturedConfigs: AgentBackendConfig[]
+  originalMessage: string
+  retryText?: string
+  sourceSlug: string
+}): ReturnType<typeof vi.fn> {
+  let backendIndex = 0
+
+  return vi.fn((config: AgentBackendConfig): AgentBackend => {
+    capturedConfigs.push(config)
+    backendIndex += 1
+    const currentBackendIndex = backendIndex
+
+    return {
+      async *chat(
+        _message: string,
+        _attachments?: MessageAttachment[],
+        options?: AgentChatOptions
+      ): AsyncGenerator<AgentEvent, void, void> {
+        void _message
+        void _attachments
+
+        if (currentBackendIndex === 1) {
+          yield {
+            type: 'source_activated',
+            sourceSlug,
+            originalMessage,
+            ...(options?.turnId === undefined ? {} : { turnId: options.turnId })
+          }
+          return
+        }
+
+        yield {
+          type: 'text_delta',
+          text: retryText,
+          ...(options?.turnId === undefined ? {} : { turnId: options.turnId })
+        }
+      },
+      abort: vi.fn(async () => {}),
+      destroy: vi.fn(),
+      getModel: vi.fn(() => 'test-model'),
+      isProcessing: vi.fn(() => false),
+      respondToPermission: vi.fn(),
+      setModel: vi.fn()
+    }
+  })
+}
+
 function createService(input: {
   agentEvents?: AgentEvent[]
   attachmentsDirectory?: string
@@ -1369,6 +1440,90 @@ describe('SessionManager.sendMessage', () => {
       ['user', 'hello\n\n[workspace activated]'],
       ['assistant', 'retried']
     ])
+  })
+
+  it('marks activated sources active for the next backend config in the same thread', async () => {
+    const capturedConfigs: AgentBackendConfig[] = []
+    const sourceProvider = createInactiveSourceProvider()
+    const createAgentBackend = createSourceActivationBackendFactory({
+      capturedConfigs,
+      originalMessage: 'hello',
+      sourceSlug: 'linear'
+    })
+    const { service } = createService({
+      createAgentBackend,
+      settings: createClaudeSettings(),
+      sourceProvider
+    })
+
+    await service.sendMessage({ content: 'hello' })
+
+    expect(sourceProvider.resolveSources).toHaveBeenCalledTimes(2)
+    expect(capturedConfigs).toHaveLength(2)
+    expect(capturedConfigs[0]?.sources).toEqual([
+      expect.objectContaining({ slug: 'linear', status: 'inactive' })
+    ])
+    expect(capturedConfigs[1]?.sources).toEqual([
+      expect.objectContaining({ slug: 'linear', status: 'active' })
+    ])
+    expect(capturedConfigs[1]?.agentSessionState?.activatedSourceSlugs).toEqual(['linear'])
+  })
+
+  it('does not share activated sources across threads', async () => {
+    const capturedConfigs: AgentBackendConfig[] = []
+    const sourceProvider = createInactiveSourceProvider()
+    const createAgentBackend = createSourceActivationBackendFactory({
+      capturedConfigs,
+      originalMessage: '   ',
+      retryText: 'other thread',
+      sourceSlug: 'linear'
+    })
+    const { service } = createService({
+      createAgentBackend,
+      settings: createClaudeSettings(),
+      sourceProvider
+    })
+
+    const firstResult = await service.sendMessage({ content: 'hello' })
+    const secondTurn = await service.createMessageTurn({
+      sessionId: firstResult.session.id,
+      topicId: firstResult.topic.id,
+      threadId: 'other-thread',
+      content: 'hello from another thread'
+    })
+
+    await service.runOperation({ operationId: secondTurn.operation.id })
+
+    expect(capturedConfigs).toHaveLength(2)
+    expect(capturedConfigs[0]?.agentSessionState?.activatedSourceSlugs).toEqual(['linear'])
+    expect(capturedConfigs[1]?.agentSessionState?.activatedSourceSlugs).toEqual([])
+    expect(capturedConfigs[1]?.sources).toEqual([
+      expect.objectContaining({ slug: 'linear', status: 'inactive' })
+    ])
+  })
+
+  it('does not inject unknown activated sources into backend config', async () => {
+    const capturedConfigs: AgentBackendConfig[] = []
+    const sourceProvider = createInactiveSourceProvider()
+    const createAgentBackend = createSourceActivationBackendFactory({
+      capturedConfigs,
+      originalMessage: 'hello',
+      sourceSlug: 'unknown'
+    })
+    const { service } = createService({
+      createAgentBackend,
+      settings: createClaudeSettings(),
+      sourceProvider
+    })
+
+    await service.sendMessage({ content: 'hello' })
+
+    expect(capturedConfigs).toHaveLength(2)
+    expect(capturedConfigs[1]?.agentSessionState?.activatedSourceSlugs).toEqual(['unknown'])
+    expect(capturedConfigs[1]?.sources).toEqual([
+      expect.objectContaining({ slug: 'linear', status: 'inactive' })
+    ])
+    expect(capturedConfigs[1]?.sources?.some((source) => source.slug === 'unknown')).toBe(false)
   })
 
   it('does not auto-retry source activation when original message is blank', async () => {
