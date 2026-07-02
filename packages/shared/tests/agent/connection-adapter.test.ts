@@ -26,7 +26,7 @@ describe('createConnectionAgentBackendConfig', () => {
       thinkingLevel: 'high'
     })
 
-    expect(createConnectionAgentBackendConfig(connection, messages)).toEqual({
+    expect(createConnectionAgentBackendConfig({ connection, messages })).toEqual({
       provider: 'anthropic',
       model: 'claude-sonnet-4-5',
       apiKey: 'stored-key',
@@ -44,7 +44,7 @@ describe('createConnectionAgentBackendConfig', () => {
       model: 'gpt-5'
     })
 
-    expect(createConnectionAgentBackendConfig(connection, [])).toEqual({
+    expect(createConnectionAgentBackendConfig({ connection, messages: [] })).toEqual({
       provider: 'pi',
       model: 'gpt-5',
       thinkingLevel: 'medium',
@@ -65,7 +65,7 @@ describe('createConnectionAgentBackendConfig', () => {
     })
 
     expect(resolveConnectionAgentBackendProvider(connection)).toBe('pi_compat')
-    expect(createConnectionAgentBackendConfig(connection, messages)).toEqual({
+    expect(createConnectionAgentBackendConfig({ connection, messages })).toEqual({
       provider: 'pi_compat',
       model: 'compat-model',
       apiKey: 'stored-key',
@@ -89,7 +89,7 @@ describe('createConnectionAgentBackendConfig', () => {
     })
 
     expect(resolveConnectionAgentBackendProvider(connection)).toBe('pi_compat')
-    expect(createConnectionAgentBackendConfig(connection, messages)).toEqual({
+    expect(createConnectionAgentBackendConfig({ connection, messages })).toEqual({
       provider: 'pi_compat',
       model: 'anthropic/claude-sonnet',
       apiKey: 'stored-key',
@@ -110,9 +110,13 @@ describe('createConnectionAgentBackendConfig', () => {
     })
 
     expect(
-      createConnectionAgentBackendConfig(connection, [], {
-        name: 'moon',
-        path: '/workspace/moon'
+      createConnectionAgentBackendConfig({
+        connection,
+        messages: [],
+        workspace: {
+          name: 'moon',
+          path: '/workspace/moon'
+        }
       })
     ).toMatchObject({
       workspace: {
@@ -131,7 +135,9 @@ describe('createConnectionAgentBackendConfig', () => {
       apiKey: 'stored-key'
     })
 
-    expect(createConnectionAgentBackendConfig(connection, [], undefined, 'ask')).toMatchObject({
+    expect(
+      createConnectionAgentBackendConfig({ connection, messages: [], permissionMode: 'ask' })
+    ).toMatchObject({
       permissionMode: 'ask'
     })
   })
@@ -154,7 +160,7 @@ describe('createConnectionAgentBackendConfig', () => {
     ]
 
     expect(
-      createConnectionAgentBackendConfig(connection, [], undefined, undefined, sources)
+      createConnectionAgentBackendConfig({ connection, messages: [], sources })
     ).toMatchObject({
       sources
     })
@@ -175,14 +181,11 @@ describe('createConnectionAgentBackendConfig', () => {
     }
 
     expect(
-      createConnectionAgentBackendConfig(
+      createConnectionAgentBackendConfig({
         connection,
-        [],
-        undefined,
-        undefined,
-        undefined,
+        messages: [],
         agentSessionState
-      )
+      })
     ).toMatchObject({
       agentSessionState
     })

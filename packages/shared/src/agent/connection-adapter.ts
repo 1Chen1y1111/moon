@@ -17,6 +17,18 @@ export const piBackendNotWiredMessage =
   'Pi backend is not wired yet. Configure an Anthropic-compatible connection for now.'
 
 /**
+ * 描述从 LLM connection 组装 agent backend config 所需的显式运行时输入。
+ */
+export type CreateConnectionAgentBackendConfigInput = {
+  agentSessionState?: AgentSessionRuntimeState
+  connection: NormalizedLlmConnection
+  messages: AgentBackendMessage[]
+  permissionMode?: AgentPermissionMode
+  sources?: AgentSourceRecord[]
+  workspace?: AgentBackendWorkspace
+}
+
+/**
  * 解析 connection 实际应使用的 agent backend；不再把 Pi-compatible 连接改写成 Claude 路径。
  */
 export function resolveConnectionAgentBackendProvider(
@@ -49,14 +61,14 @@ export function assertLlmConnectionReadyForAgent(connection: NormalizedLlmConnec
 /**
  * 把已规范化的 LLM connection 转换成 backend factory 可以消费的配置。
  */
-export function createConnectionAgentBackendConfig(
-  connection: NormalizedLlmConnection,
-  messages: AgentBackendMessage[],
-  workspace?: AgentBackendWorkspace,
-  permissionMode?: AgentPermissionMode,
-  sources?: AgentSourceRecord[],
-  agentSessionState?: AgentSessionRuntimeState
-): AgentBackendConfig {
+export function createConnectionAgentBackendConfig({
+  agentSessionState,
+  connection,
+  messages,
+  permissionMode,
+  sources,
+  workspace
+}: CreateConnectionAgentBackendConfigInput): AgentBackendConfig {
   const apiKey = connection.apiKey?.trim()
   const provider = resolveConnectionAgentBackendProvider(connection)
 

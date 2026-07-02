@@ -1197,14 +1197,14 @@ export class SessionManager {
     // 创建 agentBackend
     const agentBackend = this.createAgentBackend(
       // 把 connection、历史消息、workspace、权限模式、sources 整理成 agent 配置
-      createConnectionAgentBackendConfig(
+      createConnectionAgentBackendConfig({
+        agentSessionState,
         connection,
-        backendMessages,
-        workspace,
+        messages: backendMessages,
         permissionMode,
         sources,
-        agentSessionState
-      )
+        workspace
+      })
     )
 
     this.configureSessionScopedToolCallbacks(agentBackend, eventScope, currentUserMessage)

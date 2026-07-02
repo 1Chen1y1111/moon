@@ -179,8 +179,8 @@ export function createProviderAgentBackendConfig(
   modelId: string,
   messages: AgentBackendMessage[]
 ): AgentBackendConfig {
-  return createConnectionAgentBackendConfig(
-    createProviderLlmConnection(provider, modelId),
+  return createConnectionAgentBackendConfig({
+    connection: createProviderLlmConnection(provider, modelId),
     messages
-  )
+  })
 }
