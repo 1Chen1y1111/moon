@@ -24,7 +24,7 @@ import {
 } from './core/permission-manager'
 import { PrerequisiteManager } from './core/prerequisite-manager'
 import { runPreToolUseChecks } from './core/pre-tool-use'
-import { PromptBuilder } from './core/prompt-builder'
+import { buildSessionContextBlock, PromptBuilder } from './core/prompt-builder'
 import {
   addPermissionGrantFromRequest,
   createAgentSessionRuntimeState,
@@ -263,12 +263,17 @@ export abstract class BaseAgent implements AgentBackend {
   }
 
   /**
-   * 构造本轮 provider prompt，并统一注入 SourceManager 管理的 source context。
+   * 构造本轮 provider prompt，并统一注入会话运行态和 SourceManager 管理的 source context。
    */
   protected buildPrompt(fallbackMessage: string, messages: AgentBackendMessage[]): string {
     return this.promptBuilder.build({
       fallbackMessage,
       messages,
+      sessionContextBlock: buildSessionContextBlock({
+        agentSessionState: this.agentSessionState,
+        permissionMode: this.permissionMode,
+        workspace: this.workspace
+      }),
       sourceContextBlock: this.sourceManager.buildContextBlock(),
       workspace: this.workspace
     })

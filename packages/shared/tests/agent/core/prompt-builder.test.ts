@@ -5,7 +5,7 @@
 
 import { describe, expect, it } from 'vitest'
 
-import { PromptBuilder } from '../../../src/agent'
+import { buildSessionContextBlock, PromptBuilder } from '../../../src/agent'
 
 describe('PromptBuilder', () => {
   const workspace = { path: '/workspace/moon' }
@@ -92,6 +92,41 @@ describe('PromptBuilder', () => {
     ).toBe('<sources>\nActive:\n- github (GitHub)\n</sources>\n\nUSER:\ninspect sources')
   })
 
+  it('prepends session context before serialized history when session context is available', () => {
+    const promptBuilder = new PromptBuilder()
+
+    expect(
+      promptBuilder.build({
+        fallbackMessage: 'fallback',
+        messages: [{ role: 'user', content: 'inspect session' }],
+        sessionContextBlock: '<session_state>\npermissionMode: ask\n</session_state>'
+      })
+    ).toBe('<session_state>\npermissionMode: ask\n</session_state>\n\nUSER:\ninspect session')
+  })
+
+  it('keeps session context before source context when both are available', () => {
+    const promptBuilder = new PromptBuilder()
+
+    expect(
+      promptBuilder.build({
+        fallbackMessage: 'fallback',
+        messages: [{ role: 'user', content: 'inspect sources' }],
+        sessionContextBlock: '<session_state>\npermissionMode: safe\n</session_state>',
+        sourceContextBlock: '<sources>\nActive:\n- github (GitHub)\n</sources>'
+      })
+    ).toBe(`<session_state>
+permissionMode: safe
+</session_state>
+
+<sources>
+Active:
+- github (GitHub)
+</sources>
+
+USER:
+inspect sources`)
+  })
+
   it('prepends source context before workspace-filtered history', () => {
     const promptBuilder = new PromptBuilder()
 
@@ -131,5 +166,46 @@ describe('PromptBuilder', () => {
         sourceContextBlock: '   '
       })
     ).toBe('hello')
+  })
+
+  it('ignores blank session context so fallback behavior stays unchanged', () => {
+    const promptBuilder = new PromptBuilder()
+
+    expect(
+      promptBuilder.build({
+        fallbackMessage: 'hello',
+        messages: [],
+        sessionContextBlock: '   '
+      })
+    ).toBe('hello')
+  })
+
+  it('builds compact session context from permission mode and workspace state', () => {
+    expect(
+      buildSessionContextBlock({
+        permissionMode: 'safe',
+        workspace,
+        agentSessionState: {
+          permissionGrants: [
+            { type: 'bash', toolName: 'Bash', command: 'pnpm test' },
+            { type: 'file_write', toolName: 'Edit', path: 'README.md' }
+          ],
+          sourceGuideReads: [
+            {
+              sourceSlug: 'linear',
+              guidePath: '/workspace/moon/sources/linear/guide.md'
+            }
+          ]
+        }
+      })
+    ).toBe(`<session_state>
+permissionMode: safe
+workspacePath: /workspace/moon
+permissionGrants:
+- type="bash" toolName="Bash" command="pnpm test"
+- type="file_write" toolName="Edit" path="README.md"
+sourceGuideReads:
+- sourceSlug="linear" guidePath="/workspace/moon/sources/linear/guide.md"
+</session_state>`)
   })
 })

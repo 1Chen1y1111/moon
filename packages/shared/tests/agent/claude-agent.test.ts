@@ -433,7 +433,15 @@ describe('ClaudeAgent', () => {
 
     expect(queryClaude).toHaveBeenCalledWith(
       expect.objectContaining({
-        prompt: 'SYSTEM:\nfollow project rules\n\nUSER:\nprevious question',
+        prompt: `<session_state>
+permissionMode: ask
+</session_state>
+
+SYSTEM:
+follow project rules
+
+USER:
+previous question`,
         options: expect.objectContaining({
           includePartialMessages: true,
           model: 'claude-sonnet',
@@ -459,7 +467,11 @@ describe('ClaudeAgent', () => {
 
     expect(queryClaude).toHaveBeenCalledWith(
       expect.objectContaining({
-        prompt: `<sources>
+        prompt: `<session_state>
+permissionMode: ask
+</session_state>
+
+<sources>
 Active:
 - github (GitHub): GitHub repository context
 </sources>
@@ -502,7 +514,12 @@ inspect repo`
 
     expect(queryClaude).toHaveBeenCalledWith(
       expect.objectContaining({
-        prompt: `<sources>
+        prompt: `<session_state>
+permissionMode: ask
+workspacePath: /workspace/moon
+</session_state>
+
+<sources>
 Active:
 - workspace (Workspace): Local workspace source
   Guide: /workspace/moon/AGENTS.md
@@ -553,7 +570,12 @@ current question`,
 
     expect(queryClaude).toHaveBeenCalledWith(
       expect.objectContaining({
-        prompt: 'inspect workspace'
+        prompt: `<session_state>
+permissionMode: ask
+workspacePath: /workspace/moon
+</session_state>
+
+inspect workspace`
       })
     )
   })
@@ -1037,7 +1059,13 @@ current question`,
 
     expect(queryClaude).toHaveBeenCalledWith(
       expect.objectContaining({
-        prompt: 'USER:\nprevious question',
+        prompt: `<session_state>
+permissionMode: ask
+workspacePath: /workspace/moon
+</session_state>
+
+USER:
+previous question`,
         options: expect.objectContaining({
           allowDangerouslySkipPermissions: true,
           cwd: '/workspace/moon',

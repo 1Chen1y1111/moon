@@ -261,7 +261,11 @@ Active:
   it('owns prompt building through shared core modules', () => {
     const agent = new TestAgent({ model: 'claude-sonnet', sources })
 
-    expect(agent.buildProviderPrompt()).toBe(`<sources>
+    expect(agent.buildProviderPrompt()).toBe(`<session_state>
+permissionMode: ask
+</session_state>
+
+<sources>
 Active:
 - github (GitHub): GitHub repository context
 </sources>
@@ -296,7 +300,12 @@ previous question`)
         { role: 'assistant', content: 'previous answer' },
         { role: 'user', content: 'current question' }
       ])
-    ).toBe(`<sources>
+    ).toBe(`<session_state>
+permissionMode: ask
+workspacePath: /workspace/moon
+</session_state>
+
+<sources>
 Active:
 - workspace (Workspace): Local workspace source
   Guide: /workspace/moon/AGENTS.md
@@ -327,7 +336,12 @@ current question`)
       agent.buildProviderPromptWithMessages('inspect workspace', [
         { role: 'system', content: 'project system context' }
       ])
-    ).toBe('inspect workspace')
+    ).toBe(`<session_state>
+permissionMode: ask
+workspacePath: /workspace/moon
+</session_state>
+
+inspect workspace`)
   })
 
   it('builds prompts from the latest source runtime state', () => {
@@ -345,7 +359,11 @@ current question`)
 
     agent.markSourceActiveForTest('github')
 
-    expect(agent.buildProviderPrompt()).toBe(`<sources>
+    expect(agent.buildProviderPrompt()).toBe(`<session_state>
+permissionMode: ask
+</session_state>
+
+<sources>
 Active:
 - github (GitHub): GitHub repository context
 </sources>
@@ -509,6 +527,10 @@ previous question`)
         toolUseId: 'read-tool-1'
       })
     ).toEqual({ type: 'allow' })
+
+    expect(agent.buildProviderPrompt()).toContain(
+      'sourceGuideReads:\n- sourceSlug="linear" guidePath="/workspace/moon/sources/linear/guide.md"'
+    )
 
     expect(
       agent.checkToolUseForTest({
@@ -679,6 +701,9 @@ previous question`)
         toolUseId: 'bash-tool-1'
       })
     ).toEqual({ type: 'allow' })
+    expect(agent.buildProviderPrompt()).toContain(
+      'permissionGrants:\n- type="bash" toolName="Bash" command="pwd"'
+    )
   })
 
   it('does not add session permission grants for one-time approvals', async () => {
