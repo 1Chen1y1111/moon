@@ -3,15 +3,15 @@
  * 它只处理 Claude SDK 调用和生命周期状态，不负责会话持久化、IPC 或 renderer 状态。
  */
 
-import { query } from '@anthropic-ai/claude-agent-sdk'
+import { query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 
 import { BaseAgent } from './base-agent'
 import { ClaudeEventAdapter } from './backend/claude/event-adapter'
+import { ClaudeTurnStreamRunner } from './backend/claude/turn-stream-runner'
 import { createClaudeQueryOptions } from './backend/internal/runtime-resolver'
 import { createClaudePreToolUseHooks } from './backend/internal/tool-permission-hooks'
 import type { AgentSourceRecord } from './core/source-manager'
 import type { AgentSessionRuntimeState } from './core/session-runtime-state'
-import { SourceActivationDrainController } from './source-activation-drain'
 import type { ThinkingLevel } from '../config'
 import type {
   AgentBackendMessage,
@@ -145,6 +145,20 @@ class ClaudeStderrBuffer {
   }
 }
 
+/**
+ * 在 Claude SDK iterator 自然结束时关闭内部事件队列，确保晚到的权限事件能被 flush。
+ */
+async function* completeQueuedEventsWhenSdkFinishes(
+  sdkEvents: AsyncIterable<SDKMessage>,
+  completeQueuedEvents: () => void
+): AsyncGenerator<SDKMessage, void, void> {
+  try {
+    yield* sdkEvents
+  } finally {
+    completeQueuedEvents()
+  }
+}
+
 export class ClaudeAgent extends BaseAgent {
   private readonly apiKey?: string
   private readonly baseUrl?: string
@@ -218,130 +232,53 @@ export class ClaudeAgent extends BaseAgent {
         workspace: this.workspace
       })
       runtimeSummary = createClaudeRuntimeSummary(queryOptions)
-      let hasCompleteEvent = false
-      const sourceActivationDrain = new SourceActivationDrainController('batch-boundary')
-      const sdkEvents = this.queryClaude({ prompt, options: queryOptions })
-      const queuedEvents = eventQueue.drain()
-      let sdkEventResultPromise = sdkEvents.next()
-      let queuedEventResultPromise: Promise<IteratorResult<AgentEvent, void>> | null =
-        queuedEvents.next()
-
-      while (true) {
-        const raceCandidates: Array<
-          Promise<
-            | { type: 'sdk'; result: Awaited<typeof sdkEventResultPromise> }
-            | { type: 'queue'; result: IteratorResult<AgentEvent, void> }
-          >
-        > = [sdkEventResultPromise.then((result) => ({ type: 'sdk' as const, result }))]
-
-        if (queuedEventResultPromise !== null) {
-          raceCandidates.push(
-            queuedEventResultPromise.then((result) => ({ type: 'queue' as const, result }))
-          )
-        }
-
-        const result = await Promise.race(raceCandidates)
-
-        if (result.type === 'queue') {
-          if (result.result.done === true) {
-            queuedEventResultPromise = null
-            continue
-          }
-
-          if (result.result.value.type === 'complete') {
-            hasCompleteEvent = true
-          }
-
-          yield result.result.value
-          queuedEventResultPromise = queuedEvents.next()
-          continue
-        }
-
-        if (result.result.done) {
-          break
-        }
-
-        sdkEventResultPromise = sdkEvents.next()
-
-        for (const agentEvent of this.eventAdapter.adapt(result.result.value)) {
-          const normalizedEvent =
-            agentEvent.type === 'error'
-              ? {
-                  ...agentEvent,
-                  message: createClaudeSdkErrorMessage(
-                    agentEvent.message,
-                    stderrBuffer.read(),
-                    this.apiKey,
-                    runtimeSummary
-                  )
-                }
-              : agentEvent
-
-          if (normalizedEvent.type === 'complete') {
-            hasCompleteEvent = true
-          }
-
-          if (normalizedEvent.type === 'tool_result' && normalizedEvent.isError) {
-            const inactiveSourceError = this.sourceManager.detectInactiveSourceToolError(
-              normalizedEvent.toolName ?? '',
-              typeof normalizedEvent.result === 'string' ? normalizedEvent.result : ''
-            )
-
-            if (inactiveSourceError !== null && this.onSourceActivationRequest !== null) {
-              try {
-                const activated = await this.onSourceActivationRequest(
-                  inactiveSourceError.sourceSlug
+      const runner = new ClaudeTurnStreamRunner({
+        sdkEvents: completeQueuedEventsWhenSdkFinishes(
+          this.queryClaude({ prompt, options: queryOptions }),
+          () => eventQueue.complete()
+        ),
+        queuedEvents: eventQueue.drain(),
+        eventAdapter: this.eventAdapter,
+        normalizeAgentEvent: (agentEvent) =>
+          agentEvent.type === 'error'
+            ? {
+                ...agentEvent,
+                message: createClaudeSdkErrorMessage(
+                  agentEvent.message,
+                  stderrBuffer.read(),
+                  this.apiKey,
+                  runtimeSummary
                 )
-
-                if (activated) {
-                  this.setPendingSourceActivationRestart({
-                    sourceSlug: inactiveSourceError.sourceSlug,
-                    originalMessage: message
-                  })
-                }
-              } catch {
-                // 保留原始 tool_result 错误，让现有事件流继续向下游呈现失败原因。
               }
+            : agentEvent,
+        handleToolResultError: async (normalizedEvent) => {
+          const inactiveSourceError = this.sourceManager.detectInactiveSourceToolError(
+            normalizedEvent.toolName ?? '',
+            typeof normalizedEvent.result === 'string' ? normalizedEvent.result : ''
+          )
+
+          if (inactiveSourceError !== null && this.onSourceActivationRequest !== null) {
+            try {
+              const activated = await this.onSourceActivationRequest(
+                inactiveSourceError.sourceSlug
+              )
+
+              if (activated) {
+                this.setPendingSourceActivationRestart({
+                  sourceSlug: inactiveSourceError.sourceSlug,
+                  originalMessage: message
+                })
+              }
+            } catch {
+              // 保留原始 tool_result 错误，让现有事件流继续向下游呈现失败原因。
             }
           }
+        },
+        consumePendingSourceActivationRestart: () =>
+          this.consumePendingSourceActivationRestart()
+      })
 
-          if (
-            sourceActivationDrain.observe(normalizedEvent, () =>
-              this.consumePendingSourceActivationRestart()
-            )
-          ) {
-            continue
-          }
-
-          yield normalizedEvent
-        }
-
-        const sourceActivatedEvent = sourceActivationDrain.shouldFireAtBoundary()
-
-        if (sourceActivatedEvent !== null) {
-          yield this.eventAdapter.withCurrentTurnId(sourceActivatedEvent)
-          return
-        }
-      }
-
-      eventQueue.complete()
-
-      if (queuedEventResultPromise !== null) {
-        let queuedResult = await queuedEventResultPromise
-
-        while (queuedResult.done !== true) {
-          if (queuedResult.value.type === 'complete') {
-            hasCompleteEvent = true
-          }
-
-          yield queuedResult.value
-          queuedResult = await queuedEvents.next()
-        }
-      }
-
-      if (!hasCompleteEvent) {
-        yield { type: 'complete' }
-      }
+      yield* runner.run()
     } catch (error) {
       if (abortController.signal.aborted) {
         yield { type: 'error', message: 'Cancelled by user.' }
