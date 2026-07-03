@@ -8,6 +8,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 import { ClaudeEventAdapter } from '../../../../src/agent/backend/claude/event-adapter'
 import { ClaudeTurnStreamRunner } from '../../../../src/agent/backend/claude/turn-stream-runner'
+import { EventQueue } from '../../../../src/agent/backend/event-queue'
 import type { AgentEvent, PendingSourceActivationRestart } from '../../../../src/agent'
 
 /**
@@ -33,21 +34,10 @@ async function* createSdkEvents(messages: SDKMessage[]): AsyncGenerator<SDKMessa
 }
 
 /**
- * 创建不产出任何队列事件的 async iterator。
+ * 创建会在读取时抛错的 SDK iterator，用于验证队列生命周期兜底。
  */
-async function* createEmptyQueuedEvents(): AsyncGenerator<AgentEvent, void, void> {}
-
-/**
- * 创建延迟一拍后产出队列事件的 iterator，模拟 SDK iterator 先结束的竞态。
- */
-async function* createDelayedQueuedEvents(
-  events: AgentEvent[]
-): AsyncGenerator<AgentEvent, void, void> {
-  await new Promise((resolve) => setTimeout(resolve, 0))
-
-  for (const event of events) {
-    yield event
-  }
+async function* createThrowingSdkEvents(): AsyncGenerator<SDKMessage, void, void> {
+  throw new Error('SDK stream failed')
 }
 
 /**
@@ -55,7 +45,7 @@ async function* createDelayedQueuedEvents(
  */
 function createRunner(
   input: Partial<ConstructorParameters<typeof ClaudeTurnStreamRunner>[0]> & {
-    sdkEvents: AsyncIterator<SDKMessage, void>
+    sdkEvents: AsyncIterable<SDKMessage>
   }
 ): ClaudeTurnStreamRunner {
   const eventAdapter = input.eventAdapter ?? new ClaudeEventAdapter()
@@ -63,7 +53,7 @@ function createRunner(
   eventAdapter.startTurn('turn-1')
 
   return new ClaudeTurnStreamRunner({
-    queuedEvents: createEmptyQueuedEvents(),
+    eventQueue: new EventQueue(),
     normalizeAgentEvent: (event) => event,
     handleToolResultError: () => undefined,
     consumePendingSourceActivationRestart: () => null,
@@ -98,7 +88,30 @@ describe('ClaudeTurnStreamRunner', () => {
     ])
   })
 
+  it('completes the EventQueue when the SDK iterator finishes', async () => {
+    const eventQueue = new EventQueue()
+    const runner = createRunner({
+      sdkEvents: createSdkEvents([]),
+      eventQueue
+    })
+
+    await expect(collectEvents(runner)).resolves.toEqual([{ type: 'complete' }])
+    expect(eventQueue.isComplete).toBe(true)
+  })
+
+  it('completes the EventQueue when the SDK iterator throws', async () => {
+    const eventQueue = new EventQueue()
+    const runner = createRunner({
+      sdkEvents: createThrowingSdkEvents(),
+      eventQueue
+    })
+
+    await expect(collectEvents(runner)).rejects.toThrow('SDK stream failed')
+    expect(eventQueue.isComplete).toBe(true)
+  })
+
   it('flushes queued permission events after the SDK iterator finishes first', async () => {
+    const eventQueue = new EventQueue()
     const permissionEvent: AgentEvent = {
       type: 'permission_request',
       turnId: 'turn-1',
@@ -110,15 +123,18 @@ describe('ClaudeTurnStreamRunner', () => {
         type: 'bash'
       }
     }
+    eventQueue.enqueue(permissionEvent)
     const runner = createRunner({
       sdkEvents: createSdkEvents([]),
-      queuedEvents: createDelayedQueuedEvents([permissionEvent])
+      eventQueue
     })
 
     await expect(collectEvents(runner)).resolves.toEqual([permissionEvent, { type: 'complete' }])
+    expect(eventQueue.isComplete).toBe(true)
   })
 
   it('emits source activation after draining the current tool result batch', async () => {
+    const eventQueue = new EventQueue()
     let pending: PendingSourceActivationRestart | null = null
     const consumePending = (): PendingSourceActivationRestart | null => {
       const current = pending
@@ -161,6 +177,7 @@ describe('ClaudeTurnStreamRunner', () => {
           }
         } as SDKMessage
       ]),
+      eventQueue,
       handleToolResultError,
       consumePendingSourceActivationRestart: consumePending
     })
@@ -181,6 +198,7 @@ describe('ClaudeTurnStreamRunner', () => {
       }
     ])
     expect(handleToolResultError).toHaveBeenCalledTimes(1)
+    expect(eventQueue.isComplete).toBe(true)
   })
 
   it('adds a complete event when the SDK stream does not emit one', async () => {

@@ -3,7 +3,7 @@
  * 它只处理 Claude SDK 调用和生命周期状态，不负责会话持久化、IPC 或 renderer 状态。
  */
 
-import { query, type SDKMessage } from '@anthropic-ai/claude-agent-sdk'
+import { query } from '@anthropic-ai/claude-agent-sdk'
 
 import { BaseAgent } from './base-agent'
 import { ClaudeEventAdapter } from './backend/claude/event-adapter'
@@ -45,20 +45,6 @@ export type ClaudeAgentInput = {
  */
 function stringifyError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
-}
-
-/**
- * 在 Claude SDK iterator 自然结束时关闭内部事件队列，确保晚到的权限事件能被 flush。
- */
-async function* completeQueuedEventsWhenSdkFinishes(
-  sdkEvents: AsyncIterable<SDKMessage>,
-  completeQueuedEvents: () => void
-): AsyncGenerator<SDKMessage, void, void> {
-  try {
-    yield* sdkEvents
-  } finally {
-    completeQueuedEvents()
-  }
 }
 
 export class ClaudeAgent extends BaseAgent {
@@ -135,11 +121,8 @@ export class ClaudeAgent extends BaseAgent {
       })
       runtimeSummary = createClaudeRuntimeSummary(queryOptions)
       const runner = new ClaudeTurnStreamRunner({
-        sdkEvents: completeQueuedEventsWhenSdkFinishes(
-          this.queryClaude({ prompt, options: queryOptions }),
-          () => eventQueue.complete()
-        ),
-        queuedEvents: eventQueue.drain(),
+        sdkEvents: this.queryClaude({ prompt, options: queryOptions }),
+        eventQueue,
         eventAdapter: this.eventAdapter,
         normalizeAgentEvent: (agentEvent) =>
           agentEvent.type === 'error'
