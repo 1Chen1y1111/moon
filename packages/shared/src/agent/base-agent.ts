@@ -15,7 +15,7 @@ import type {
   AgentSourceActivationCallback,
   MessageAttachment
 } from './backend/types'
-import { EventQueue } from './backend/event-queue'
+import { AgentTurnRuntime, type AgentTurnState } from './backend/agent-turn-runtime'
 import { AgentPermissionRequestQueue } from './backend/permission-request-queue'
 import type { PendingSourceActivationRestart } from './source-activation-drain'
 import {
@@ -44,13 +44,6 @@ export type BaseAgentInput = {
   workspace?: AgentBackendWorkspace
 }
 
-type AgentTurnState = {
-  abortController: AbortController
-  eventQueue: EventQueue
-  cleanupExternalAbort: () => void
-  turnId: string | null
-}
-
 /**
  * 提供所有 backend 都需要的模型状态、core modules、运行中标记、取消和权限决策桥接。
  */
@@ -68,12 +61,8 @@ export abstract class BaseAgent implements AgentBackend {
   protected readonly thinkingLevel?: ThinkingLevel
   protected readonly workspace?: AgentBackendWorkspace
   private readonly permissionRequestQueue = new AgentPermissionRequestQueue()
-  private abortController: AbortController | null = null
-  private currentTurnId: string | null = null
-  private eventQueue: EventQueue | null = null
+  private readonly turnRuntime = new AgentTurnRuntime()
   private model: string
-  private pendingSourceActivationRestart: PendingSourceActivationRestart | null = null
-  private processing = false
 
   /**
    * 保存所有 backend 通用的运行时配置。
@@ -126,27 +115,23 @@ export abstract class BaseAgent implements AgentBackend {
    * 请求中止当前 turn，并释放基类持有的挂起权限状态。
    */
   async abort(reason?: string): Promise<void> {
-    this.abortController?.abort(reason)
-    this.eventQueue?.complete()
+    this.turnRuntime.abort(reason)
     this.rejectPendingPermissions(typeof reason === 'string' ? reason : 'Agent aborted.')
-    this.clearTurnState()
   }
 
   /**
    * 释放 agent 持有的运行时状态，供会话结束或 backend 被替换时调用。
    */
   destroy(): void {
-    this.abortController?.abort('destroyed')
-    this.eventQueue?.complete()
+    this.turnRuntime.destroy()
     this.rejectPendingPermissions('Agent destroyed.')
-    this.clearTurnState()
   }
 
   /**
    * 暴露当前 backend 是否正在处理消息，供会话层判断取消和排队语义。
    */
   isProcessing(): boolean {
-    return this.processing
+    return this.turnRuntime.isProcessing()
   }
 
   /**
@@ -167,54 +152,18 @@ export abstract class BaseAgent implements AgentBackend {
    * 启动一次 agent turn，并把外部 abort signal 桥接到本轮内部 AbortController。
    */
   protected startTurn(options: AgentChatOptions = {}): AgentTurnState {
-    const abortController = new AbortController()
-    const eventQueue = new EventQueue()
-    const turnId = options.turnId ?? null
-    const relayAbort = (): void => abortController.abort(options.abortSignal?.reason)
-
-    this.abortController = abortController
-    this.currentTurnId = turnId
-    this.eventQueue = eventQueue
-    this.processing = true
-    this.pendingSourceActivationRestart = null
+    const turn = this.turnRuntime.start(options)
     this.sourceManager.clearActivatedSources()
 
-    if (options.abortSignal?.aborted) {
-      relayAbort()
-    } else {
-      options.abortSignal?.addEventListener('abort', relayAbort, { once: true })
-    }
-
-    return {
-      abortController,
-      turnId,
-      eventQueue,
-      cleanupExternalAbort: () => options.abortSignal?.removeEventListener('abort', relayAbort)
-    }
+    return turn
   }
 
   /**
    * 结束一次 agent turn，清理 abort、事件队列和未决权限请求。
    */
   protected endTurn(turn: AgentTurnState): void {
-    turn.cleanupExternalAbort()
-    turn.eventQueue.complete()
-
-    if (this.abortController === turn.abortController) {
-      this.abortController = null
-    }
-
-    if (this.eventQueue === turn.eventQueue) {
-      this.eventQueue = null
-    }
-
-    if (this.currentTurnId === turn.turnId) {
-      this.currentTurnId = null
-    }
-
+    this.turnRuntime.end(turn)
     this.rejectPendingPermissions('Agent turn ended.')
-    this.pendingSourceActivationRestart = null
-    this.processing = false
   }
 
   /**
@@ -223,7 +172,7 @@ export abstract class BaseAgent implements AgentBackend {
   protected requestPermission(
     request: AgentPermissionRequest
   ): Promise<AgentPermissionDecision> {
-    const eventQueue = this.eventQueue
+    const eventQueue = this.turnRuntime.eventQueue
 
     if (eventQueue === null) {
       return Promise.resolve({
@@ -238,7 +187,7 @@ export abstract class BaseAgent implements AgentBackend {
     eventQueue.enqueue({
       type: 'permission_request',
       request,
-      ...(this.currentTurnId === null ? {} : { turnId: this.currentTurnId })
+      ...(this.turnRuntime.turnId === null ? {} : { turnId: this.turnRuntime.turnId })
     })
 
     return decisionPromise
@@ -300,22 +249,14 @@ export abstract class BaseAgent implements AgentBackend {
    * 记录一次等待 drain 后发出的 source activation restart；同一轮内采用 first-writer-wins。
    */
   setPendingSourceActivationRestart(pending: PendingSourceActivationRestart): void {
-    if (this.pendingSourceActivationRestart !== null) {
-      return
-    }
-
-    this.pendingSourceActivationRestart = pending
+    this.turnRuntime.setPendingSourceActivationRestart(pending)
   }
 
   /**
    * 消费并清空 pending source activation restart，供 drain controller 在工具结果边界读取。
    */
   protected consumePendingSourceActivationRestart(): PendingSourceActivationRestart | null {
-    const pending = this.pendingSourceActivationRestart
-
-    this.pendingSourceActivationRestart = null
-
-    return pending
+    return this.turnRuntime.consumePendingSourceActivationRestart()
   }
 
   /**
@@ -339,16 +280,5 @@ export abstract class BaseAgent implements AgentBackend {
    */
   private rejectPendingPermissions(reason: string): void {
     this.permissionRequestQueue.rejectAll(reason)
-  }
-
-  /**
-   * 清空当前 turn 引用和运行中标记。
-   */
-  private clearTurnState(): void {
-    this.abortController = null
-    this.currentTurnId = null
-    this.eventQueue = null
-    this.pendingSourceActivationRestart = null
-    this.processing = false
   }
 }
