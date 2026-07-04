@@ -23,8 +23,8 @@ import {
   type AgentToolPermissionCheckResult,
   type ClaudeToolUsePermissionInput
 } from './core/permission-manager'
+import { runAgentPreToolUseRuntime } from './core/pre-tool-use-runtime'
 import { PrerequisiteManager } from './core/prerequisite-manager'
-import { runPreToolUseChecks } from './core/pre-tool-use'
 import { buildSessionContextBlock, PromptBuilder } from './core/prompt-builder'
 import {
   addPermissionGrantFromRequest,
@@ -319,47 +319,19 @@ export abstract class BaseAgent implements AgentBackend {
   }
 
   /**
-   * 使用 BaseAgent 持有的 PermissionManager 检查 Claude SDK 工具调用。
+   * 将 Claude SDK 工具调用交给 shared core PreToolUse runtime 编排。
    */
   protected checkClaudeToolUse(
     input: ClaudeToolUsePermissionInput
   ): AgentToolPermissionCheckResult {
-    const sources = this.sourceManager.listSources()
-    const sourceActivation = this.sourceManager.checkInactiveMcpSourceTool(input.toolName)
-    const sourceTool = this.sourceManager.checkKnownMcpSourceTool(input.toolName)
-    const prerequisiteCheck = this.prerequisiteManager.checkClaudeToolUse(input, sources)
-    const prerequisite = prerequisiteCheck.type === 'block' ? prerequisiteCheck : null
-
-    let permissionResult: AgentToolPermissionCheckResult
-
-    if (this.permissionManager === undefined) {
-      permissionResult = runPreToolUseChecks({
-        ...input,
-        permissionMode: this.permissionMode,
-        permissionGrants: this.agentSessionState.permissionGrants,
-        prerequisite,
-        sourceActivation,
-        sourceTool
-      })
-    } else {
-      permissionResult = this.permissionManager.checkClaudeToolUse(input, {
-        permissionGrants: this.agentSessionState.permissionGrants,
-        prerequisite,
-        sourceActivation,
-        sourceTool
-      })
-    }
-
-    if (permissionResult.type === 'allow' || permissionResult.type === 'modify') {
-      this.prerequisiteManager.trackClaudeToolUse(
-        permissionResult.type === 'modify'
-          ? { ...input, toolInput: permissionResult.toolInput }
-          : input,
-        sources
-      )
-    }
-
-    return permissionResult
+    return runAgentPreToolUseRuntime({
+      agentSessionState: this.agentSessionState,
+      input,
+      permissionManager: this.permissionManager,
+      permissionMode: this.permissionMode,
+      prerequisiteManager: this.prerequisiteManager,
+      sourceManager: this.sourceManager
+    })
   }
 
   /**
