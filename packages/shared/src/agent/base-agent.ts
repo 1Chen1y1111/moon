@@ -15,8 +15,8 @@ import type {
   AgentSourceActivationCallback,
   MessageAttachment
 } from './backend/types'
+import { AgentPermissionRuntime } from './backend/agent-permission-runtime'
 import { AgentTurnRuntime, type AgentTurnState } from './backend/agent-turn-runtime'
-import { AgentPermissionRequestQueue } from './backend/permission-request-queue'
 import type { PendingSourceActivationRestart } from './source-activation-drain'
 import {
   PermissionManager,
@@ -27,7 +27,6 @@ import { AgentPromptRuntime } from './core/agent-prompt-runtime'
 import { runAgentPreToolUseRuntime } from './core/pre-tool-use-runtime'
 import { PrerequisiteManager } from './core/prerequisite-manager'
 import {
-  addPermissionGrantFromRequest,
   createAgentSessionRuntimeState,
   type AgentSessionRuntimeState
 } from './core/session-runtime-state'
@@ -59,7 +58,7 @@ export abstract class BaseAgent implements AgentBackend {
   protected readonly sourceManager: SourceManager
   protected readonly thinkingLevel?: ThinkingLevel
   protected readonly workspace?: AgentBackendWorkspace
-  private readonly permissionRequestQueue = new AgentPermissionRequestQueue()
+  private readonly permissionRuntime: AgentPermissionRuntime
   private readonly promptRuntime: AgentPromptRuntime
   private readonly turnRuntime = new AgentTurnRuntime()
   private model: string
@@ -80,6 +79,9 @@ export abstract class BaseAgent implements AgentBackend {
     this.permissionMode = permissionMode
     this.permissionManager =
       workspace === undefined ? undefined : new PermissionManager({ permissionMode, workspace })
+    this.permissionRuntime = new AgentPermissionRuntime({
+      agentSessionState: this.agentSessionState
+    })
     this.prerequisiteManager = new PrerequisiteManager({
       agentSessionState: this.agentSessionState,
       workspace
@@ -105,15 +107,7 @@ export abstract class BaseAgent implements AgentBackend {
    * 响应正在等待的权限请求，并把决策交还给发起请求的 SDK hook 或子运行时。
    */
   respondToPermission(requestId: string, allowed: boolean, alwaysAllow?: boolean): void {
-    const response = this.permissionRequestQueue.respond(requestId, allowed, alwaysAllow)
-
-    if (response === null) {
-      return
-    }
-
-    if (response.decision.approved && response.decision.alwaysAllow === true) {
-      addPermissionGrantFromRequest(this.agentSessionState, response.request)
-    }
+    this.permissionRuntime.respondToPermission(requestId, allowed, alwaysAllow)
   }
 
   /**
@@ -121,7 +115,7 @@ export abstract class BaseAgent implements AgentBackend {
    */
   async abort(reason?: string): Promise<void> {
     this.turnRuntime.abort(reason)
-    this.rejectPendingPermissions(typeof reason === 'string' ? reason : 'Agent aborted.')
+    this.permissionRuntime.rejectAll(typeof reason === 'string' ? reason : 'Agent aborted.')
   }
 
   /**
@@ -129,7 +123,7 @@ export abstract class BaseAgent implements AgentBackend {
    */
   destroy(): void {
     this.turnRuntime.destroy()
-    this.rejectPendingPermissions('Agent destroyed.')
+    this.permissionRuntime.rejectAll('Agent destroyed.')
   }
 
   /**
@@ -168,7 +162,7 @@ export abstract class BaseAgent implements AgentBackend {
    */
   protected endTurn(turn: AgentTurnState): void {
     this.turnRuntime.end(turn)
-    this.rejectPendingPermissions('Agent turn ended.')
+    this.permissionRuntime.rejectAll('Agent turn ended.')
   }
 
   /**
@@ -177,25 +171,11 @@ export abstract class BaseAgent implements AgentBackend {
   protected requestPermission(
     request: AgentPermissionRequest
   ): Promise<AgentPermissionDecision> {
-    const eventQueue = this.turnRuntime.eventQueue
-
-    if (eventQueue === null) {
-      return Promise.resolve({
-        requestId: request.requestId,
-        approved: false,
-        reason: 'No active agent event queue.'
-      })
-    }
-
-    const decisionPromise = this.permissionRequestQueue.create(request)
-
-    eventQueue.enqueue({
-      type: 'permission_request',
+    return this.permissionRuntime.requestPermission({
+      eventQueue: this.turnRuntime.eventQueue,
       request,
-      ...(this.turnRuntime.turnId === null ? {} : { turnId: this.turnRuntime.turnId })
+      turnId: this.turnRuntime.turnId
     })
-
-    return decisionPromise
   }
 
   /**
@@ -270,10 +250,4 @@ export abstract class BaseAgent implements AgentBackend {
     })
   }
 
-  /**
-   * 拒绝并释放所有未决权限请求，避免 SDK hook 在取消或销毁后继续等待。
-   */
-  private rejectPendingPermissions(reason: string): void {
-    this.permissionRequestQueue.rejectAll(reason)
-  }
 }
