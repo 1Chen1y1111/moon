@@ -12,6 +12,7 @@ import {
   createClaudeRuntimeSummary,
   createClaudeSdkErrorMessage
 } from './backend/claude/sdk-diagnostics'
+import { handleClaudeSourceActivationToolResult } from './backend/claude/source-activation-handler'
 import { ClaudeTurnStreamRunner } from './backend/claude/turn-stream-runner'
 import { createClaudeQueryOptions } from './backend/internal/runtime-resolver'
 import { createClaudePreToolUseHooks } from './backend/internal/tool-permission-hooks'
@@ -136,29 +137,15 @@ export class ClaudeAgent extends BaseAgent {
                 })
               }
             : agentEvent,
-        handleToolResultError: async (normalizedEvent) => {
-          const inactiveSourceError = this.sourceManager.detectInactiveSourceToolError(
-            normalizedEvent.toolName ?? '',
-            typeof normalizedEvent.result === 'string' ? normalizedEvent.result : ''
-          )
-
-          if (inactiveSourceError !== null && this.onSourceActivationRequest !== null) {
-            try {
-              const activated = await this.onSourceActivationRequest(
-                inactiveSourceError.sourceSlug
-              )
-
-              if (activated) {
-                this.setPendingSourceActivationRestart({
-                  sourceSlug: inactiveSourceError.sourceSlug,
-                  originalMessage: message
-                })
-              }
-            } catch {
-              // 保留原始 tool_result 错误，让现有事件流继续向下游呈现失败原因。
-            }
-          }
-        },
+        handleToolResultError: (normalizedEvent) =>
+          handleClaudeSourceActivationToolResult({
+            event: normalizedEvent,
+            originalMessage: message,
+            requestSourceActivation: this.onSourceActivationRequest,
+            setPendingSourceActivationRestart: (pending) =>
+              this.setPendingSourceActivationRestart(pending),
+            sourceManager: this.sourceManager
+          }),
         consumePendingSourceActivationRestart: () =>
           this.consumePendingSourceActivationRestart()
       })
