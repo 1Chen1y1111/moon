@@ -23,9 +23,9 @@ import {
   type AgentToolPermissionCheckResult,
   type ClaudeToolUsePermissionInput
 } from './core/permission-manager'
+import { AgentPromptRuntime } from './core/agent-prompt-runtime'
 import { runAgentPreToolUseRuntime } from './core/pre-tool-use-runtime'
 import { PrerequisiteManager } from './core/prerequisite-manager'
-import { buildSessionContextBlock, PromptBuilder } from './core/prompt-builder'
 import {
   addPermissionGrantFromRequest,
   createAgentSessionRuntimeState,
@@ -55,12 +55,12 @@ export abstract class BaseAgent implements AgentBackend {
   protected readonly permissionManager?: PermissionManager
   protected readonly permissionMode?: AgentPermissionMode
   protected readonly prerequisiteManager: PrerequisiteManager
-  protected readonly promptBuilder: PromptBuilder
   protected readonly agentSessionState: AgentSessionRuntimeState
   protected readonly sourceManager: SourceManager
   protected readonly thinkingLevel?: ThinkingLevel
   protected readonly workspace?: AgentBackendWorkspace
   private readonly permissionRequestQueue = new AgentPermissionRequestQueue()
+  private readonly promptRuntime: AgentPromptRuntime
   private readonly turnRuntime = new AgentTurnRuntime()
   private model: string
 
@@ -84,8 +84,13 @@ export abstract class BaseAgent implements AgentBackend {
       agentSessionState: this.agentSessionState,
       workspace
     })
-    this.promptBuilder = new PromptBuilder()
     this.sourceManager = new SourceManager({ sources })
+    this.promptRuntime = new AgentPromptRuntime({
+      agentSessionState: this.agentSessionState,
+      permissionMode,
+      sourceManager: this.sourceManager,
+      workspace
+    })
     this.thinkingLevel = thinkingLevel
     this.workspace = workspace
   }
@@ -197,17 +202,7 @@ export abstract class BaseAgent implements AgentBackend {
    * 构造本轮 provider prompt，并统一注入会话运行态和 SourceManager 管理的 source context。
    */
   protected buildPrompt(fallbackMessage: string, messages: AgentBackendMessage[]): string {
-    return this.promptBuilder.build({
-      fallbackMessage,
-      messages,
-      sessionContextBlock: buildSessionContextBlock({
-        agentSessionState: this.agentSessionState,
-        permissionMode: this.permissionMode,
-        workspace: this.workspace
-      }),
-      sourceContextBlock: this.sourceManager.buildContextBlock(),
-      workspace: this.workspace
-    })
+    return this.promptRuntime.build({ fallbackMessage, messages })
   }
 
   /**
