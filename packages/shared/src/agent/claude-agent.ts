@@ -8,14 +8,12 @@ import { query } from '@anthropic-ai/claude-agent-sdk'
 import { BaseAgent } from './base-agent'
 import { ClaudeEventAdapter } from './backend/claude/event-adapter'
 import {
-  ClaudeStderrBuffer,
-  createClaudeRuntimeSummary,
-  createClaudeSdkErrorMessage
-} from './backend/claude/sdk-diagnostics'
+  createClaudeQueryRuntime,
+  type ClaudeQueryRuntime
+} from './backend/claude/query-runtime'
+import { createClaudeSdkErrorMessage } from './backend/claude/sdk-diagnostics'
 import { handleClaudeSourceActivationToolResult } from './backend/claude/source-activation-handler'
 import { ClaudeTurnStreamRunner } from './backend/claude/turn-stream-runner'
-import { createClaudeQueryOptions } from './backend/internal/runtime-resolver'
-import { createClaudePreToolUseHooks } from './backend/internal/tool-permission-hooks'
 import type { AgentSourceRecord } from './core/source-manager'
 import type { AgentSessionRuntimeState } from './core/session-runtime-state'
 import type { ThinkingLevel } from '../config'
@@ -90,37 +88,31 @@ export class ClaudeAgent extends BaseAgent {
 
     const turn = this.startTurn(options)
     const { abortController, eventQueue } = turn
-    const stderrBuffer = new ClaudeStderrBuffer()
+    let stderrBuffer: ClaudeQueryRuntime['stderrBuffer'] | undefined
     let runtimeSummary: string | undefined
 
     try {
       this.eventAdapter.startTurn(options.turnId)
 
       const prompt = this.buildPrompt(message, this.messages)
-      const queryOptions = createClaudeQueryOptions({
+      const queryRuntime = createClaudeQueryRuntime({
         abortController,
         apiKey: this.apiKey,
         baseUrl: this.baseUrl,
-        hooks:
-          this.workspace === undefined
-            ? undefined
-            : createClaudePreToolUseHooks({
-                checkToolUse: (input) => this.checkClaudeToolUse(input),
-                onToolUseBlocked: (input, reason) =>
-                  this.eventAdapter.setBlockReason(input.toolUseId, reason),
-                requestPermission: (request) => this.requestPermission(request),
-                requestSourceActivation:
-                  this.onSourceActivationRequest === null
-                    ? undefined
-                    : (sourceSlug) =>
-                        this.onSourceActivationRequest?.(sourceSlug) ?? Promise.resolve(false)
-              }),
+        checkToolUse: (input) => this.checkClaudeToolUse(input),
         model: this.getModel(),
-        stderr: (data) => stderrBuffer.append(data),
+        onToolUseBlocked: (input, reason) =>
+          this.eventAdapter.setBlockReason(input.toolUseId, reason),
+        requestPermission: (request) => this.requestPermission(request),
+        requestSourceActivation: this.onSourceActivationRequest,
         thinkingLevel: options.thinkingOverride ?? this.thinkingLevel,
         workspace: this.workspace
       })
-      runtimeSummary = createClaudeRuntimeSummary(queryOptions)
+      const { queryOptions } = queryRuntime
+
+      stderrBuffer = queryRuntime.stderrBuffer
+      runtimeSummary = queryRuntime.runtimeSummary
+
       const runner = new ClaudeTurnStreamRunner({
         sdkEvents: this.queryClaude({ prompt, options: queryOptions }),
         eventQueue,
@@ -132,7 +124,7 @@ export class ClaudeAgent extends BaseAgent {
                 message: createClaudeSdkErrorMessage({
                   apiKey: this.apiKey,
                   message: agentEvent.message,
-                  stderr: stderrBuffer.read(),
+                  stderr: stderrBuffer?.read() ?? '',
                   runtimeSummary
                 })
               }
@@ -162,7 +154,7 @@ export class ClaudeAgent extends BaseAgent {
         message: createClaudeSdkErrorMessage({
           apiKey: this.apiKey,
           message: stringifyError(error),
-          stderr: stderrBuffer.read(),
+          stderr: stderrBuffer?.read() ?? '',
           runtimeSummary
         })
       }
