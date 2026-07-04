@@ -16,6 +16,7 @@ import type {
   MessageAttachment
 } from './backend/types'
 import { EventQueue } from './backend/event-queue'
+import { AgentPermissionRequestQueue } from './backend/permission-request-queue'
 import type { PendingSourceActivationRestart } from './source-activation-drain'
 import {
   PermissionManager,
@@ -50,10 +51,6 @@ type AgentTurnState = {
   turnId: string | null
 }
 
-type PendingAgentPermission = {
-  resolve: (decision: AgentPermissionDecision) => void
-}
-
 /**
  * 提供所有 backend 都需要的模型状态、core modules、运行中标记、取消和权限决策桥接。
  */
@@ -70,8 +67,7 @@ export abstract class BaseAgent implements AgentBackend {
   protected readonly sourceManager: SourceManager
   protected readonly thinkingLevel?: ThinkingLevel
   protected readonly workspace?: AgentBackendWorkspace
-  private readonly pendingPermissions = new Map<string, PendingAgentPermission>()
-  private readonly pendingPermissionRequests = new Map<string, AgentPermissionRequest>()
+  private readonly permissionRequestQueue = new AgentPermissionRequestQueue()
   private abortController: AbortController | null = null
   private currentTurnId: string | null = null
   private eventQueue: EventQueue | null = null
@@ -115,26 +111,15 @@ export abstract class BaseAgent implements AgentBackend {
    * 响应正在等待的权限请求，并把决策交还给发起请求的 SDK hook 或子运行时。
    */
   respondToPermission(requestId: string, allowed: boolean, alwaysAllow?: boolean): void {
-    const pendingPermission = this.pendingPermissions.get(requestId)
+    const response = this.permissionRequestQueue.respond(requestId, allowed, alwaysAllow)
 
-    if (pendingPermission === undefined) {
+    if (response === null) {
       return
     }
 
-    this.pendingPermissions.delete(requestId)
-    const request = this.pendingPermissionRequests.get(requestId)
-
-    this.pendingPermissionRequests.delete(requestId)
-
-    if (allowed && alwaysAllow === true && request !== undefined) {
-      addPermissionGrantFromRequest(this.agentSessionState, request)
+    if (response.decision.approved && response.decision.alwaysAllow === true) {
+      addPermissionGrantFromRequest(this.agentSessionState, response.request)
     }
-
-    pendingPermission.resolve(
-      allowed
-        ? { requestId, approved: true, ...(alwaysAllow ? { alwaysAllow } : {}) }
-        : { requestId, approved: false }
-    )
   }
 
   /**
@@ -248,10 +233,7 @@ export abstract class BaseAgent implements AgentBackend {
       })
     }
 
-    const decisionPromise = new Promise<AgentPermissionDecision>((resolve) => {
-      this.pendingPermissions.set(request.requestId, { resolve })
-      this.pendingPermissionRequests.set(request.requestId, request)
-    })
+    const decisionPromise = this.permissionRequestQueue.create(request)
 
     eventQueue.enqueue({
       type: 'permission_request',
@@ -384,12 +366,7 @@ export abstract class BaseAgent implements AgentBackend {
    * 拒绝并释放所有未决权限请求，避免 SDK hook 在取消或销毁后继续等待。
    */
   private rejectPendingPermissions(reason: string): void {
-    for (const [requestId, pendingPermission] of this.pendingPermissions) {
-      pendingPermission.resolve({ requestId, approved: false, reason })
-    }
-
-    this.pendingPermissions.clear()
-    this.pendingPermissionRequests.clear()
+    this.permissionRequestQueue.rejectAll(reason)
   }
 
   /**
