@@ -8,10 +8,10 @@ import type {
   ClaudeToolUsePermissionInput,
   PermissionManager
 } from './permission-manager'
+import type { AgentSourceRuntime } from './agent-source-runtime'
 import type { PrerequisiteManager } from './prerequisite-manager'
 import { runPreToolUseChecks } from './pre-tool-use'
 import type { AgentSessionRuntimeState } from './session-runtime-state'
-import type { SourceManager } from './source-manager'
 import type { AgentPermissionMode } from './types'
 
 /**
@@ -23,7 +23,7 @@ export type AgentPreToolUseRuntimeInput = {
   permissionManager?: PermissionManager
   permissionMode?: AgentPermissionMode
   prerequisiteManager: PrerequisiteManager
-  sourceManager: SourceManager
+  sourceRuntime: AgentSourceRuntime
 }
 
 /**
@@ -35,11 +35,11 @@ export function runAgentPreToolUseRuntime({
   permissionManager,
   permissionMode,
   prerequisiteManager,
-  sourceManager
+  sourceRuntime
 }: AgentPreToolUseRuntimeInput): AgentToolPermissionCheckResult {
-  const sources = sourceManager.listSources()
-  const sourceActivation = sourceManager.checkInactiveMcpSourceTool(input.toolName)
-  const sourceTool = sourceManager.checkKnownMcpSourceTool(input.toolName)
+  const sources = sourceRuntime.listSources()
+  const sourceActivation = sourceRuntime.checkInactiveMcpSourceTool(input.toolName)
+  const sourceTool = sourceRuntime.checkKnownMcpSourceTool(input.toolName)
   const prerequisiteCheck = prerequisiteManager.checkClaudeToolUse(input, sources)
   const prerequisite = prerequisiteCheck.type === 'block' ? prerequisiteCheck : null
 

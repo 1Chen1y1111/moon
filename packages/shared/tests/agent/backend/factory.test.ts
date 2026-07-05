@@ -62,7 +62,7 @@ describe('agent backend factory', () => {
       baseUrl?: string
       messages: unknown[]
       permissionMode?: string
-      sourceManager: { buildContextBlock: () => string }
+      sourceRuntime: { buildContextBlock: () => string }
       thinkingLevel?: string
       workspace?: { name?: string; path: string }
     }
@@ -74,7 +74,7 @@ describe('agent backend factory', () => {
     expect(backend.permissionMode).toBe('ask')
     expect(backend.thinkingLevel).toBe('high')
     expect(backend.workspace).toEqual({ name: 'moon', path: '/workspace/moon' })
-    expect(backend.sourceManager.buildContextBlock()).toBe(`<sources>
+    expect(backend.sourceRuntime.buildContextBlock()).toBe(`<sources>
 Active:
 - github (GitHub): GitHub repository context
 </sources>`)

@@ -20,24 +20,24 @@ class TestAgent extends BaseAgent {
   lastAbortSignal: AbortSignal | null = null
 
   /**
-   * 通过基类持有的 source manager 写入测试 source，并返回上下文块。
+   * 通过基类持有的 source runtime 写入测试 source，并返回上下文块。
    */
   buildSourceContextBlock(): string {
-    this.sourceManager.upsertSource({
+    this.sourceRuntime.upsertSource({
       slug: 'github',
       name: 'GitHub',
       description: 'GitHub repository context',
       status: 'active'
     })
 
-    return this.sourceManager.buildContextBlock()
+    return this.sourceRuntime.buildContextBlock()
   }
 
   /**
    * 读取基类初始化出的 source context，避免测试直接访问 protected 字段。
    */
   readSourceContextBlock(): string {
-    return this.sourceManager.buildContextBlock()
+    return this.sourceRuntime.buildContextBlock()
   }
 
   /**
@@ -189,7 +189,7 @@ describe('BaseAgent', () => {
     }
   ]
 
-  it('hydrates shared source manager from constructor sources', () => {
+  it('hydrates shared source runtime from constructor sources', () => {
     const agent = new TestAgent({ model: 'claude-sonnet', sources })
 
     expect(agent.readSourceContextBlock()).toBe(`<sources>
@@ -198,7 +198,7 @@ Active:
 </sources>`)
   })
 
-  it('owns shared source manager state for concrete backends', () => {
+  it('owns shared source runtime state for concrete backends', () => {
     const agent = new TestAgent({ model: 'claude-sonnet' })
 
     expect(agent.buildSourceContextBlock()).toBe(`<sources>

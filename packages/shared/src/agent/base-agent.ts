@@ -18,6 +18,7 @@ import type {
 import { AgentPermissionRuntime } from './backend/agent-permission-runtime'
 import { AgentTurnRuntime, type AgentTurnState } from './backend/agent-turn-runtime'
 import type { PendingSourceActivationRestart } from './source-activation-drain'
+import { AgentSourceRuntime } from './core/agent-source-runtime'
 import {
   PermissionManager,
   type AgentToolPermissionCheckResult,
@@ -30,7 +31,7 @@ import {
   createAgentSessionRuntimeState,
   type AgentSessionRuntimeState
 } from './core/session-runtime-state'
-import { SourceManager, type AgentSourceRecord } from './core/source-manager'
+import type { AgentSourceRecord } from './core/source-manager'
 import type { ThinkingLevel } from '../config'
 import type { AgentPermissionMode } from './core/types'
 
@@ -55,7 +56,7 @@ export abstract class BaseAgent implements AgentBackend {
   protected readonly permissionMode?: AgentPermissionMode
   protected readonly prerequisiteManager: PrerequisiteManager
   protected readonly agentSessionState: AgentSessionRuntimeState
-  protected readonly sourceManager: SourceManager
+  protected readonly sourceRuntime: AgentSourceRuntime
   protected readonly thinkingLevel?: ThinkingLevel
   protected readonly workspace?: AgentBackendWorkspace
   private readonly permissionRuntime: AgentPermissionRuntime
@@ -86,11 +87,11 @@ export abstract class BaseAgent implements AgentBackend {
       agentSessionState: this.agentSessionState,
       workspace
     })
-    this.sourceManager = new SourceManager({ sources })
+    this.sourceRuntime = new AgentSourceRuntime({ sources })
     this.promptRuntime = new AgentPromptRuntime({
       agentSessionState: this.agentSessionState,
       permissionMode,
-      sourceManager: this.sourceManager,
+      sourceRuntime: this.sourceRuntime,
       workspace
     })
     this.thinkingLevel = thinkingLevel
@@ -152,7 +153,7 @@ export abstract class BaseAgent implements AgentBackend {
    */
   protected startTurn(options: AgentChatOptions = {}): AgentTurnState {
     const turn = this.turnRuntime.start(options)
-    this.sourceManager.clearActivatedSources()
+    this.sourceRuntime.clearActivatedSources()
 
     return turn
   }
@@ -179,7 +180,7 @@ export abstract class BaseAgent implements AgentBackend {
   }
 
   /**
-   * 构造本轮 provider prompt，并统一注入会话运行态和 SourceManager 管理的 source context。
+   * 构造本轮 provider prompt，并统一注入会话运行态和 source runtime 管理的 context。
    */
   protected buildPrompt(fallbackMessage: string, messages: AgentBackendMessage[]): string {
     return this.promptRuntime.build({ fallbackMessage, messages })
@@ -189,35 +190,35 @@ export abstract class BaseAgent implements AgentBackend {
    * 将运行时已知 source 标记为 active，并在本 turn 记录一次 activation。
    */
   protected markSourceActive(slug: string): boolean {
-    return this.sourceManager.markSourceActive(slug)
+    return this.sourceRuntime.markSourceActive(slug)
   }
 
   /**
    * 将运行时已知 source 标记为 inactive，不触发事件或自动重启。
    */
   protected markSourceInactive(slug: string): boolean {
-    return this.sourceManager.markSourceInactive(slug)
+    return this.sourceRuntime.markSourceInactive(slug)
   }
 
   /**
    * 将运行时已知 source 标记为 needs_auth，不触发鉴权流程。
    */
   protected markSourceNeedsAuth(slug: string, error?: string): boolean {
-    return this.sourceManager.markSourceNeedsAuth(slug, error)
+    return this.sourceRuntime.markSourceNeedsAuth(slug, error)
   }
 
   /**
    * 将运行时已知 source 标记为 failed，不触发事件或自动重启。
    */
   protected markSourceFailed(slug: string, error?: string): boolean {
-    return this.sourceManager.markSourceFailed(slug, error)
+    return this.sourceRuntime.markSourceFailed(slug, error)
   }
 
   /**
    * 消费本 turn 新激活的 source slugs，供后续 backend 决定是否触发更高层流程。
    */
   protected consumeActivatedSources(): string[] {
-    return this.sourceManager.consumeActivatedSources()
+    return this.sourceRuntime.consumeActivatedSources()
   }
 
   /**
@@ -246,7 +247,7 @@ export abstract class BaseAgent implements AgentBackend {
       permissionManager: this.permissionManager,
       permissionMode: this.permissionMode,
       prerequisiteManager: this.prerequisiteManager,
-      sourceManager: this.sourceManager
+      sourceRuntime: this.sourceRuntime
     })
   }
 

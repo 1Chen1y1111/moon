@@ -5,6 +5,7 @@
 
 import { describe, expect, it } from 'vitest'
 
+import { AgentSourceRuntime } from '../../../src/agent/core/agent-source-runtime'
 import { PermissionManager } from '../../../src/agent/core/permission-manager'
 import {
   runAgentPreToolUseRuntime,
@@ -15,7 +16,7 @@ import {
   createAgentSessionRuntimeState,
   type AgentSessionRuntimeState
 } from '../../../src/agent/core/session-runtime-state'
-import { SourceManager, type AgentSourceRecord } from '../../../src/agent/core/source-manager'
+import type { AgentSourceRecord } from '../../../src/agent/core/source-manager'
 import type { AgentPermissionMode } from '../../../src/agent/core/types'
 
 const workspace = { path: '/workspace/moon' }
@@ -36,7 +37,7 @@ function createHarness({
   permissionMode = 'ask',
   sources = []
 }: RuntimeHarnessInput = {}) {
-  const sourceManager = new SourceManager({ sources })
+  const sourceRuntime = new AgentSourceRuntime({ sources })
   const prerequisiteManager = new PrerequisiteManager({ agentSessionState, workspace })
   const permissionManager = new PermissionManager({ permissionMode, workspace })
 
@@ -49,7 +50,7 @@ function createHarness({
         permissionManager,
         permissionMode,
         prerequisiteManager,
-        sourceManager
+        sourceRuntime
       })
     }
   }

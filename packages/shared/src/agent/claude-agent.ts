@@ -136,7 +136,7 @@ export class ClaudeAgent extends BaseAgent {
             requestSourceActivation: this.onSourceActivationRequest,
             setPendingSourceActivationRestart: (pending) =>
               this.setPendingSourceActivationRestart(pending),
-            sourceManager: this.sourceManager
+            sourceRuntime: this.sourceRuntime
           }),
         consumePendingSourceActivationRestart: () =>
           this.consumePendingSourceActivationRestart()

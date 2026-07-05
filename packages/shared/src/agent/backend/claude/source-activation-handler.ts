@@ -3,7 +3,7 @@
  * 它只请求宿主激活 source 并记录 pending restart，不决定事件 drain、auto-retry 或真实 tool 执行。
  */
 
-import type { SourceManager } from '../../core/source-manager'
+import type { AgentSourceRuntime } from '../../core/agent-source-runtime'
 import type { PendingSourceActivationRestart } from '../../source-activation-drain'
 import type { AgentEvent, AgentSourceActivationCallback } from '../types'
 
@@ -14,7 +14,7 @@ export type ClaudeSourceActivationToolResultHandlerInput = {
   originalMessage: string
   requestSourceActivation?: AgentSourceActivationCallback | null
   setPendingSourceActivationRestart: (pending: PendingSourceActivationRestart) => void
-  sourceManager: SourceManager
+  sourceRuntime: AgentSourceRuntime
 }
 
 /**
@@ -25,13 +25,13 @@ export async function handleClaudeSourceActivationToolResult({
   originalMessage,
   requestSourceActivation,
   setPendingSourceActivationRestart,
-  sourceManager
+  sourceRuntime
 }: ClaudeSourceActivationToolResultHandlerInput): Promise<void> {
   if (!event.isError || requestSourceActivation == null) {
     return
   }
 
-  const inactiveSourceError = sourceManager.detectInactiveSourceToolError(
+  const inactiveSourceError = sourceRuntime.detectInactiveSourceToolError(
     event.toolName ?? '',
     typeof event.result === 'string' ? event.result : ''
   )

@@ -6,8 +6,8 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import { handleClaudeSourceActivationToolResult } from '../../../../src/agent/backend/claude/source-activation-handler'
+import { AgentSourceRuntime } from '../../../../src/agent/core/agent-source-runtime'
 import {
-  SourceManager,
   type AgentEvent,
   type AgentSourceRecord,
   type PendingSourceActivationRestart
@@ -16,10 +16,12 @@ import {
 type ToolResultAgentEvent = Extract<AgentEvent, { type: 'tool_result' }>
 
 /**
- * 创建包含单个 Linear source 的 SourceManager，方便覆盖 active/inactive/unknown 分支。
+ * 创建包含单个 Linear source 的 AgentSourceRuntime，方便覆盖 active/inactive/unknown 分支。
  */
-function createSourceManager(status: AgentSourceRecord['status'] = 'inactive'): SourceManager {
-  return new SourceManager({
+function createSourceRuntime(
+  status: AgentSourceRecord['status'] = 'inactive'
+): AgentSourceRuntime {
+  return new AgentSourceRuntime({
     sources: [
       {
         slug: 'linear',
@@ -59,7 +61,7 @@ describe('handleClaudeSourceActivationToolResult', () => {
       originalMessage: 'create linear issue',
       requestSourceActivation,
       setPendingSourceActivationRestart,
-      sourceManager: createSourceManager()
+      sourceRuntime: createSourceRuntime()
     })
 
     expect(requestSourceActivation).toHaveBeenCalledWith('linear')
@@ -78,7 +80,7 @@ describe('handleClaudeSourceActivationToolResult', () => {
       originalMessage: 'create linear issue',
       requestSourceActivation,
       setPendingSourceActivationRestart,
-      sourceManager: createSourceManager()
+      sourceRuntime: createSourceRuntime()
     })
 
     expect(requestSourceActivation).toHaveBeenCalledWith('linear')
@@ -96,7 +98,7 @@ describe('handleClaudeSourceActivationToolResult', () => {
       originalMessage: 'create linear issue',
       requestSourceActivation,
       setPendingSourceActivationRestart,
-      sourceManager: createSourceManager()
+      sourceRuntime: createSourceRuntime()
     })
 
     expect(requestSourceActivation).toHaveBeenCalledWith('linear')
@@ -111,7 +113,7 @@ describe('handleClaudeSourceActivationToolResult', () => {
       originalMessage: 'create linear issue',
       requestSourceActivation: null,
       setPendingSourceActivationRestart,
-      sourceManager: createSourceManager()
+      sourceRuntime: createSourceRuntime()
     })
 
     expect(setPendingSourceActivationRestart).not.toHaveBeenCalled()
@@ -121,12 +123,12 @@ describe('handleClaudeSourceActivationToolResult', () => {
     {
       name: 'active source',
       event: createToolResultEvent(),
-      sourceManager: createSourceManager('active')
+      sourceRuntime: createSourceRuntime('active')
     },
     {
       name: 'unknown source',
       event: createToolResultEvent(),
-      sourceManager: new SourceManager({ sources: [] })
+      sourceRuntime: new AgentSourceRuntime({ sources: [] })
     },
     {
       name: 'non-source tool-not-found',
@@ -134,7 +136,7 @@ describe('handleClaudeSourceActivationToolResult', () => {
         toolName: 'Read',
         result: "Tool 'Read' not found"
       }),
-      sourceManager: createSourceManager()
+      sourceRuntime: createSourceRuntime()
     },
     {
       name: 'non-error tool_result',
@@ -142,9 +144,9 @@ describe('handleClaudeSourceActivationToolResult', () => {
         isError: false,
         result: 'ok'
       }),
-      sourceManager: createSourceManager()
+      sourceRuntime: createSourceRuntime()
     }
-  ])('does not request activation for $name', async ({ event, sourceManager }) => {
+  ])('does not request activation for $name', async ({ event, sourceRuntime }) => {
     const requestSourceActivation = vi.fn(async () => true)
     const setPendingSourceActivationRestart = vi.fn()
 
@@ -153,7 +155,7 @@ describe('handleClaudeSourceActivationToolResult', () => {
       originalMessage: 'create linear issue',
       requestSourceActivation,
       setPendingSourceActivationRestart,
-      sourceManager
+      sourceRuntime
     })
 
     expect(requestSourceActivation).not.toHaveBeenCalled()

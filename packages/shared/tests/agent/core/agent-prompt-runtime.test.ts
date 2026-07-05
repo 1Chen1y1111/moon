@@ -5,15 +5,15 @@
 
 import { describe, expect, it } from 'vitest'
 
+import { AgentSourceRuntime } from '../../../src/agent/core/agent-source-runtime'
 import { AgentPromptRuntime } from '../../../src/agent/core/agent-prompt-runtime'
 import { createAgentSessionRuntimeState } from '../../../src/agent/core/session-runtime-state'
-import { SourceManager } from '../../../src/agent/core/source-manager'
 
 describe('AgentPromptRuntime', () => {
   const workspace = { path: '/workspace/moon' }
 
   it('places session context before source context and serialized messages', () => {
-    const sourceManager = new SourceManager({
+    const sourceRuntime = new AgentSourceRuntime({
       sources: [
         {
           slug: 'github',
@@ -26,7 +26,7 @@ describe('AgentPromptRuntime', () => {
     const runtime = new AgentPromptRuntime({
       agentSessionState: createAgentSessionRuntimeState(),
       permissionMode: 'safe',
-      sourceManager
+      sourceRuntime
     })
 
     expect(
@@ -50,7 +50,7 @@ inspect sources`)
   it('keeps workspace message filtering behavior', () => {
     const runtime = new AgentPromptRuntime({
       agentSessionState: createAgentSessionRuntimeState(),
-      sourceManager: new SourceManager(),
+      sourceRuntime: new AgentSourceRuntime(),
       workspace
     })
 
@@ -78,7 +78,7 @@ previous answer`)
   it('uses the fallback message when workspace filtering removes history', () => {
     const runtime = new AgentPromptRuntime({
       agentSessionState: createAgentSessionRuntimeState(),
-      sourceManager: new SourceManager(),
+      sourceRuntime: new AgentSourceRuntime(),
       workspace
     })
 
@@ -100,7 +100,7 @@ inspect workspace`)
     const runtime = new AgentPromptRuntime({
       agentSessionState,
       permissionMode: 'allow-all',
-      sourceManager: new SourceManager(),
+      sourceRuntime: new AgentSourceRuntime(),
       workspace
     })
 
@@ -136,7 +136,7 @@ inspect session`)
   })
 
   it('reads the latest source state when building prompts', () => {
-    const sourceManager = new SourceManager({
+    const sourceRuntime = new AgentSourceRuntime({
       sources: [
         {
           slug: 'github',
@@ -148,7 +148,7 @@ inspect session`)
     })
     const runtime = new AgentPromptRuntime({
       agentSessionState: createAgentSessionRuntimeState(),
-      sourceManager
+      sourceRuntime
     })
 
     expect(
@@ -159,7 +159,7 @@ inspect session`)
     ).toContain(`Inactive:
 - github (GitHub): GitHub issues`)
 
-    sourceManager.markSourceActive('github')
+    sourceRuntime.markSourceActive('github')
 
     expect(
       runtime.build({
