@@ -10,23 +10,15 @@ import { join } from 'node:path'
 import {
   assertLlmConnectionReadyForAgent,
   assertProviderReadyForAgent,
-  addActivatedSourceSlug,
   createBackend,
-  createConnectionAgentBackendConfig,
-  createAgentSessionRuntimeState,
   createAgentBackendMessage,
   createProviderLlmConnection,
   resolveAgentBackendProvider,
   resolveConnectionAgentBackendProvider,
-  hasActivatedSourceSlug,
   type AgentBackend,
-  type AgentBackendConfig,
   type AgentBackendMessage,
   type AgentEvent,
-  type AgentPermissionMode,
-  type AgentPermissionDecision,
-  type AgentSessionRuntimeState,
-  type AgentSourceRecord
+  type AgentPermissionDecision
 } from '@moon/shared/agent'
 import type { NormalizedLlmConnection } from '@moon/shared/config'
 import type {
@@ -79,13 +71,19 @@ import {
 import type { AppSettings, ProviderSettings } from '@moon/shared/domain/settings'
 import type { ProviderId } from '@moon/shared/domain/provider'
 import type { SessionEventRouteHint } from './handlers'
-import { SessionScopedToolCallbackRegistry } from './session-scoped-tool-callback-registry'
+import {
+  SessionAgentRuntime,
+  type AgentBackendFactory,
+  type SessionPermissionModeResolver,
+  type SessionSourceActivator,
+  type SessionSourceProvider,
+  type SessionSourceProviderScope
+} from './session-agent-runtime'
 
 const newChatTitle = '新聊天'
 const defaultTopicTitle = '默认话题'
 const defaultThreadTitle = '主线'
 const titleMaxLength = 48
-const defaultAgentPermissionMode = 'ask' satisfies AgentPermissionMode
 
 export type AgentOperationsRepositoryPort = {
   findById: (id: string) => Promise<AgentOperationRecord | null>
@@ -133,39 +131,6 @@ export type TopicsRepositoryPort = {
   findById: (id: string) => Promise<TopicRecord | null>
   listBySession: (sessionId: string) => Promise<TopicRecord[]>
   save: (topic: TopicRecord) => Promise<TopicRecord>
-}
-
-/**
- * Source provider 解析 sources 时可见的会话作用域，保持在 server-core 纯 runtime 边界内。
- */
-export type SessionSourceProviderScope = {
-  project: ProjectRecord | null
-  session: SessionRecord
-  topic: TopicRecord
-  thread: ThreadRecord
-}
-
-/**
- * 为当前会话 turn 提供 agent sources，具体来源由 Electron main 或未来 runtime 注入。
- */
-export type SessionSourceProvider = {
-  resolveSources: (scope: SessionSourceProviderScope) => Promise<AgentSourceRecord[]>
-}
-
-/**
- * 为当前会话 turn 解析 agent 权限模式，具体来源可由 Electron main 或未来 runtime 注入。
- */
-export type SessionPermissionModeResolver = {
-  resolvePermissionMode: (
-    scope: SessionSourceProviderScope
-  ) => AgentPermissionMode | Promise<AgentPermissionMode>
-}
-
-/**
- * 激活当前会话 turn 需要的 source；当前只表达 runtime 边界，不实现具体连接协议。
- */
-export type SessionSourceActivator = {
-  activateSource: (scope: SessionSourceProviderScope, sourceSlug: string) => Promise<boolean>
 }
 
 export type SessionManagerDependencies = {
@@ -224,41 +189,11 @@ type ResolvedAgentTarget = {
 
 type ConversationScope = SessionSourceProviderScope
 
-export type AgentBackendFactory = (config: AgentBackendConfig) => AgentBackend
-
 /**
  * 创建当前时间戳，统一聊天落库记录的时间格式。
  */
 function createTimestamp(): string {
   return new Date().toISOString()
-}
-
-/**
- * 将当前 thread session 记住的 source activation 应用到 provider 返回的 source 列表。
- * 这里不创建未知 source，只把已知 slug 标记为 active，避免提前引入完整 MCP source registry。
- */
-function applySessionActivatedSources(
-  sources: AgentSourceRecord[],
-  agentSessionState: AgentSessionRuntimeState
-): AgentSourceRecord[] {
-  if (agentSessionState.activatedSourceSlugs.length === 0) {
-    return sources
-  }
-
-  return sources.map((source) => {
-    if (!hasActivatedSourceSlug(agentSessionState.activatedSourceSlugs, source.slug)) {
-      return source
-    }
-
-    const activatedSource: AgentSourceRecord = {
-      ...source,
-      status: 'active'
-    }
-
-    delete activatedSource.error
-
-    return activatedSource
-  })
 }
 
 /**
@@ -571,20 +506,15 @@ async function toAgentBackendMessage(
 export class SessionManager {
   private readonly activeAgentBackends = new Map<string, AgentBackend>()
   private readonly activeOperations = new Map<string, AbortController>()
+  private readonly agentRuntime: SessionAgentRuntime
   private readonly agentOperationsRepository: AgentOperationsRepositoryPort
   private readonly attachmentsDirectory: string
-  private readonly createAgentBackend: AgentBackendFactory
   private readonly messagesRepository: MessagesRepositoryPort
   private readonly operationEventListeners = new Map<string, OperationEventListenerRegistration>()
   private readonly pendingToolPermissions = new Map<string, PendingToolPermission>()
-  private readonly permissionModeResolver?: SessionPermissionModeResolver
   private readonly projectsRepository?: ProjectsRepositoryPort
-  private readonly agentSessionRuntimeStates = new Map<string, AgentSessionRuntimeState>()
   private readonly sessionsRepository: SessionsRepositoryPort
-  private readonly sessionScopedToolCallbacks = new SessionScopedToolCallbackRegistry()
   private readonly settingsRepository: SettingsRepositoryPort
-  private readonly sourceActivator?: SessionSourceActivator
-  private readonly sourceProvider?: SessionSourceProvider
   private readonly threadsRepository: ThreadsRepositoryPort
   private readonly toolInvocationsRepository: ToolInvocationsRepositoryPort
   private readonly topicsRepository: TopicsRepositoryPort
@@ -608,50 +538,24 @@ export class SessionManager {
     toolInvocationsRepository,
     topicsRepository
   }: SessionManagerDependencies) {
-    this.agentOperationsRepository = agentOperationsRepository
-    this.createAgentBackend =
+    const resolvedCreateAgentBackend: AgentBackendFactory =
       createAgentBackend ?? ((config) => agentBackend ?? createBackend(config))
+
+    this.agentOperationsRepository = agentOperationsRepository
+    this.agentRuntime = new SessionAgentRuntime({
+      createAgentBackend: resolvedCreateAgentBackend,
+      permissionModeResolver,
+      sourceActivator,
+      sourceProvider
+    })
     this.attachmentsDirectory = attachmentsDirectory ?? join(process.cwd(), '.moon-attachments')
     this.messagesRepository = messagesRepository
-    this.permissionModeResolver = permissionModeResolver
     this.projectsRepository = projectsRepository
     this.sessionsRepository = sessionsRepository
     this.settingsRepository = settingsRepository
-    this.sourceActivator = sourceActivator
-    this.sourceProvider = sourceProvider
     this.threadsRepository = threadsRepository
     this.toolInvocationsRepository = toolInvocationsRepository
     this.topicsRepository = topicsRepository
-  }
-
-  /**
-   * 返回指定 thread 的内存态 agent session runtime state；同一 thread 后续 operation 复用。
-   */
-  private resolveAgentSessionRuntimeState(threadId: string): AgentSessionRuntimeState {
-    const existing = this.agentSessionRuntimeStates.get(threadId)
-
-    if (existing !== undefined) {
-      return existing
-    }
-
-    const state = createAgentSessionRuntimeState()
-
-    this.agentSessionRuntimeStates.set(threadId, state)
-
-    return state
-  }
-
-  /**
-   * 解析当前会话 turn 使用的 agent 权限模式；未注入 resolver 时保持默认 ask 语义。
-   */
-  private async resolvePermissionModeForScope(
-    scope: ConversationScope
-  ): Promise<AgentPermissionMode> {
-    if (this.permissionModeResolver === undefined) {
-      return defaultAgentPermissionMode
-    }
-
-    return this.permissionModeResolver.resolvePermissionMode(scope)
   }
 
   /**
@@ -1189,25 +1093,14 @@ export class SessionManager {
             path: scope.project.path
           }
 
-    const agentSessionState = this.resolveAgentSessionRuntimeState(scope.thread.id)
-    const permissionMode = await this.resolvePermissionModeForScope(scope)
-    // 取出这次会话可用的上下文来源 比如项目/技能/上下文材料
-    const sources = await this.resolveSourcesForScope(scope, agentSessionState)
+    const { agentBackend } = await this.agentRuntime.createBackend({
+      connection,
+      messages: backendMessages,
+      originalMessage: currentUserMessage,
+      scope: eventScope,
+      workspace
+    })
 
-    // 创建 agentBackend
-    const agentBackend = this.createAgentBackend(
-      // 把 connection、历史消息、workspace、权限模式、sources 整理成 agent 配置
-      createConnectionAgentBackendConfig({
-        agentSessionState,
-        connection,
-        messages: backendMessages,
-        permissionMode,
-        sources,
-        workspace
-      })
-    )
-
-    this.configureSessionScopedToolCallbacks(agentBackend, eventScope, currentUserMessage)
     this.activeAgentBackends.set(operation.id, agentBackend)
 
     if (onEvent !== undefined) {
@@ -1335,52 +1228,7 @@ export class SessionManager {
     } finally {
       this.activeAgentBackends.delete(operation.id)
       this.operationEventListeners.delete(operation.id)
-      this.sessionScopedToolCallbacks.unregister(eventScope.session.id)
-    }
-  }
-
-  /**
-   * 注册当前会话的 session-scoped tool 回调，并给 backend 注入 source activation 请求桥。
-   */
-  private configureSessionScopedToolCallbacks(
-    agentBackend: AgentBackend,
-    scope: ConversationScope,
-    originalMessage: string
-  ): void {
-    const sessionId = scope.session.id
-    const agentSessionState = this.resolveAgentSessionRuntimeState(scope.thread.id)
-
-    this.sessionScopedToolCallbacks.register(sessionId, {
-      activateSourceInSessionFn: async (sourceSlug: string): Promise<boolean> => {
-        if (
-          this.sourceActivator === undefined ||
-          agentBackend.setPendingSourceActivationRestart === undefined
-        ) {
-          return false
-        }
-
-        const activated = await this.sourceActivator.activateSource(scope, sourceSlug)
-
-        if (!activated) {
-          return false
-        }
-
-        addActivatedSourceSlug(agentSessionState, sourceSlug)
-
-        agentBackend.setPendingSourceActivationRestart({
-          sourceSlug,
-          originalMessage
-        })
-
-        return true
-      }
-    })
-
-    agentBackend.onSourceActivationRequest = async (sourceSlug: string): Promise<boolean> => {
-      const activateSourceInSessionFn =
-        this.sessionScopedToolCallbacks.get(sessionId)?.activateSourceInSessionFn
-
-      return activateSourceInSessionFn?.(sourceSlug) ?? false
+      this.agentRuntime.releaseSessionCallbacks(eventScope.session.id)
     }
   }
 
@@ -1487,10 +1335,7 @@ export class SessionManager {
     }
 
     if (event.type === 'source_activated') {
-      addActivatedSourceSlug(
-        this.resolveAgentSessionRuntimeState(scope.thread.id),
-        event.sourceSlug
-      )
+      this.agentRuntime.recordActivatedSource(scope.thread.id, event.sourceSlug)
 
       onEvent?.(
         {
@@ -1738,23 +1583,6 @@ export class SessionManager {
     }
 
     return { message, operation }
-  }
-
-  /**
-   * 从可选 source provider 读取当前会话可见的 sources；空列表不写入 backend config。
-   */
-  private async resolveSourcesForScope(
-    scope: ConversationScope,
-    agentSessionState: AgentSessionRuntimeState
-  ): Promise<AgentSourceRecord[] | undefined> {
-    if (this.sourceProvider === undefined) {
-      return undefined
-    }
-
-    const sources = await this.sourceProvider.resolveSources(scope)
-    const resolvedSources = applySessionActivatedSources(sources, agentSessionState)
-
-    return resolvedSources.length === 0 ? undefined : resolvedSources
   }
 
   /**
