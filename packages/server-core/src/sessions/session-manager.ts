@@ -17,7 +17,6 @@ import {
   resolveConnectionAgentBackendProvider,
   type AgentBackend,
   type AgentBackendMessage,
-  type AgentEvent,
   type AgentPermissionDecision
 } from '@moon/shared/agent'
 import type { NormalizedLlmConnection } from '@moon/shared/config'
@@ -71,6 +70,10 @@ import {
 import type { AppSettings, ProviderSettings } from '@moon/shared/domain/settings'
 import type { ProviderId } from '@moon/shared/domain/provider'
 import type { SessionEventRouteHint } from './handlers'
+import {
+  SessionAgentEventApplier,
+  type SessionSourceActivationSignal
+} from './session-agent-event-applier'
 import {
   SessionAgentRuntime,
   type AgentBackendFactory,
@@ -155,24 +158,8 @@ export type SessionOperationEventListener = (
   routeHint?: SessionEventRouteHint
 ) => void
 
-type AgentInfoPayload = Extract<AgentEvent, { type: 'info' }>
-type AgentPermissionPayload = Extract<AgentEvent, { type: 'permission_request' }>
-type AgentStatusPayload = Extract<AgentEvent, { type: 'status' }>
-type AgentEventUsagePayload = Extract<AgentEvent, { type: 'usage_update' }>['usage']
-
-type AgentEventApplicationResult = {
-  message: MessageRecord
-  operation: AgentOperationRecord
-  sourceActivation?: SourceActivationSignal
-}
-
 type PendingToolPermission = {
   operationId: string
-}
-
-type SourceActivationSignal = {
-  originalMessage?: string
-  sourceSlug: string
 }
 
 type OperationEventListenerRegistration = {
@@ -266,63 +253,6 @@ function getErrorMessage(error: unknown): string {
 }
 
 /**
- * 把工具结果归一化成 JSON object，兼容工具返回基础类型的情况。
- */
-function normalizeToolResult(value: unknown): Record<string, unknown> {
-  if (typeof value === 'object' && value !== null && !Array.isArray(value)) {
-    return value as Record<string, unknown>
-  }
-
-  return { value }
-}
-
-/**
- * 把权限请求转换成工具参数，便于 UI 在不理解 SDK 私有结构时仍能展示风险信息。
- */
-function createPermissionRequestArguments(
-  request: AgentPermissionPayload['request']
-): ChatJsonObject {
-  return {
-    description: request.description,
-    ...(request.command === undefined ? {} : { command: request.command }),
-    ...(request.path === undefined ? {} : { path: request.path }),
-    ...(request.type === undefined ? {} : { type: request.type }),
-    ...(request.reason === undefined ? {} : { reason: request.reason }),
-    ...(request.impact === undefined ? {} : { impact: request.impact })
-  }
-}
-
-/**
- * 生成保留 agent turn id 的 message metadata patch；没有 turn id 时保持旧记录形状。
- */
-function createAgentTurnMessageMetadataPatch(
-  metadata: ChatJsonObject | undefined,
-  turnId?: string
-): Pick<MessageRecord, 'metadata'> | Record<string, never> {
-  return turnId === undefined
-    ? {}
-    : {
-        metadata: {
-          ...(metadata ?? {}),
-          agentTurnId: turnId
-        }
-      }
-}
-
-/**
- * 生成保留 agent turn id 的 tool state patch；没有 turn id 时不写空 state。
- */
-function createAgentTurnToolStatePatch(
-  state: ChatJsonObject | null | undefined,
-  turnId?: string
-): Pick<ToolInvocationRecord, 'state'> | Record<string, never> {
-  const nextState =
-    turnId === undefined ? (state ?? undefined) : { ...(state ?? {}), agentTurnId: turnId }
-
-  return nextState === undefined ? {} : { state: nextState }
-}
-
-/**
  * 从工具状态中读取 agent turn id，用于权限恢复这类非 AgentEvent 直接触发的广播。
  */
 function readAgentTurnIdFromToolState(
@@ -338,120 +268,6 @@ function readAgentTurnIdFromToolState(
  */
 function resolveRejectedToolReason(reason?: string): string {
   return reason?.trim() || 'Rejected by user.'
-}
-
-/**
- * 把 agent usage 事件转换成可写入 JSON 字段的普通对象。
- */
-function toAgentUsageJson(usage: AgentEventUsagePayload): ChatJsonObject {
-  return { ...usage }
-}
-
-/**
- * 解析 usage 的总 token；provider 没有直接给出时按已知 token 字段求和。
- */
-function resolveUsageTotalTokens(usage: AgentEventUsagePayload): number | undefined {
-  if (usage.totalTokens !== undefined) {
-    return usage.totalTokens
-  }
-
-  if (usage.inputTokens === undefined && usage.outputTokens === undefined) {
-    return undefined
-  }
-
-  return (
-    (usage.inputTokens ?? 0) +
-    (usage.outputTokens ?? 0) +
-    (usage.cacheReadTokens ?? 0) +
-    (usage.cacheCreationTokens ?? 0)
-  )
-}
-
-/**
- * 把最新 usage 快照合并进 operation，保留未被本次事件覆盖的历史字段。
- */
-function applyAgentUsageToOperation(
-  operation: AgentOperationRecord,
-  usage: AgentEventUsagePayload,
-  timestamp: string
-): AgentOperationRecord {
-  const totalTokens = resolveUsageTotalTokens(usage)
-
-  return {
-    ...operation,
-    ...(usage.inputTokens === undefined ? {} : { totalInputTokens: usage.inputTokens }),
-    ...(usage.outputTokens === undefined ? {} : { totalOutputTokens: usage.outputTokens }),
-    ...(totalTokens === undefined ? {} : { totalTokens }),
-    ...(usage.costUsd === undefined ? {} : { totalCost: String(usage.costUsd) }),
-    usage: {
-      ...(operation.usage ?? {}),
-      ...toAgentUsageJson(usage),
-      ...(totalTokens === undefined ? {} : { totalTokens })
-    },
-    updatedAt: timestamp
-  }
-}
-
-/**
- * 把 provider/SDK 自己的 session id 写入 operation metadata，避免混同 Moon 会话 id。
- */
-function applyProviderSessionIdToOperation(
-  operation: AgentOperationRecord,
-  providerSessionId: string,
-  timestamp: string
-): AgentOperationRecord {
-  return {
-    ...operation,
-    metadata: {
-      ...(operation.metadata ?? {}),
-      providerSessionId
-    },
-    updatedAt: timestamp
-  }
-}
-
-/**
- * 把 agent 状态事件记录到 operation metadata，只保存最后一次状态快照。
- */
-function applyAgentStatusToOperation(
-  operation: AgentOperationRecord,
-  status: AgentStatusPayload,
-  timestamp: string
-): AgentOperationRecord {
-  return {
-    ...operation,
-    metadata: {
-      ...(operation.metadata ?? {}),
-      lastAgentStatus: {
-        message: status.message,
-        ...(status.statusType === undefined ? {} : { statusType: status.statusType }),
-        updatedAt: timestamp
-      }
-    },
-    updatedAt: timestamp
-  }
-}
-
-/**
- * 把 agent 提示事件记录到 operation metadata，只保存最后一次提示快照。
- */
-function applyAgentInfoToOperation(
-  operation: AgentOperationRecord,
-  info: AgentInfoPayload,
-  timestamp: string
-): AgentOperationRecord {
-  return {
-    ...operation,
-    metadata: {
-      ...(operation.metadata ?? {}),
-      lastAgentInfo: {
-        message: info.message,
-        level: info.level ?? 'info',
-        updatedAt: timestamp
-      }
-    },
-    updatedAt: timestamp
-  }
 }
 
 export {
@@ -506,6 +322,7 @@ async function toAgentBackendMessage(
 export class SessionManager {
   private readonly activeAgentBackends = new Map<string, AgentBackend>()
   private readonly activeOperations = new Map<string, AbortController>()
+  private readonly agentEventApplier: SessionAgentEventApplier
   private readonly agentRuntime: SessionAgentRuntime
   private readonly agentOperationsRepository: AgentOperationsRepositoryPort
   private readonly attachmentsDirectory: string
@@ -547,6 +364,17 @@ export class SessionManager {
       permissionModeResolver,
       sourceActivator,
       sourceProvider
+    })
+    this.agentEventApplier = new SessionAgentEventApplier({
+      agentOperationsRepository,
+      clearPendingToolPermission: (toolInvocationId) =>
+        this.pendingToolPermissions.delete(toolInvocationId),
+      messagesRepository,
+      recordActivatedSource: (threadId, sourceSlug) =>
+        this.agentRuntime.recordActivatedSource(threadId, sourceSlug),
+      toolInvocationsRepository,
+      trackPendingToolPermission: (toolInvocation, operationId) =>
+        this.trackPendingToolPermission(toolInvocation, operationId)
     })
     this.attachmentsDirectory = attachmentsDirectory ?? join(process.cwd(), '.moon-attachments')
     this.messagesRepository = messagesRepository
@@ -1066,7 +894,7 @@ export class SessionManager {
     const eventRouteHint = createSessionEventRouteHint(eventScope.session)
     let assistantMessage = initialAssistantMessage
     let currentOperation = operation
-    let sourceActivationSignal: SourceActivationSignal | null = null
+    let sourceActivationSignal: SessionSourceActivationSignal | null = null
 
     // 拿出当前 thread 里的历史消息
     const previousMessages = await this.messagesRepository.listByThread(scope.thread.id)
@@ -1119,11 +947,12 @@ export class SessionManager {
 
       while (!agentEventResult.done) {
         const agentEvent = agentEventResult.value
-        const eventResult = await this.applyAgentEvent({
+        const eventResult = await this.agentEventApplier.apply({
           event: agentEvent,
           message: assistantMessage,
           onEvent,
           operation: currentOperation,
+          routeHint: eventRouteHint,
           scope: eventScope
         })
 
@@ -1244,7 +1073,7 @@ export class SessionManager {
     onEvent?: SessionOperationEventListener
     operation: AgentOperationRecord
     scope: ConversationScope
-    signal: SourceActivationSignal | null
+    signal: SessionSourceActivationSignal | null
   }): Promise<void> {
     const originalMessage = signal?.originalMessage
 
@@ -1270,319 +1099,6 @@ export class SessionManager {
       },
       onEvent
     )
-  }
-
-  /**
-   * 把统一 agent 事件映射到消息、工具调用和 operation 的持久化状态。
-   */
-  private async applyAgentEvent({
-    event,
-    message,
-    onEvent,
-    operation,
-    scope
-  }: {
-    event: AgentEvent
-    message: MessageRecord
-    onEvent?: SessionOperationEventListener
-    operation: AgentOperationRecord
-    scope: ConversationScope
-  }): Promise<AgentEventApplicationResult> {
-    const eventRouteHint = createSessionEventRouteHint(scope.session)
-
-    if (event.type === 'session_id_update') {
-      const updatedOperation = await this.agentOperationsRepository.save(
-        applyProviderSessionIdToOperation(operation, event.sessionId, createTimestamp())
-      )
-
-      return { message, operation: updatedOperation }
-    }
-
-    if (event.type === 'usage_update') {
-      const updatedOperation = await this.agentOperationsRepository.save(
-        applyAgentUsageToOperation(operation, event.usage, createTimestamp())
-      )
-
-      return { message, operation: updatedOperation }
-    }
-
-    if (event.type === 'complete') {
-      if (event.usage === undefined) {
-        return { message, operation }
-      }
-
-      const updatedOperation = await this.agentOperationsRepository.save(
-        applyAgentUsageToOperation(operation, event.usage, createTimestamp())
-      )
-
-      return { message, operation: updatedOperation }
-    }
-
-    if (event.type === 'status') {
-      const updatedOperation = await this.agentOperationsRepository.save(
-        applyAgentStatusToOperation(operation, event, createTimestamp())
-      )
-
-      return { message, operation: updatedOperation }
-    }
-
-    if (event.type === 'info') {
-      const updatedOperation = await this.agentOperationsRepository.save(
-        applyAgentInfoToOperation(operation, event, createTimestamp())
-      )
-
-      return { message, operation: updatedOperation }
-    }
-
-    if (event.type === 'source_activated') {
-      this.agentRuntime.recordActivatedSource(scope.thread.id, event.sourceSlug)
-
-      onEvent?.(
-        {
-          type: 'source-activated',
-          operationId: operation.id,
-          sessionId: scope.session.id,
-          topicId: scope.topic.id,
-          threadId: scope.thread.id,
-          messageId: message.id,
-          sourceSlug: event.sourceSlug,
-          ...(event.originalMessage === undefined
-            ? {}
-            : { originalMessage: event.originalMessage }),
-          ...(event.turnId === undefined ? {} : { turnId: event.turnId })
-        },
-        eventRouteHint
-      )
-
-      return {
-        message,
-        operation,
-        sourceActivation: {
-          sourceSlug: event.sourceSlug,
-          ...(event.originalMessage === undefined ? {} : { originalMessage: event.originalMessage })
-        }
-      }
-    }
-
-    if (event.type === 'text_delta') {
-      const updatedMessage = await this.messagesRepository.save({
-        ...message,
-        content: `${message.content}${event.text}`,
-        ...createAgentTurnMessageMetadataPatch(message.metadata, event.turnId),
-        updatedAt: createTimestamp()
-      })
-
-      onEvent?.(
-        {
-          type: 'message-delta',
-          operationId: operation.id,
-          sessionId: scope.session.id,
-          topicId: scope.topic.id,
-          threadId: scope.thread.id,
-          messageId: message.id,
-          delta: event.text,
-          ...(event.turnId === undefined ? {} : { turnId: event.turnId })
-        },
-        eventRouteHint
-      )
-
-      return { message: updatedMessage, operation }
-    }
-
-    if (event.type === 'text_complete') {
-      if (event.text.length === 0 || message.content.length > 0) {
-        return { message, operation }
-      }
-
-      const updatedMessage = await this.messagesRepository.save({
-        ...message,
-        content: event.text,
-        ...createAgentTurnMessageMetadataPatch(message.metadata, event.turnId),
-        updatedAt: createTimestamp()
-      })
-
-      onEvent?.(
-        {
-          type: 'message-delta',
-          operationId: operation.id,
-          sessionId: scope.session.id,
-          topicId: scope.topic.id,
-          threadId: scope.thread.id,
-          messageId: message.id,
-          delta: event.text,
-          ...(event.turnId === undefined ? {} : { turnId: event.turnId })
-        },
-        eventRouteHint
-      )
-
-      return { message: updatedMessage, operation }
-    }
-
-    if (event.type === 'reasoning_delta') {
-      const updatedMessage = await this.messagesRepository.save({
-        ...message,
-        reasoning: `${message.reasoning ?? ''}${event.text}`,
-        ...createAgentTurnMessageMetadataPatch(message.metadata, event.turnId),
-        updatedAt: createTimestamp()
-      })
-
-      onEvent?.(
-        {
-          type: 'reasoning-delta',
-          operationId: operation.id,
-          sessionId: scope.session.id,
-          topicId: scope.topic.id,
-          threadId: scope.thread.id,
-          messageId: message.id,
-          delta: event.text,
-          ...(event.turnId === undefined ? {} : { turnId: event.turnId })
-        },
-        eventRouteHint
-      )
-
-      return { message: updatedMessage, operation }
-    }
-
-    if (event.type === 'permission_request') {
-      const timestamp = createTimestamp()
-      const toolInvocation = await this.toolInvocationsRepository.save({
-        id: event.request.requestId,
-        toolCallId: event.request.requestId,
-        operationId: operation.id,
-        messageId: message.id,
-        name: event.request.toolName,
-        arguments: createPermissionRequestArguments(event.request),
-        intervention: {
-          type: 'permission_request',
-          description: event.request.description,
-          ...(event.request.command === undefined ? {} : { command: event.request.command }),
-          ...(event.request.path === undefined ? {} : { path: event.request.path }),
-          ...(event.request.reason === undefined ? {} : { reason: event.request.reason }),
-          ...(event.request.impact === undefined ? {} : { impact: event.request.impact })
-        },
-        ...createAgentTurnToolStatePatch(undefined, event.turnId),
-        status: 'waiting_for_human',
-        createdAt: timestamp,
-        updatedAt: timestamp
-      })
-      const waitingOperation = await this.agentOperationsRepository.save({
-        ...operation,
-        status: 'waiting_for_human',
-        completionReason: 'waiting_for_human',
-        humanInterventions: (operation.humanInterventions ?? 0) + 1,
-        updatedAt: timestamp
-      })
-
-      this.trackPendingToolPermission(toolInvocation, waitingOperation.id)
-
-      onEvent?.(
-        {
-          type: 'tool-waiting-approval',
-          operationId: operation.id,
-          sessionId: scope.session.id,
-          topicId: scope.topic.id,
-          threadId: scope.thread.id,
-          messageId: message.id,
-          toolInvocation,
-          ...(event.turnId === undefined ? {} : { turnId: event.turnId })
-        },
-        eventRouteHint
-      )
-
-      return { message, operation: waitingOperation }
-    }
-
-    if (event.type === 'tool_start') {
-      const status = event.status === 'waiting_for_human' ? 'waiting_for_human' : 'running'
-      const timestamp = createTimestamp()
-      let currentOperation = operation
-      const toolInvocation = await this.toolInvocationsRepository.save({
-        id: event.toolUseId,
-        toolCallId: event.toolUseId,
-        operationId: operation.id,
-        messageId: message.id,
-        name: event.toolName,
-        arguments: event.input ?? {},
-        ...createAgentTurnToolStatePatch(undefined, event.turnId),
-        status,
-        createdAt: timestamp,
-        updatedAt: timestamp
-      })
-
-      if (status === 'waiting_for_human') {
-        currentOperation = await this.agentOperationsRepository.save({
-          ...operation,
-          status: 'waiting_for_human',
-          completionReason: 'waiting_for_human',
-          humanInterventions: (operation.humanInterventions ?? 0) + 1,
-          updatedAt: timestamp
-        })
-        this.trackPendingToolPermission(toolInvocation, currentOperation.id)
-      }
-
-      onEvent?.(
-        {
-          type: status === 'waiting_for_human' ? 'tool-waiting-approval' : 'tool-start',
-          operationId: operation.id,
-          sessionId: scope.session.id,
-          topicId: scope.topic.id,
-          threadId: scope.thread.id,
-          messageId: message.id,
-          toolInvocation,
-          ...(event.turnId === undefined ? {} : { turnId: event.turnId })
-        },
-        eventRouteHint
-      )
-
-      return { message, operation: currentOperation }
-    }
-
-    if (event.type === 'tool_result') {
-      const currentToolInvocation = await this.toolInvocationsRepository.findById(event.toolUseId)
-      const timestamp = createTimestamp()
-      const toolInvocation = await this.toolInvocationsRepository.save({
-        id: event.toolUseId,
-        toolCallId: currentToolInvocation?.toolCallId ?? event.toolUseId,
-        operationId: operation.id,
-        messageId: message.id,
-        name: event.toolName ?? currentToolInvocation?.name ?? 'unknown',
-        arguments: event.input ?? currentToolInvocation?.arguments ?? {},
-        result: event.isError ? null : normalizeToolResult(event.result ?? null),
-        error: event.isError ? getErrorMessage(event.result ?? 'Tool call failed.') : null,
-        ...createAgentTurnToolStatePatch(currentToolInvocation?.state, event.turnId),
-        status: event.isError ? 'error' : 'done',
-        createdAt: currentToolInvocation?.createdAt ?? timestamp,
-        updatedAt: timestamp
-      })
-
-      this.pendingToolPermissions.delete(toolInvocation.id)
-
-      onEvent?.(
-        {
-          type: 'tool-finish',
-          operationId: operation.id,
-          sessionId: scope.session.id,
-          topicId: scope.topic.id,
-          threadId: scope.thread.id,
-          messageId: message.id,
-          toolInvocation,
-          ...(event.turnId === undefined ? {} : { turnId: event.turnId })
-        },
-        eventRouteHint
-      )
-
-      return { message, operation }
-    }
-
-    if (event.type === 'error') {
-      throw new Error(event.message)
-    }
-
-    if (event.type === 'typed_error') {
-      throw new Error(event.error.message)
-    }
-
-    return { message, operation }
   }
 
   /**
