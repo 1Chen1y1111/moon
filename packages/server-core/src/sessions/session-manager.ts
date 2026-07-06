@@ -66,12 +66,10 @@ import {
 import type { AppSettings, ProviderSettings } from '@moon/shared/domain/settings'
 import type { ProviderId } from '@moon/shared/domain/provider'
 import type { SessionEventRouteHint } from './handlers'
-import {
-  SessionAgentEventApplier,
-  type SessionSourceActivationSignal
-} from './session-agent-event-applier'
+import { SessionAgentEventApplier } from './session-agent-event-applier'
 import { SessionOperationLifecycleRuntime } from './session-operation-lifecycle-runtime'
 import { SessionOperationRuntime } from './session-operation-runtime'
+import { SessionSourceActivationRetryRuntime } from './session-source-activation-retry-runtime'
 import {
   SessionAgentRuntime,
   type AgentBackendFactory,
@@ -232,6 +230,7 @@ export class SessionManager {
   private readonly operationRuntime: SessionOperationRuntime
   private readonly projectsRepository?: ProjectsRepositoryPort
   private readonly sessionsRepository: SessionsRepositoryPort
+  private readonly sourceActivationRetryRuntime: SessionSourceActivationRetryRuntime
   private readonly settingsRepository: SettingsRepositoryPort
   private readonly threadsRepository: ThreadsRepositoryPort
   private readonly toolPermissionRuntime: SessionToolPermissionRuntime
@@ -295,6 +294,9 @@ export class SessionManager {
       messagesRepository,
       sessionsRepository,
       toolPermissionRuntime: this.toolPermissionRuntime
+    })
+    this.sourceActivationRetryRuntime = new SessionSourceActivationRetryRuntime({
+      sendMessage: (input, onEvent) => this.sendMessage(input, onEvent)
     })
     this.messagesRepository = messagesRepository
     this.projectsRepository = projectsRepository
@@ -513,11 +515,11 @@ export class SessionManager {
         scope
       })
 
-      await this.runSourceActivationAutoRetry({
+      await this.sourceActivationRetryRuntime.run({
         onEvent,
         operation: result.operation,
         scope,
-        signal: result.sourceActivation
+        sourceActivation: result.sourceActivation
       })
 
       return {
@@ -605,46 +607,6 @@ export class SessionManager {
       toolInvocationId: parsedInput.toolInvocationId,
       reason: parsedInput.reason
     })
-  }
-
-  /**
-   * source_activated 结束当前 turn 后，复用原始用户消息自动创建下一轮重发消息。
-   */
-  private async runSourceActivationAutoRetry({
-    onEvent,
-    operation,
-    scope,
-    signal
-  }: {
-    onEvent?: SessionOperationEventListener
-    operation: AgentOperationRecord
-    scope: ConversationScope
-    signal: SessionSourceActivationSignal | null
-  }): Promise<void> {
-    const originalMessage = signal?.originalMessage
-
-    if (signal === null || originalMessage === undefined || originalMessage.trim().length === 0) {
-      return
-    }
-
-    const llmConnectionId =
-      typeof operation.appContext?.llmConnectionId === 'string'
-        ? operation.appContext.llmConnectionId
-        : undefined
-    const provider = operation.provider ?? scope.session.provider
-
-    await this.sendMessage(
-      {
-        sessionId: scope.session.id,
-        topicId: scope.topic.id,
-        threadId: scope.thread.id,
-        projectId: scope.project?.id ?? null,
-        provider,
-        ...(llmConnectionId === undefined ? {} : { llmConnectionId }),
-        content: originalMessage
-      },
-      onEvent
-    )
   }
 
   /**
