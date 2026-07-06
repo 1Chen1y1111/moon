@@ -16,15 +16,13 @@ import {
   resolveAgentBackendProvider,
   resolveConnectionAgentBackendProvider,
   type AgentBackend,
-  type AgentBackendMessage,
-  type AgentPermissionDecision
+  type AgentBackendMessage
 } from '@moon/shared/agent'
 import type { NormalizedLlmConnection } from '@moon/shared/config'
 import type {
   AgentOperationRecord,
   ChatAttachmentKind,
   ChatAttachmentRecord,
-  ChatJsonObject,
   ChatOperationEvent,
   CreateMessageTurnResult,
   MessageRecord,
@@ -82,6 +80,7 @@ import {
   type SessionSourceProvider,
   type SessionSourceProviderScope
 } from './session-agent-runtime'
+import { SessionToolPermissionRuntime } from './session-tool-permission-runtime'
 
 const newChatTitle = '新聊天'
 const defaultTopicTitle = '默认话题'
@@ -157,15 +156,6 @@ export type SessionOperationEventListener = (
   event: ChatOperationEvent,
   routeHint?: SessionEventRouteHint
 ) => void
-
-type PendingToolPermission = {
-  operationId: string
-}
-
-type OperationEventListenerRegistration = {
-  listener: SessionOperationEventListener
-  routeHint?: SessionEventRouteHint
-}
 
 type ResolvedAgentTarget = {
   connection: NormalizedLlmConnection
@@ -252,24 +242,6 @@ function getErrorMessage(error: unknown): string {
   return String(error)
 }
 
-/**
- * 从工具状态中读取 agent turn id，用于权限恢复这类非 AgentEvent 直接触发的广播。
- */
-function readAgentTurnIdFromToolState(
-  state: ChatJsonObject | null | undefined
-): string | undefined {
-  const turnId = state?.agentTurnId
-
-  return typeof turnId === 'string' && turnId.length > 0 ? turnId : undefined
-}
-
-/**
- * 为拒绝类工具决策生成统一文案，避免 renderer 和 main 对默认文案各自发散。
- */
-function resolveRejectedToolReason(reason?: string): string {
-  return reason?.trim() || 'Rejected by user.'
-}
-
 export {
   isOpenAICompatibleProvider,
   isSupportedChatProvider,
@@ -320,20 +292,17 @@ async function toAgentBackendMessage(
  * 编排聊天会话、agent operation、工具调用和消息持久化之间的主流程。
  */
 export class SessionManager {
-  private readonly activeAgentBackends = new Map<string, AgentBackend>()
   private readonly activeOperations = new Map<string, AbortController>()
   private readonly agentEventApplier: SessionAgentEventApplier
   private readonly agentRuntime: SessionAgentRuntime
   private readonly agentOperationsRepository: AgentOperationsRepositoryPort
   private readonly attachmentsDirectory: string
   private readonly messagesRepository: MessagesRepositoryPort
-  private readonly operationEventListeners = new Map<string, OperationEventListenerRegistration>()
-  private readonly pendingToolPermissions = new Map<string, PendingToolPermission>()
   private readonly projectsRepository?: ProjectsRepositoryPort
   private readonly sessionsRepository: SessionsRepositoryPort
   private readonly settingsRepository: SettingsRepositoryPort
   private readonly threadsRepository: ThreadsRepositoryPort
-  private readonly toolInvocationsRepository: ToolInvocationsRepositoryPort
+  private readonly toolPermissionRuntime: SessionToolPermissionRuntime
   private readonly topicsRepository: TopicsRepositoryPort
 
   /**
@@ -365,16 +334,20 @@ export class SessionManager {
       sourceActivator,
       sourceProvider
     })
+    this.toolPermissionRuntime = new SessionToolPermissionRuntime({
+      agentOperationsRepository,
+      toolInvocationsRepository
+    })
     this.agentEventApplier = new SessionAgentEventApplier({
       agentOperationsRepository,
       clearPendingToolPermission: (toolInvocationId) =>
-        this.pendingToolPermissions.delete(toolInvocationId),
+        this.toolPermissionRuntime.clearPendingToolPermission(toolInvocationId),
       messagesRepository,
       recordActivatedSource: (threadId, sourceSlug) =>
         this.agentRuntime.recordActivatedSource(threadId, sourceSlug),
       toolInvocationsRepository,
       trackPendingToolPermission: (toolInvocation, operationId) =>
-        this.trackPendingToolPermission(toolInvocation, operationId)
+        this.toolPermissionRuntime.trackPendingToolPermission(toolInvocation, operationId)
     })
     this.attachmentsDirectory = attachmentsDirectory ?? join(process.cwd(), '.moon-attachments')
     this.messagesRepository = messagesRepository
@@ -382,7 +355,6 @@ export class SessionManager {
     this.sessionsRepository = sessionsRepository
     this.settingsRepository = settingsRepository
     this.threadsRepository = threadsRepository
-    this.toolInvocationsRepository = toolInvocationsRepository
     this.topicsRepository = topicsRepository
   }
 
@@ -689,7 +661,7 @@ export class SessionManager {
       return operation
     }
 
-    await this.rejectPendingToolPermissionsForOperation(operation.id, 'Cancelled by user.')
+    await this.toolPermissionRuntime.rejectPendingForOperation(operation.id, 'Cancelled by user.')
 
     const cancelledOperation = await this.agentOperationsRepository.save({
       ...operation,
@@ -721,9 +693,8 @@ export class SessionManager {
   async approveToolCall(input: ApproveToolCallInput): Promise<ToolInvocationRecord> {
     const parsedInput = approveToolCallInputSchema.parse(input)
 
-    return this.resolveToolPermissionDecision(parsedInput.toolInvocationId, {
-      requestId: parsedInput.toolInvocationId,
-      approved: true,
+    return this.toolPermissionRuntime.approve({
+      toolInvocationId: parsedInput.toolInvocationId,
       ...(parsedInput.alwaysAllow === undefined ? {} : { alwaysAllow: parsedInput.alwaysAllow })
     })
   }
@@ -734,140 +705,10 @@ export class SessionManager {
   async rejectToolCall(input: RejectToolCallInput): Promise<ToolInvocationRecord> {
     const parsedInput = rejectToolCallInputSchema.parse(input)
 
-    return this.resolveToolPermissionDecision(parsedInput.toolInvocationId, {
-      requestId: parsedInput.toolInvocationId,
-      approved: false,
-      reason: resolveRejectedToolReason(parsedInput.reason)
+    return this.toolPermissionRuntime.reject({
+      toolInvocationId: parsedInput.toolInvocationId,
+      reason: parsedInput.reason
     })
-  }
-
-  /**
-   * 把权限请求记录为待审批状态，供用户操作或取消 operation 时定位。
-   */
-  private trackPendingToolPermission(
-    toolInvocation: ToolInvocationRecord,
-    operationId: string
-  ): void {
-    this.pendingToolPermissions.set(toolInvocation.id, { operationId })
-  }
-
-  /**
-   * 在权限审批结束后广播工具完成事件，让 renderer 从等待态恢复到运行态。
-   */
-  private emitToolPermissionResolvedEvent(
-    operation: AgentOperationRecord,
-    toolInvocation: ToolInvocationRecord
-  ): void {
-    const listenerRegistration = this.operationEventListeners.get(operation.id)
-    const sessionId =
-      typeof operation.appContext?.sessionId === 'string' ? operation.appContext.sessionId : null
-
-    if (
-      listenerRegistration === undefined ||
-      sessionId === null ||
-      operation.topicId == null ||
-      operation.threadId == null
-    ) {
-      return
-    }
-
-    const turnId = readAgentTurnIdFromToolState(toolInvocation.state)
-
-    listenerRegistration.listener(
-      {
-        type: 'tool-finish',
-        operationId: operation.id,
-        sessionId,
-        topicId: operation.topicId,
-        threadId: operation.threadId,
-        messageId: toolInvocation.messageId,
-        toolInvocation,
-        ...(turnId === undefined ? {} : { turnId })
-      },
-      listenerRegistration.routeHint
-    )
-  }
-
-  /**
-   * 解析 UI 审批结果，更新工具状态，并把决策回传给正在等待的 agent backend。
-   */
-  private async resolveToolPermissionDecision(
-    toolInvocationId: string,
-    decision: AgentPermissionDecision,
-    options: { resumeOperation: boolean } = { resumeOperation: true }
-  ): Promise<ToolInvocationRecord> {
-    const toolInvocation = await this.toolInvocationsRepository.findById(toolInvocationId)
-
-    if (toolInvocation === null) {
-      throw new Error('Tool invocation not found.')
-    }
-
-    if (toolInvocation.status !== 'waiting_for_human') {
-      return toolInvocation
-    }
-
-    const timestamp = createTimestamp()
-    const updatedToolInvocation = await this.toolInvocationsRepository.save({
-      ...toolInvocation,
-      status: decision.approved ? 'done' : 'rejected',
-      result: decision.approved ? { approved: true } : null,
-      error: decision.approved ? null : resolveRejectedToolReason(decision.reason),
-      updatedAt: timestamp
-    })
-    const pendingPermission = this.pendingToolPermissions.get(toolInvocation.id)
-    const operationId = toolInvocation.operationId ?? pendingPermission?.operationId
-
-    this.pendingToolPermissions.delete(toolInvocation.id)
-
-    if (operationId !== undefined) {
-      const backend = this.activeAgentBackends.get(operationId)
-      const operation = await this.agentOperationsRepository.findById(operationId)
-
-      if (options.resumeOperation && backend !== undefined && operation !== null) {
-        const resumedOperation = await this.agentOperationsRepository.save({
-          ...operation,
-          status: 'running',
-          completionReason: null,
-          updatedAt: timestamp
-        })
-
-        this.emitToolPermissionResolvedEvent(resumedOperation, updatedToolInvocation)
-      }
-
-      backend?.respondToPermission(
-        decision.requestId,
-        decision.approved,
-        decision.approved ? (decision.alwaysAllow ?? false) : false
-      )
-    }
-
-    return updatedToolInvocation
-  }
-
-  /**
-   * operation 被取消时拒绝所有待处理权限，释放仍在等待用户决策的 backend。
-   */
-  private async rejectPendingToolPermissionsForOperation(
-    operationId: string,
-    reason: string
-  ): Promise<void> {
-    const pendingToolInvocationIds = [...this.pendingToolPermissions.entries()]
-      .filter(([, pendingPermission]) => pendingPermission.operationId === operationId)
-      .map(([toolInvocationId]) => toolInvocationId)
-
-    await Promise.all(
-      pendingToolInvocationIds.map((toolInvocationId) =>
-        this.resolveToolPermissionDecision(
-          toolInvocationId,
-          {
-            requestId: toolInvocationId,
-            approved: false,
-            reason
-          },
-          { resumeOperation: false }
-        )
-      )
-    )
   }
 
   private async executeOperation({
@@ -929,13 +770,10 @@ export class SessionManager {
       workspace
     })
 
-    this.activeAgentBackends.set(operation.id, agentBackend)
+    this.toolPermissionRuntime.registerBackend(operation.id, agentBackend)
 
     if (onEvent !== undefined) {
-      this.operationEventListeners.set(operation.id, {
-        listener: onEvent,
-        routeHint: eventRouteHint
-      })
+      this.toolPermissionRuntime.registerOperationListener(operation.id, onEvent, eventRouteHint)
     }
 
     try {
@@ -1055,8 +893,8 @@ export class SessionManager {
 
       throw error
     } finally {
-      this.activeAgentBackends.delete(operation.id)
-      this.operationEventListeners.delete(operation.id)
+      this.toolPermissionRuntime.releaseBackend(operation.id)
+      this.toolPermissionRuntime.releaseOperationListener(operation.id)
       this.agentRuntime.releaseSessionCallbacks(eventScope.session.id)
     }
   }
