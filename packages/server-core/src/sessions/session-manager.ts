@@ -70,6 +70,7 @@ import {
   SessionAgentEventApplier,
   type SessionSourceActivationSignal
 } from './session-agent-event-applier'
+import { SessionOperationLifecycleRuntime } from './session-operation-lifecycle-runtime'
 import { SessionOperationRuntime } from './session-operation-runtime'
 import {
   SessionAgentRuntime,
@@ -222,12 +223,12 @@ export function createChatTitle(content: string): string {
  * 编排聊天会话、agent operation、工具调用和消息持久化之间的主流程。
  */
 export class SessionManager {
-  private readonly activeOperations = new Map<string, AbortController>()
   private readonly agentEventApplier: SessionAgentEventApplier
   private readonly agentRuntime: SessionAgentRuntime
   private readonly agentOperationsRepository: AgentOperationsRepositoryPort
   private readonly attachmentsDirectory: string
   private readonly messagesRepository: MessagesRepositoryPort
+  private readonly operationLifecycleRuntime: SessionOperationLifecycleRuntime
   private readonly operationRuntime: SessionOperationRuntime
   private readonly projectsRepository?: ProjectsRepositoryPort
   private readonly sessionsRepository: SessionsRepositoryPort
@@ -281,6 +282,11 @@ export class SessionManager {
         this.toolPermissionRuntime.trackPendingToolPermission(toolInvocation, operationId)
     })
     this.attachmentsDirectory = attachmentsDirectory ?? join(process.cwd(), '.moon-attachments')
+    this.operationLifecycleRuntime = new SessionOperationLifecycleRuntime({
+      agentOperationsRepository,
+      messagesRepository,
+      toolPermissionRuntime: this.toolPermissionRuntime
+    })
     this.operationRuntime = new SessionOperationRuntime({
       agentEventApplier: this.agentEventApplier,
       agentOperationsRepository,
@@ -489,41 +495,20 @@ export class SessionManager {
       throw new Error('Agent operation messages not found.')
     }
 
-    const startedAt = createTimestamp()
-    const runningOperation = await this.agentOperationsRepository.save({
-      ...operation,
-      status: 'running',
-      completionReason: null,
-      error: null,
-      startedAt: operation.startedAt ?? startedAt,
-      updatedAt: startedAt
+    const lifecycle = await this.operationLifecycleRuntime.start({
+      assistantMessage,
+      onEvent,
+      operation,
+      routeHint: eventRouteHint
     })
-    const streamingAssistantMessage = await this.messagesRepository.save({
-      ...assistantMessage,
-      status: 'streaming',
-      error: null,
-      updatedAt: startedAt
-    })
-    const abortController = new AbortController()
-
-    onEvent?.(
-      {
-        type: 'operation-started',
-        operationId: runningOperation.id,
-        operation: runningOperation
-      },
-      eventRouteHint
-    )
-
-    this.activeOperations.set(runningOperation.id, abortController)
 
     try {
       const result = await this.operationRuntime.execute({
-        abortSignal: abortController.signal,
-        assistantMessage: streamingAssistantMessage,
+        abortSignal: lifecycle.abortSignal,
+        assistantMessage: lifecycle.assistantMessage,
         connection,
         onEvent,
-        operation: runningOperation,
+        operation: lifecycle.operation,
         routeHint: eventRouteHint,
         scope
       })
@@ -540,7 +525,7 @@ export class SessionManager {
         messages: result.messages
       }
     } finally {
-      this.activeOperations.delete(runningOperation.id)
+      this.operationLifecycleRuntime.release(lifecycle.operation.id)
     }
   }
 
@@ -594,45 +579,8 @@ export class SessionManager {
    */
   async cancelOperation(input: CancelAgentOperationInput): Promise<AgentOperationRecord> {
     const parsedInput = cancelAgentOperationInputSchema.parse(input)
-    const abortController = this.activeOperations.get(parsedInput.operationId)
-    const timestamp = createTimestamp()
 
-    abortController?.abort('cancelled')
-
-    const operation = await this.agentOperationsRepository.findById(parsedInput.operationId)
-
-    if (operation === null) {
-      throw new Error('Agent operation not found.')
-    }
-
-    if (operation.status === 'done') {
-      return operation
-    }
-
-    await this.toolPermissionRuntime.rejectPendingForOperation(operation.id, 'Cancelled by user.')
-
-    const cancelledOperation = await this.agentOperationsRepository.save({
-      ...operation,
-      status: 'interrupted',
-      completionReason: 'interrupted',
-      error: null,
-      updatedAt: timestamp,
-      completedAt: timestamp
-    })
-
-    const operationMessages = await this.messagesRepository.listByOperation(operation.id)
-    const assistantMessage = operationMessages.find((message) => message.role === 'assistant')
-
-    if (assistantMessage !== undefined) {
-      await this.messagesRepository.save({
-        ...assistantMessage,
-        status: 'cancelled',
-        error: 'Cancelled by user.',
-        updatedAt: timestamp
-      })
-    }
-
-    return cancelledOperation
+    return this.operationLifecycleRuntime.cancel({ operationId: parsedInput.operationId })
   }
 
   /**
