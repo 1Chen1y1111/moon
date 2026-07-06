@@ -4,19 +4,17 @@
  */
 
 import { randomUUID } from 'node:crypto'
-import { mkdir, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import {
   assertLlmConnectionReadyForAgent,
   assertProviderReadyForAgent,
   createBackend,
-  createAgentBackendMessage,
   createProviderLlmConnection,
   resolveAgentBackendProvider,
   resolveConnectionAgentBackendProvider,
-  type AgentBackend,
-  type AgentBackendMessage
+  type AgentBackend
 } from '@moon/shared/agent'
 import type { NormalizedLlmConnection } from '@moon/shared/config'
 import type {
@@ -72,6 +70,7 @@ import {
   SessionAgentEventApplier,
   type SessionSourceActivationSignal
 } from './session-agent-event-applier'
+import { SessionOperationRuntime } from './session-operation-runtime'
 import {
   SessionAgentRuntime,
   type AgentBackendFactory,
@@ -199,49 +198,6 @@ function toBuffer(data: ArrayBuffer | ArrayBufferView): Buffer {
   return Buffer.from(data.buffer, data.byteOffset, data.byteLength)
 }
 
-/**
- * 判断附件是否适合以内联文本形式注入模型上下文。
- */
-function isTextAttachment(attachment: ChatAttachmentRecord): boolean {
-  if (attachment.mimeType.startsWith('text/') || attachment.mimeType === 'application/json') {
-    return true
-  }
-
-  const extension = attachment.name.split('.').at(-1)?.toLowerCase()
-
-  return (
-    extension !== undefined &&
-    [
-      'txt',
-      'md',
-      'markdown',
-      'json',
-      'csv',
-      'log',
-      'ts',
-      'tsx',
-      'js',
-      'jsx',
-      'css',
-      'html',
-      'xml',
-      'yml',
-      'yaml'
-    ].includes(extension)
-  )
-}
-
-/**
- * 把未知异常归一化成可展示、可持久化的错误文本。
- */
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message
-  }
-
-  return String(error)
-}
-
 export {
   isOpenAICompatibleProvider,
   isSupportedChatProvider,
@@ -263,32 +219,6 @@ export function createChatTitle(content: string): string {
 }
 
 /**
- * 读取本地附件内容，并把持久化消息转换成 backend 无关的上下文消息。
- */
-async function toAgentBackendMessage(
-  message: MessageRecord,
-  attachmentsDirectory: string
-): Promise<AgentBackendMessage | null> {
-  let content = message.content
-
-  if (message.role === 'user') {
-    if ((message.attachments?.length ?? 0) > 0) {
-      for (const attachment of message.attachments ?? []) {
-        const data = await readFile(join(attachmentsDirectory, attachment.id))
-
-        if (isTextAttachment(attachment)) {
-          content = `${content}\n\n[Attachment: ${attachment.name}]\n${data.toString('utf8')}`
-        } else {
-          content = `${content}\n\n[Attachment: ${attachment.name}]\n非文本附件暂未注入 backend prompt。`
-        }
-      }
-    }
-  }
-
-  return createAgentBackendMessage({ ...message, content })
-}
-
-/**
  * 编排聊天会话、agent operation、工具调用和消息持久化之间的主流程。
  */
 export class SessionManager {
@@ -298,6 +228,7 @@ export class SessionManager {
   private readonly agentOperationsRepository: AgentOperationsRepositoryPort
   private readonly attachmentsDirectory: string
   private readonly messagesRepository: MessagesRepositoryPort
+  private readonly operationRuntime: SessionOperationRuntime
   private readonly projectsRepository?: ProjectsRepositoryPort
   private readonly sessionsRepository: SessionsRepositoryPort
   private readonly settingsRepository: SettingsRepositoryPort
@@ -350,6 +281,15 @@ export class SessionManager {
         this.toolPermissionRuntime.trackPendingToolPermission(toolInvocation, operationId)
     })
     this.attachmentsDirectory = attachmentsDirectory ?? join(process.cwd(), '.moon-attachments')
+    this.operationRuntime = new SessionOperationRuntime({
+      agentEventApplier: this.agentEventApplier,
+      agentOperationsRepository,
+      agentRuntime: this.agentRuntime,
+      attachmentsDirectory: this.attachmentsDirectory,
+      messagesRepository,
+      sessionsRepository,
+      toolPermissionRuntime: this.toolPermissionRuntime
+    })
     this.messagesRepository = messagesRepository
     this.projectsRepository = projectsRepository
     this.sessionsRepository = sessionsRepository
@@ -578,13 +518,21 @@ export class SessionManager {
     this.activeOperations.set(runningOperation.id, abortController)
 
     try {
-      const result = await this.executeOperation({
-        abortController,
+      const result = await this.operationRuntime.execute({
+        abortSignal: abortController.signal,
         assistantMessage: streamingAssistantMessage,
+        connection,
         onEvent,
         operation: runningOperation,
-        connection,
+        routeHint: eventRouteHint,
         scope
+      })
+
+      await this.runSourceActivationAutoRetry({
+        onEvent,
+        operation: result.operation,
+        scope,
+        signal: result.sourceActivation
       })
 
       return {
@@ -709,194 +657,6 @@ export class SessionManager {
       toolInvocationId: parsedInput.toolInvocationId,
       reason: parsedInput.reason
     })
-  }
-
-  private async executeOperation({
-    abortController,
-    assistantMessage: initialAssistantMessage,
-    connection,
-    onEvent,
-    operation,
-    scope
-  }: {
-    abortController: AbortController
-    assistantMessage: MessageRecord
-    connection: NormalizedLlmConnection
-    onEvent?: SessionOperationEventListener
-    operation: AgentOperationRecord
-    scope: ConversationScope
-  }): Promise<SendMessageResult> {
-    const eventScope = {
-      project: scope.project,
-      session: scope.session,
-      topic: scope.topic,
-      thread: scope.thread
-    }
-    const eventRouteHint = createSessionEventRouteHint(eventScope.session)
-    let assistantMessage = initialAssistantMessage
-    let currentOperation = operation
-    let sourceActivationSignal: SessionSourceActivationSignal | null = null
-
-    // 拿出当前 thread 里的历史消息
-    const previousMessages = await this.messagesRepository.listByThread(scope.thread.id)
-
-    // 转成 agent backend 格式
-    const backendMessages = (
-      await Promise.all(
-        previousMessages
-          .filter((message) => message.id !== assistantMessage.id)
-          .map((message) => toAgentBackendMessage(message, this.attachmentsDirectory))
-      )
-    ).filter((message): message is AgentBackendMessage => message !== null)
-
-    // 从后往前找最近一条 user 消息，把它作为这次要问 agent 的内容
-    const currentUserMessage =
-      [...previousMessages].reverse().find((message) => message.role === 'user')?.content ?? ''
-
-    // 如果这次会话绑定了项目，就把项目名和路径交给 agent
-    const workspace =
-      scope.project === null
-        ? undefined
-        : {
-            name: scope.project.name,
-            path: scope.project.path
-          }
-
-    const { agentBackend } = await this.agentRuntime.createBackend({
-      connection,
-      messages: backendMessages,
-      originalMessage: currentUserMessage,
-      scope: eventScope,
-      workspace
-    })
-
-    this.toolPermissionRuntime.registerBackend(operation.id, agentBackend)
-
-    if (onEvent !== undefined) {
-      this.toolPermissionRuntime.registerOperationListener(operation.id, onEvent, eventRouteHint)
-    }
-
-    try {
-      const agentEvents = agentBackend.chat(currentUserMessage, undefined, {
-        abortSignal: abortController.signal,
-        turnId: operation.id
-      })
-      let agentEventResult = await agentEvents.next()
-
-      while (!agentEventResult.done) {
-        const agentEvent = agentEventResult.value
-        const eventResult = await this.agentEventApplier.apply({
-          event: agentEvent,
-          message: assistantMessage,
-          onEvent,
-          operation: currentOperation,
-          routeHint: eventRouteHint,
-          scope: eventScope
-        })
-
-        assistantMessage = eventResult.message
-        currentOperation = eventResult.operation
-        sourceActivationSignal ??= eventResult.sourceActivation ?? null
-        agentEventResult = await agentEvents.next()
-      }
-
-      const completedTimestamp = createTimestamp()
-
-      if (
-        sourceActivationSignal === null &&
-        assistantMessage.content.trim().length === 0 &&
-        !assistantMessage.reasoning
-      ) {
-        throw new Error('Model returned an empty response.')
-      }
-
-      assistantMessage = await this.messagesRepository.save({
-        ...assistantMessage,
-        content: assistantMessage.content.trim(),
-        status: 'complete',
-        updatedAt: completedTimestamp
-      })
-
-      const completedOperation = await this.agentOperationsRepository.save({
-        ...currentOperation,
-        status: 'done',
-        completionReason: 'done',
-        updatedAt: completedTimestamp,
-        completedAt: completedTimestamp
-      })
-      const sessionAfterAssistant = await this.sessionsRepository.save({
-        ...eventScope.session,
-        updatedAt: completedTimestamp
-      })
-      const messages = await this.messagesRepository.listByThread(eventScope.thread.id)
-
-      onEvent?.(
-        {
-          type: 'operation-done',
-          operationId: currentOperation.id,
-          session: sessionAfterAssistant,
-          topic: eventScope.topic,
-          thread: eventScope.thread,
-          operation: completedOperation,
-          messages
-        },
-        eventRouteHint
-      )
-
-      await this.runSourceActivationAutoRetry({
-        onEvent,
-        operation: completedOperation,
-        scope: eventScope,
-        signal: sourceActivationSignal
-      })
-
-      return {
-        session: sessionAfterAssistant,
-        topic: eventScope.topic,
-        thread: eventScope.thread,
-        operation: completedOperation,
-        messages
-      }
-    } catch (error) {
-      const errorMessage = getErrorMessage(error)
-      const failedTimestamp = createTimestamp()
-      const isCancelled = abortController.signal.aborted
-      const failedOperation = await this.agentOperationsRepository.save({
-        ...currentOperation,
-        status: isCancelled ? 'interrupted' : 'error',
-        completionReason: isCancelled ? 'interrupted' : 'error',
-        error: isCancelled ? null : { message: errorMessage },
-        updatedAt: failedTimestamp,
-        completedAt: failedTimestamp
-      })
-
-      await this.messagesRepository.save({
-        ...assistantMessage,
-        status: isCancelled ? 'cancelled' : 'error',
-        error: isCancelled ? 'Cancelled by user.' : errorMessage,
-        updatedAt: failedTimestamp
-      })
-
-      onEvent?.(
-        {
-          type: 'operation-error',
-          operationId: currentOperation.id,
-          sessionId: eventScope.session.id,
-          topicId: eventScope.topic.id,
-          threadId: eventScope.thread.id,
-          messageId: assistantMessage.id,
-          error: isCancelled ? 'Cancelled by user.' : errorMessage,
-          operation: failedOperation
-        },
-        eventRouteHint
-      )
-
-      throw error
-    } finally {
-      this.toolPermissionRuntime.releaseBackend(operation.id)
-      this.toolPermissionRuntime.releaseOperationListener(operation.id)
-      this.agentRuntime.releaseSessionCallbacks(eventScope.session.id)
-    }
   }
 
   /**
