@@ -26,7 +26,6 @@ import type {
   ToolInvocationRecord,
   TopicRecord
 } from '@moon/shared/domain/chat'
-import { defaultChatUserId } from '@moon/shared/domain/chat'
 import type { ProjectRecord } from '@moon/shared/domain/project'
 import {
   approveToolCallInputSchema,
@@ -63,6 +62,10 @@ import type { ProviderId } from '@moon/shared/domain/provider'
 import type { SessionEventRouteHint } from './handlers'
 import { SessionAgentEventApplier } from './session-agent-event-applier'
 import { SessionAgentTargetRuntime } from './session-agent-target-runtime'
+import {
+  SessionMessageTurnRuntime,
+  createChatTitle
+} from './session-message-turn-runtime'
 import { SessionOperationLifecycleRuntime } from './session-operation-lifecycle-runtime'
 import { SessionOperationRuntime } from './session-operation-runtime'
 import { SessionSourceActivationRetryRuntime } from './session-source-activation-retry-runtime'
@@ -75,11 +78,6 @@ import {
   type SessionSourceProviderScope
 } from './session-agent-runtime'
 import { SessionToolPermissionRuntime } from './session-tool-permission-runtime'
-
-const newChatTitle = '新聊天'
-const defaultTopicTitle = '默认话题'
-const defaultThreadTitle = '主线'
-const titleMaxLength = 48
 
 export type AgentOperationsRepositoryPort = {
   findById: (id: string) => Promise<AgentOperationRecord | null>
@@ -193,18 +191,7 @@ export {
   selectDefaultChatProvider
 }
 
-/**
- * 根据首条用户输入生成会话标题，空内容回退为默认新聊天标题。
- */
-export function createChatTitle(content: string): string {
-  const normalizedContent = content.replace(/\s+/g, ' ').trim()
-
-  if (normalizedContent.length <= titleMaxLength) {
-    return normalizedContent || newChatTitle
-  }
-
-  return `${normalizedContent.slice(0, titleMaxLength)}...`
-}
+export { createChatTitle }
 
 /**
  * 编排聊天会话、agent operation、工具调用和消息持久化之间的主流程。
@@ -216,6 +203,7 @@ export class SessionManager {
   private readonly agentOperationsRepository: AgentOperationsRepositoryPort
   private readonly attachmentsDirectory: string
   private readonly messagesRepository: MessagesRepositoryPort
+  private readonly messageTurnRuntime: SessionMessageTurnRuntime
   private readonly operationLifecycleRuntime: SessionOperationLifecycleRuntime
   private readonly operationRuntime: SessionOperationRuntime
   private readonly projectsRepository?: ProjectsRepositoryPort
@@ -251,6 +239,14 @@ export class SessionManager {
     this.agentTargetRuntime = new SessionAgentTargetRuntime({
       sessionsRepository,
       settingsRepository
+    })
+    this.messageTurnRuntime = new SessionMessageTurnRuntime({
+      agentOperationsRepository,
+      messagesRepository,
+      projectsRepository,
+      sessionsRepository,
+      threadsRepository,
+      topicsRepository
     })
     this.agentRuntime = new SessionAgentRuntime({
       createAgentBackend: resolvedCreateAgentBackend,
@@ -343,15 +339,8 @@ export class SessionManager {
    */
   async createSession(): Promise<SessionRecord> {
     const target = await this.agentTargetRuntime.resolveDefaultTarget()
-    const project = await this.resolveInputProject({}, null)
-    const scope = await this.createConversationScope(
-      target.providerId,
-      target.persistedLlmConnectionId,
-      newChatTitle,
-      project
-    )
 
-    return scope.session
+    return this.messageTurnRuntime.createSession({ target })
   }
 
   /**
@@ -390,76 +379,8 @@ export class SessionManager {
   async createMessageTurn(input: CreateMessageTurnInput): Promise<CreateMessageTurnResult> {
     const parsedInput = createMessageTurnInputSchema.parse(input)
     const target = await this.agentTargetRuntime.resolveMessageTarget(parsedInput)
-    const connection = target.connection
-    const persistedLlmConnectionId = target.persistedLlmConnectionId
-    const providerId = target.providerId
-    const modelId = connection.model
-    const project = await this.resolveInputProject(parsedInput, target.session)
 
-    const scope = await this.resolveConversationScope(
-      parsedInput,
-      target.session,
-      providerId,
-      persistedLlmConnectionId,
-      project
-    )
-    const operation = await this.createOperation(
-      scope,
-      providerId,
-      connection,
-      persistedLlmConnectionId,
-      'idle'
-    )
-    const attachments = parsedInput.attachments ?? []
-    const timestamp = createTimestamp()
-    const previousMessages = await this.messagesRepository.listByThread(scope.thread.id)
-    const parentMessage = [...previousMessages].reverse().find((message) => message.role !== 'tool')
-    const userMessage = await this.messagesRepository.save({
-      id: randomUUID(),
-      sessionId: scope.session.id,
-      topicId: scope.topic.id,
-      threadId: scope.thread.id,
-      ...(parentMessage === undefined ? {} : { parentId: parentMessage.id }),
-      operationId: operation.id,
-      role: 'user',
-      content: parsedInput.content,
-      status: 'complete',
-      provider: providerId,
-      model: modelId,
-      ...(attachments.length === 0 ? {} : { attachments }),
-      createdAt: timestamp,
-      updatedAt: timestamp
-    })
-    const title = createChatTitle(parsedInput.content || attachments[0]?.name || '')
-    const sessionAfterUser = await this.touchSessionWithTitle(scope.session, title)
-    const topicAfterUser = await this.touchTopicTitle(scope.topic, title)
-    const threadAfterUser = await this.touchThreadTitle(scope.thread, title)
-    const assistantTimestamp = createTimestamp()
-    const assistantMessage = await this.messagesRepository.save({
-      id: randomUUID(),
-      sessionId: sessionAfterUser.id,
-      topicId: topicAfterUser.id,
-      threadId: threadAfterUser.id,
-      parentId: userMessage.id,
-      operationId: operation.id,
-      role: 'assistant',
-      content: '',
-      reasoning: '',
-      status: 'pending',
-      provider: providerId,
-      model: modelId,
-      createdAt: assistantTimestamp,
-      updatedAt: assistantTimestamp
-    })
-
-    return {
-      session: sessionAfterUser,
-      topic: topicAfterUser,
-      thread: threadAfterUser,
-      operation,
-      userMessage,
-      assistantMessage
-    }
+    return this.messageTurnRuntime.create({ input: parsedInput, target })
   }
 
   /**
@@ -604,54 +525,6 @@ export class SessionManager {
     })
   }
 
-  private async resolveConversationScope(
-    input: SendChatMessageInput,
-    session: SessionRecord | null,
-    providerId: ProviderId,
-    persistedLlmConnectionId: string | null,
-    project: ProjectRecord | null
-  ): Promise<ConversationScope> {
-    if (session === null) {
-      return this.createConversationScope(
-        providerId,
-        persistedLlmConnectionId,
-        createChatTitle(input.content || input.attachments?.[0]?.name || ''),
-        project
-      )
-    }
-
-    const thread =
-      input.threadId === undefined
-        ? await this.getDefaultThread(session.id)
-        : await this.threadsRepository.findById(input.threadId)
-
-    if (thread !== null) {
-      const topic = await this.topicsRepository.findById(thread.topicId)
-
-      if (topic === null) {
-        throw new Error('Chat topic not found.')
-      }
-
-      return { project, session, topic, thread }
-    }
-
-    const topic =
-      input.topicId === undefined
-        ? await this.getDefaultTopic(session.id)
-        : await this.topicsRepository.findById(input.topicId)
-
-    if (topic === null) {
-      return this.createTopicAndThread(session, defaultTopicTitle, defaultThreadTitle, project)
-    }
-
-    return {
-      project,
-      session,
-      topic,
-      thread: await this.createThread(topic, defaultThreadTitle)
-    }
-  }
-
   /**
    * 从 operation appContext 还原会话作用域，保证恢复运行时仍绑定原项目。
    */
@@ -677,206 +550,12 @@ export class SessionManager {
   }
 
   /**
-   * 创建会话、默认 topic 和默认 thread，并把会话绑定到当前项目。
-   */
-  private async createConversationScope(
-    providerId: ProviderId,
-    persistedLlmConnectionId: string | null,
-    title: string,
-    project: ProjectRecord | null
-  ): Promise<ConversationScope> {
-    const timestamp = createTimestamp()
-    const session = await this.sessionsRepository.save({
-      id: randomUUID(),
-      llmConnectionId: persistedLlmConnectionId,
-      projectId: project?.id ?? null,
-      provider: providerId,
-      title,
-      status: 'active',
-      userId: defaultChatUserId,
-      createdAt: timestamp,
-      updatedAt: timestamp
-    })
-
-    return this.createTopicAndThread(session, title, defaultThreadTitle, project)
-  }
-
-  /**
-   * 为会话创建默认 topic/thread，并沿用调用方解析好的项目上下文。
-   */
-  private async createTopicAndThread(
-    session: SessionRecord,
-    topicTitle: string,
-    threadTitle: string,
-    project: ProjectRecord | null
-  ): Promise<ConversationScope> {
-    const timestamp = createTimestamp()
-    const topic = await this.topicsRepository.save({
-      id: randomUUID(),
-      sessionId: session.id,
-      title: topicTitle,
-      userId: defaultChatUserId,
-      trigger: 'chat',
-      mode: 'default',
-      status: 'active',
-      createdAt: timestamp,
-      updatedAt: timestamp
-    })
-    const thread = await this.threadsRepository.save({
-      id: randomUUID(),
-      topicId: topic.id,
-      title: threadTitle,
-      type: 'standalone',
-      status: 'active',
-      userId: defaultChatUserId,
-      lastActiveAt: timestamp,
-      createdAt: timestamp,
-      updatedAt: timestamp
-    })
-
-    return { project, session, topic, thread }
-  }
-
-  /**
-   * 在现有 topic 下创建新的 continuation thread。
-   */
-  private async createThread(topic: TopicRecord, title: string): Promise<ThreadRecord> {
-    const timestamp = createTimestamp()
-
-    return this.threadsRepository.save({
-      id: randomUUID(),
-      topicId: topic.id,
-      title,
-      type: 'continuation',
-      status: 'active',
-      userId: defaultChatUserId,
-      lastActiveAt: timestamp,
-      createdAt: timestamp,
-      updatedAt: timestamp
-    })
-  }
-
-  /**
-   * 创建 agent operation，并把项目上下文写入 appContext 供恢复和审计使用。
-   */
-  private async createOperation(
-    scope: ConversationScope,
-    providerId: ProviderId,
-    connection: NormalizedLlmConnection,
-    persistedLlmConnectionId: string | null,
-    status: AgentOperationRecord['status'] = 'running'
-  ): Promise<AgentOperationRecord> {
-    const timestamp = createTimestamp()
-
-    return this.agentOperationsRepository.save({
-      id: randomUUID(),
-      userId: defaultChatUserId,
-      topicId: scope.topic.id,
-      threadId: scope.thread.id,
-      status,
-      ...(status === 'running' ? { startedAt: timestamp } : {}),
-      model: connection.model,
-      provider: providerId,
-      trigger: 'chat',
-      appContext: {
-        sessionId: scope.session.id,
-        ...(persistedLlmConnectionId === null ? {} : { llmConnectionId: persistedLlmConnectionId }),
-        llmConnectionBackend: connection.backend,
-        ...(scope.project === null
-          ? {}
-          : {
-              projectId: scope.project.id,
-              projectName: scope.project.name,
-              projectPath: scope.project.path
-            })
-      },
-      createdAt: timestamp,
-      updatedAt: timestamp
-    })
-  }
-
-  /**
-   * 读取会话默认 topic，当前策略使用列表首项作为默认值。
-   */
-  private async getDefaultTopic(sessionId: string): Promise<TopicRecord | null> {
-    const topics = await this.topicsRepository.listBySession(sessionId)
-
-    return topics[0] ?? null
-  }
-
-  /**
    * 读取会话默认 thread，当前策略使用列表首项作为默认值。
    */
   private async getDefaultThread(sessionId: string): Promise<ThreadRecord | null> {
     const threads = await this.threadsRepository.listBySession(sessionId)
 
     return threads[0] ?? null
-  }
-
-  /**
-   * 用户首条消息后按内容刷新新会话标题，已有自定义标题保持不变。
-   */
-  private async touchSessionWithTitle(
-    session: SessionRecord,
-    title: string
-  ): Promise<SessionRecord> {
-    const shouldUpdateTitle = session.title === newChatTitle || session.title === ''
-
-    return this.sessionsRepository.save({
-      ...session,
-      title: shouldUpdateTitle ? title : session.title,
-      updatedAt: createTimestamp()
-    })
-  }
-
-  /**
-   * 用户首条消息后按内容刷新默认 topic 标题。
-   */
-  private async touchTopicTitle(topic: TopicRecord, title: string): Promise<TopicRecord> {
-    const shouldUpdateTitle = topic.title === defaultTopicTitle || topic.title === newChatTitle
-
-    return this.topicsRepository.save({
-      ...topic,
-      title: shouldUpdateTitle ? title : topic.title,
-      updatedAt: createTimestamp()
-    })
-  }
-
-  /**
-   * 用户首条消息后按内容刷新默认 thread 标题并更新时间。
-   */
-  private async touchThreadTitle(thread: ThreadRecord, title: string): Promise<ThreadRecord> {
-    const shouldUpdateTitle = thread.title === defaultThreadTitle || thread.title === newChatTitle
-    const timestamp = createTimestamp()
-
-    return this.threadsRepository.save({
-      ...thread,
-      title: shouldUpdateTitle ? title : thread.title,
-      lastActiveAt: timestamp,
-      updatedAt: timestamp
-    })
-  }
-
-  /**
-   * 解析新消息归属项目；已有 session 优先使用 session 绑定，空输入回退 active project。
-   */
-  private async resolveInputProject(
-    input: Pick<SendChatMessageInput, 'projectId'>,
-    session: SessionRecord | null
-  ): Promise<ProjectRecord | null> {
-    if (session !== null) {
-      return this.resolveSessionProject(session)
-    }
-
-    if (input.projectId === null) {
-      return null
-    }
-
-    if (input.projectId !== undefined) {
-      return this.resolveProjectById(input.projectId)
-    }
-
-    return this.projectsRepository?.getActiveProject() ?? null
   }
 
   /**
