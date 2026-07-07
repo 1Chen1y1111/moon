@@ -8,12 +8,7 @@ import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import {
-  assertLlmConnectionReadyForAgent,
-  assertProviderReadyForAgent,
   createBackend,
-  createProviderLlmConnection,
-  resolveAgentBackendProvider,
-  resolveConnectionAgentBackendProvider,
   type AgentBackend
 } from '@moon/shared/agent'
 import type { NormalizedLlmConnection } from '@moon/shared/config'
@@ -63,10 +58,11 @@ import {
   selectChatModel,
   selectDefaultChatProvider
 } from '@moon/shared/domain/chat-provider'
-import type { AppSettings, ProviderSettings } from '@moon/shared/domain/settings'
+import type { AppSettings } from '@moon/shared/domain/settings'
 import type { ProviderId } from '@moon/shared/domain/provider'
 import type { SessionEventRouteHint } from './handlers'
 import { SessionAgentEventApplier } from './session-agent-event-applier'
+import { SessionAgentTargetRuntime } from './session-agent-target-runtime'
 import { SessionOperationLifecycleRuntime } from './session-operation-lifecycle-runtime'
 import { SessionOperationRuntime } from './session-operation-runtime'
 import { SessionSourceActivationRetryRuntime } from './session-source-activation-retry-runtime'
@@ -155,13 +151,6 @@ export type SessionOperationEventListener = (
   routeHint?: SessionEventRouteHint
 ) => void
 
-type ResolvedAgentTarget = {
-  connection: NormalizedLlmConnection
-  persistedLlmConnectionId: string | null
-  providerId: ProviderId
-  session: SessionRecord | null
-}
-
 type ConversationScope = SessionSourceProviderScope
 
 /**
@@ -222,6 +211,7 @@ export function createChatTitle(content: string): string {
  */
 export class SessionManager {
   private readonly agentEventApplier: SessionAgentEventApplier
+  private readonly agentTargetRuntime: SessionAgentTargetRuntime
   private readonly agentRuntime: SessionAgentRuntime
   private readonly agentOperationsRepository: AgentOperationsRepositoryPort
   private readonly attachmentsDirectory: string
@@ -231,7 +221,6 @@ export class SessionManager {
   private readonly projectsRepository?: ProjectsRepositoryPort
   private readonly sessionsRepository: SessionsRepositoryPort
   private readonly sourceActivationRetryRuntime: SessionSourceActivationRetryRuntime
-  private readonly settingsRepository: SettingsRepositoryPort
   private readonly threadsRepository: ThreadsRepositoryPort
   private readonly toolPermissionRuntime: SessionToolPermissionRuntime
   private readonly topicsRepository: TopicsRepositoryPort
@@ -259,6 +248,10 @@ export class SessionManager {
       createAgentBackend ?? ((config) => agentBackend ?? createBackend(config))
 
     this.agentOperationsRepository = agentOperationsRepository
+    this.agentTargetRuntime = new SessionAgentTargetRuntime({
+      sessionsRepository,
+      settingsRepository
+    })
     this.agentRuntime = new SessionAgentRuntime({
       createAgentBackend: resolvedCreateAgentBackend,
       permissionModeResolver,
@@ -301,7 +294,6 @@ export class SessionManager {
     this.messagesRepository = messagesRepository
     this.projectsRepository = projectsRepository
     this.sessionsRepository = sessionsRepository
-    this.settingsRepository = settingsRepository
     this.threadsRepository = threadsRepository
     this.topicsRepository = topicsRepository
   }
@@ -350,7 +342,7 @@ export class SessionManager {
    * 创建空聊天会话，并绑定当前默认 provider/connection 与 active project。
    */
   async createSession(): Promise<SessionRecord> {
-    const target = await this.resolveDefaultAgentTarget()
+    const target = await this.agentTargetRuntime.resolveDefaultTarget()
     const project = await this.resolveInputProject({}, null)
     const scope = await this.createConversationScope(
       target.providerId,
@@ -397,7 +389,7 @@ export class SessionManager {
    */
   async createMessageTurn(input: CreateMessageTurnInput): Promise<CreateMessageTurnResult> {
     const parsedInput = createMessageTurnInputSchema.parse(input)
-    const target = await this.resolveAgentTarget(parsedInput)
+    const target = await this.agentTargetRuntime.resolveMessageTarget(parsedInput)
     const connection = target.connection
     const persistedLlmConnectionId = target.persistedLlmConnectionId
     const providerId = target.providerId
@@ -485,8 +477,11 @@ export class SessionManager {
     }
 
     const scope = await this.resolveOperationScope(operation)
-    const target = await this.resolveOperationTarget(operation, scope.session)
-    const connection = this.withOperationModel(target.connection, operation)
+    const target = await this.agentTargetRuntime.resolveOperationTarget({
+      operation,
+      session: scope.session
+    })
+    const connection = target.connection
 
     const operationMessages = await this.messagesRepository.listByOperation(operation.id)
     const userMessage = operationMessages.find((message) => message.role === 'user')
@@ -607,316 +602,6 @@ export class SessionManager {
       toolInvocationId: parsedInput.toolInvocationId,
       reason: parsedInput.reason
     })
-  }
-
-  /**
-   * 解析新消息应使用的 agent target，显式 connection 优先于 provider 和会话默认值。
-   */
-  private async resolveAgentTarget(input: SendChatMessageInput): Promise<ResolvedAgentTarget> {
-    const settings = await this.settingsRepository.getSettings()
-
-    if (input.sessionId !== undefined) {
-      const session = await this.sessionsRepository.findById(input.sessionId)
-
-      if (session === null) {
-        throw new Error('Chat session not found.')
-      }
-
-      if (input.llmConnectionId !== undefined) {
-        const inputConnection = await this.resolveInputLlmConnection(input.llmConnectionId)
-
-        return this.createConnectionAgentTarget(
-          inputConnection,
-          {
-            ...session,
-            provider: inputConnection.providerId ?? input.provider ?? session.provider,
-            llmConnectionId: inputConnection.id
-          },
-          input.provider ?? session.provider
-        )
-      }
-
-      if (input.provider !== undefined) {
-        const providerConnection = await this.resolveProviderLlmConnection(input.provider)
-
-        if (providerConnection !== null) {
-          return this.createConnectionAgentTarget(
-            providerConnection,
-            {
-              ...session,
-              provider: input.provider,
-              llmConnectionId: providerConnection.id
-            },
-            input.provider
-          )
-        }
-
-        return this.createProviderAgentTarget(settings.providers[input.provider], {
-          ...session,
-          provider: input.provider,
-          llmConnectionId: null
-        })
-      }
-
-      const sessionConnection = await this.resolveSessionLlmConnection(session)
-
-      if (sessionConnection !== null) {
-        return this.createConnectionAgentTarget(sessionConnection, session, session.provider)
-      }
-
-      return this.createProviderAgentTarget(settings.providers[session.provider], session)
-    }
-
-    if (input.llmConnectionId !== undefined) {
-      const inputConnection = await this.resolveInputLlmConnection(input.llmConnectionId)
-
-      return this.createConnectionAgentTarget(inputConnection, null, input.provider)
-    }
-
-    if (input.provider !== undefined) {
-      const providerConnection = await this.resolveProviderLlmConnection(input.provider)
-
-      if (providerConnection !== null) {
-        return this.createConnectionAgentTarget(providerConnection, null, input.provider)
-      }
-
-      return this.createProviderAgentTarget(settings.providers[input.provider], null)
-    }
-
-    return this.resolveDefaultAgentTarget()
-  }
-
-  /**
-   * 解析默认 agent target，优先使用持久化默认 connection，再回退到旧 provider 设置。
-   */
-  private async resolveDefaultAgentTarget(): Promise<ResolvedAgentTarget> {
-    const connection = await this.settingsRepository.selectDefaultLlmConnection()
-
-    if (connection !== null) {
-      return this.createConnectionAgentTarget(connection, null)
-    }
-
-    const settings = await this.settingsRepository.getSettings()
-
-    return this.createProviderAgentTarget(selectDefaultChatProvider(settings), null)
-  }
-
-  /**
-   * 解析 operation 运行时的 agent target，优先使用 operation/session 上记录的 connection。
-   */
-  private async resolveOperationTarget(
-    operation: AgentOperationRecord,
-    session: SessionRecord
-  ): Promise<ResolvedAgentTarget> {
-    const operationConnectionId =
-      typeof operation.appContext?.llmConnectionId === 'string'
-        ? operation.appContext.llmConnectionId
-        : undefined
-    const connection =
-      operationConnectionId === undefined
-        ? await this.resolveSessionLlmConnection(session)
-        : await this.settingsRepository.findLlmConnectionById(operationConnectionId)
-
-    if (connection !== null) {
-      return this.createConnectionAgentTarget(
-        connection,
-        session,
-        operation.provider ?? session.provider
-      )
-    }
-
-    const settings = await this.settingsRepository.getSettings()
-
-    return this.createProviderAgentTarget(
-      settings.providers[operation.provider ?? session.provider],
-      session
-    )
-  }
-
-  /**
-   * 通过 session 记录的 connection id 查找持久化连接，缺失时返回 null 以便回退 provider。
-   */
-  private async resolveSessionLlmConnection(
-    session: SessionRecord
-  ): Promise<NormalizedLlmConnection | null> {
-    return session.llmConnectionId === undefined || session.llmConnectionId === null
-      ? null
-      : this.settingsRepository.findLlmConnectionById(session.llmConnectionId)
-  }
-
-  /**
-   * 解析用户显式指定的 connection，缺失时抛错避免静默切到其它模型。
-   */
-  private async resolveInputLlmConnection(id: string): Promise<NormalizedLlmConnection> {
-    const connection = await this.settingsRepository.findLlmConnectionById(id)
-
-    if (connection === null) {
-      throw new Error('LLM connection not found.')
-    }
-
-    return connection
-  }
-
-  /**
-   * 按 provider id 查找同步出来的同名 connection，仅在仍启用且归属匹配时使用。
-   */
-  private async resolveProviderLlmConnection(
-    provider: ProviderId
-  ): Promise<NormalizedLlmConnection | null> {
-    const connection = await this.settingsRepository.findLlmConnectionById(provider)
-
-    if (connection === null || !connection.enabled) {
-      return null
-    }
-
-    if (connection.providerId !== undefined && connection.providerId !== provider) {
-      return null
-    }
-
-    return connection
-  }
-
-  /**
-   * 对 provider 派生连接使用最新 provider 设置生成运行时连接，避免旧连接协议滞留。
-   * 旧数据可能没有 providerId，此时借助会话或输入 provider 归属兜底识别。
-   */
-  private async refreshProviderBackedConnection(
-    connection: NormalizedLlmConnection,
-    fallbackProviderId?: ProviderId
-  ): Promise<NormalizedLlmConnection> {
-    const currentBackend = resolveConnectionAgentBackendProvider(connection)
-
-    if (currentBackend === 'pi' || currentBackend === 'pi_compat') {
-      return connection
-    }
-
-    const settings = await this.settingsRepository.getSettings()
-    const providerId =
-      connection.providerId ??
-      (settings.providers[connection.id] === undefined ? fallbackProviderId : connection.id)
-
-    if (providerId === undefined) {
-      return connection
-    }
-
-    const provider = settings.providers[providerId]
-
-    if (provider === undefined || !provider.enabled || !isSupportedChatProvider(provider)) {
-      return connection
-    }
-
-    const storedProvider = await this.withStoredApiKey(provider)
-    const providerWithApiKey = storedProvider.apiKey.trim()
-      ? storedProvider
-      : {
-          ...storedProvider,
-          apiKey: connection.apiKey ?? ''
-        }
-    const model = selectChatModel(providerWithApiKey)
-
-    try {
-      assertProviderReadyForAgent(providerWithApiKey, model)
-    } catch {
-      return connection
-    }
-
-    const providerConnection = createProviderLlmConnection(providerWithApiKey, model)
-    const providerBackend = resolveConnectionAgentBackendProvider(providerConnection)
-
-    if (currentBackend === providerBackend) {
-      return connection
-    }
-
-    return {
-      ...providerConnection,
-      id: connection.id,
-      enabled: connection.enabled,
-      isDefault: connection.isDefault,
-      thinkingLevel: connection.thinkingLevel,
-      providerId: connection.providerId ?? providerConnection.providerId
-    }
-  }
-
-  /**
-   * 基于持久化 LLM connection 创建 agent target，并完成 connection 级可执行校验。
-   */
-  private async createConnectionAgentTarget(
-    connection: NormalizedLlmConnection,
-    session: SessionRecord | null,
-    fallbackProviderId?: ProviderId
-  ): Promise<ResolvedAgentTarget> {
-    const runtimeConnection = await this.refreshProviderBackedConnection(
-      connection,
-      fallbackProviderId
-    )
-
-    assertLlmConnectionReadyForAgent(runtimeConnection)
-
-    return {
-      connection: runtimeConnection,
-      persistedLlmConnectionId: connection.id,
-      providerId: runtimeConnection.providerId ?? fallbackProviderId ?? runtimeConnection.id,
-      session
-    }
-  }
-
-  /**
-   * 基于 provider fallback 创建 agent target，并把 provider 设置派生成 connection。
-   */
-  private async createProviderAgentTarget(
-    provider: ProviderSettings | undefined,
-    session: SessionRecord | null
-  ): Promise<ResolvedAgentTarget> {
-    if (provider === undefined) {
-      throw new Error('Unknown provider.')
-    }
-
-    if (!provider.enabled) {
-      throw new Error(`${provider.name} is disabled.`)
-    }
-
-    const providerWithApiKey = await this.withStoredApiKey(provider)
-    const model = selectChatModel(providerWithApiKey)
-
-    if (!isSupportedChatProvider(providerWithApiKey)) {
-      const backend = resolveAgentBackendProvider(providerWithApiKey, model)
-
-      if (backend === 'pi' || backend === 'pi_compat') {
-        assertProviderReadyForAgent(providerWithApiKey, model)
-      }
-
-      throw new Error(`${provider.name} is not supported for chat.`)
-    }
-
-    assertProviderReadyForAgent(providerWithApiKey, model)
-
-    const connection = createProviderLlmConnection(providerWithApiKey, model)
-
-    return {
-      connection,
-      persistedLlmConnectionId: null,
-      providerId: providerWithApiKey.provider,
-      session:
-        session === null
-          ? null
-          : {
-              ...session,
-              provider: providerWithApiKey.provider,
-              llmConnectionId: null
-            }
-    }
-  }
-
-  /**
-   * 运行历史 operation 时保留 operation 上锁定的模型，同时复用 connection 的凭据和端点。
-   */
-  private withOperationModel(
-    connection: NormalizedLlmConnection,
-    operation: AgentOperationRecord
-  ): NormalizedLlmConnection {
-    return operation.model === null || operation.model === undefined
-      ? connection
-      : { ...connection, model: operation.model }
   }
 
   private async resolveConversationScope(
@@ -1170,18 +855,6 @@ export class SessionManager {
       lastActiveAt: timestamp,
       updatedAt: timestamp
     })
-  }
-
-  /**
-   * 读取持久化 API key 并合并进 provider 设置，避免 renderer 接触密钥。
-   */
-  private async withStoredApiKey(provider: ProviderSettings): Promise<ProviderSettings> {
-    const apiKey = await this.settingsRepository.getProviderApiKey(provider.provider)
-
-    return {
-      ...provider,
-      apiKey
-    }
   }
 
   /**
