@@ -67,6 +67,7 @@ import {
   createChatTitle
 } from './session-message-turn-runtime'
 import { SessionOperationLifecycleRuntime } from './session-operation-lifecycle-runtime'
+import { SessionOperationRunnerRuntime } from './session-operation-runner-runtime'
 import { SessionOperationRuntime } from './session-operation-runtime'
 import { SessionSourceActivationRetryRuntime } from './session-source-activation-retry-runtime'
 import {
@@ -74,8 +75,7 @@ import {
   type AgentBackendFactory,
   type SessionPermissionModeResolver,
   type SessionSourceActivator,
-  type SessionSourceProvider,
-  type SessionSourceProviderScope
+  type SessionSourceProvider
 } from './session-agent-runtime'
 import { SessionToolPermissionRuntime } from './session-tool-permission-runtime'
 
@@ -149,8 +149,6 @@ export type SessionOperationEventListener = (
   routeHint?: SessionEventRouteHint
 ) => void
 
-type ConversationScope = SessionSourceProviderScope
-
 /**
  * 创建当前时间戳，统一聊天落库记录的时间格式。
  */
@@ -200,15 +198,12 @@ export class SessionManager {
   private readonly agentEventApplier: SessionAgentEventApplier
   private readonly agentTargetRuntime: SessionAgentTargetRuntime
   private readonly agentRuntime: SessionAgentRuntime
-  private readonly agentOperationsRepository: AgentOperationsRepositoryPort
   private readonly attachmentsDirectory: string
   private readonly messagesRepository: MessagesRepositoryPort
   private readonly messageTurnRuntime: SessionMessageTurnRuntime
   private readonly operationLifecycleRuntime: SessionOperationLifecycleRuntime
-  private readonly operationRuntime: SessionOperationRuntime
-  private readonly projectsRepository?: ProjectsRepositoryPort
+  private readonly operationRunnerRuntime: SessionOperationRunnerRuntime
   private readonly sessionsRepository: SessionsRepositoryPort
-  private readonly sourceActivationRetryRuntime: SessionSourceActivationRetryRuntime
   private readonly threadsRepository: ThreadsRepositoryPort
   private readonly toolPermissionRuntime: SessionToolPermissionRuntime
   private readonly topicsRepository: TopicsRepositoryPort
@@ -235,7 +230,6 @@ export class SessionManager {
     const resolvedCreateAgentBackend: AgentBackendFactory =
       createAgentBackend ?? ((config) => agentBackend ?? createBackend(config))
 
-    this.agentOperationsRepository = agentOperationsRepository
     this.agentTargetRuntime = new SessionAgentTargetRuntime({
       sessionsRepository,
       settingsRepository
@@ -275,7 +269,7 @@ export class SessionManager {
       messagesRepository,
       toolPermissionRuntime: this.toolPermissionRuntime
     })
-    this.operationRuntime = new SessionOperationRuntime({
+    const operationRuntime = new SessionOperationRuntime({
       agentEventApplier: this.agentEventApplier,
       agentOperationsRepository,
       agentRuntime: this.agentRuntime,
@@ -284,11 +278,22 @@ export class SessionManager {
       sessionsRepository,
       toolPermissionRuntime: this.toolPermissionRuntime
     })
-    this.sourceActivationRetryRuntime = new SessionSourceActivationRetryRuntime({
+    const sourceActivationRetryRuntime = new SessionSourceActivationRetryRuntime({
       sendMessage: (input, onEvent) => this.sendMessage(input, onEvent)
     })
+    this.operationRunnerRuntime = new SessionOperationRunnerRuntime({
+      agentOperationsRepository,
+      agentTargetRuntime: this.agentTargetRuntime,
+      messagesRepository,
+      operationLifecycleRuntime: this.operationLifecycleRuntime,
+      operationRuntime,
+      projectsRepository,
+      sessionsRepository,
+      sourceActivationRetryRuntime,
+      threadsRepository,
+      topicsRepository
+    })
     this.messagesRepository = messagesRepository
-    this.projectsRepository = projectsRepository
     this.sessionsRepository = sessionsRepository
     this.threadsRepository = threadsRepository
     this.topicsRepository = topicsRepository
@@ -391,60 +396,11 @@ export class SessionManager {
     onEvent?: SessionOperationEventListener
   ): Promise<RunChatOperationResult> {
     const parsedInput = runChatOperationInputSchema.parse(input)
-    const operation = await this.agentOperationsRepository.findById(parsedInput.operationId)
 
-    if (operation === null) {
-      throw new Error('Agent operation not found.')
-    }
-
-    const scope = await this.resolveOperationScope(operation)
-    const target = await this.agentTargetRuntime.resolveOperationTarget({
-      operation,
-      session: scope.session
-    })
-    const connection = target.connection
-
-    const operationMessages = await this.messagesRepository.listByOperation(operation.id)
-    const userMessage = operationMessages.find((message) => message.role === 'user')
-    const assistantMessage = operationMessages.find((message) => message.role === 'assistant')
-    const eventRouteHint = createSessionEventRouteHint(scope.session)
-
-    if (userMessage === undefined || assistantMessage === undefined) {
-      throw new Error('Agent operation messages not found.')
-    }
-
-    const lifecycle = await this.operationLifecycleRuntime.start({
-      assistantMessage,
+    return this.operationRunnerRuntime.run({
       onEvent,
-      operation,
-      routeHint: eventRouteHint
+      operationId: parsedInput.operationId
     })
-
-    try {
-      const result = await this.operationRuntime.execute({
-        abortSignal: lifecycle.abortSignal,
-        assistantMessage: lifecycle.assistantMessage,
-        connection,
-        onEvent,
-        operation: lifecycle.operation,
-        routeHint: eventRouteHint,
-        scope
-      })
-
-      await this.sourceActivationRetryRuntime.run({
-        onEvent,
-        operation: result.operation,
-        scope,
-        sourceActivation: result.sourceActivation
-      })
-
-      return {
-        operation: result.operation,
-        messages: result.messages
-      }
-    } finally {
-      this.operationLifecycleRuntime.release(lifecycle.operation.id)
-    }
   }
 
   /**
@@ -526,59 +482,11 @@ export class SessionManager {
   }
 
   /**
-   * 从 operation appContext 还原会话作用域，保证恢复运行时仍绑定原项目。
-   */
-  private async resolveOperationScope(operation: AgentOperationRecord): Promise<ConversationScope> {
-    const sessionId =
-      typeof operation.appContext?.sessionId === 'string'
-        ? operation.appContext.sessionId
-        : undefined
-
-    if (sessionId === undefined || operation.topicId == null || operation.threadId == null) {
-      throw new Error('Agent operation context is incomplete.')
-    }
-
-    const session = await this.sessionsRepository.findById(sessionId)
-    const topic = await this.topicsRepository.findById(operation.topicId)
-    const thread = await this.threadsRepository.findById(operation.threadId)
-
-    if (session === null || topic === null || thread === null) {
-      throw new Error('Agent operation context not found.')
-    }
-
-    return { project: await this.resolveSessionProject(session), session, topic, thread }
-  }
-
-  /**
    * 读取会话默认 thread，当前策略使用列表首项作为默认值。
    */
   private async getDefaultThread(sessionId: string): Promise<ThreadRecord | null> {
     const threads = await this.threadsRepository.listBySession(sessionId)
 
     return threads[0] ?? null
-  }
-
-  /**
-   * 根据 session.projectId 查找项目，null 表示历史未绑定会话。
-   */
-  private async resolveSessionProject(session: SessionRecord): Promise<ProjectRecord | null> {
-    return session.projectId === null ? null : this.resolveProjectById(session.projectId)
-  }
-
-  /**
-   * 按 id 读取项目，避免输入引用不存在项目时静默降级。
-   */
-  private async resolveProjectById(projectId: string): Promise<ProjectRecord> {
-    if (this.projectsRepository === undefined) {
-      throw new Error('Project repository is not available.')
-    }
-
-    const project = await this.projectsRepository.findById(projectId)
-
-    if (project === null) {
-      throw new Error('Project not found.')
-    }
-
-    return project
   }
 }
