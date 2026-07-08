@@ -69,6 +69,7 @@ import {
 import { SessionOperationLifecycleRuntime } from './session-operation-lifecycle-runtime'
 import { SessionOperationRunnerRuntime } from './session-operation-runner-runtime'
 import { SessionOperationRuntime } from './session-operation-runtime'
+import { SessionSendMessageRuntime } from './session-send-message-runtime'
 import { SessionSourceActivationRetryRuntime } from './session-source-activation-retry-runtime'
 import {
   SessionAgentRuntime,
@@ -157,14 +158,6 @@ function createTimestamp(): string {
 }
 
 /**
- * 根据会话记录生成内部事件路由提示。
- * 这里不改变对 renderer 广播的事件 payload。
- */
-function createSessionEventRouteHint(session: SessionRecord): SessionEventRouteHint {
-  return { workspaceId: session.projectId }
-}
-
-/**
  * 根据 MIME 类型确定附件在聊天域里的粗粒度类型。
  */
 function resolveAttachmentKind(mimeType: string): ChatAttachmentKind {
@@ -203,6 +196,7 @@ export class SessionManager {
   private readonly messageTurnRuntime: SessionMessageTurnRuntime
   private readonly operationLifecycleRuntime: SessionOperationLifecycleRuntime
   private readonly operationRunnerRuntime: SessionOperationRunnerRuntime
+  private readonly sendMessageRuntime: SessionSendMessageRuntime
   private readonly sessionsRepository: SessionsRepositoryPort
   private readonly threadsRepository: ThreadsRepositoryPort
   private readonly toolPermissionRuntime: SessionToolPermissionRuntime
@@ -292,6 +286,10 @@ export class SessionManager {
       sourceActivationRetryRuntime,
       threadsRepository,
       topicsRepository
+    })
+    this.sendMessageRuntime = new SessionSendMessageRuntime({
+      createMessageTurn: (input) => this.createMessageTurn(input),
+      runOperation: (input, onEvent) => this.runOperation(input, onEvent)
     })
     this.messagesRepository = messagesRepository
     this.sessionsRepository = sessionsRepository
@@ -411,41 +409,8 @@ export class SessionManager {
     onEvent?: SessionOperationEventListener
   ): Promise<SendMessageResult> {
     const parsedInput = sendChatMessageInputSchema.parse(input)
-    const turn = await this.createMessageTurn(parsedInput)
-    const eventRouteHint = createSessionEventRouteHint(turn.session)
 
-    onEvent?.(
-      {
-        type: 'message-created',
-        operationId: turn.operation.id,
-        session: turn.session,
-        topic: turn.topic,
-        thread: turn.thread,
-        message: turn.userMessage
-      },
-      eventRouteHint
-    )
-    onEvent?.(
-      {
-        type: 'message-created',
-        operationId: turn.operation.id,
-        session: turn.session,
-        topic: turn.topic,
-        thread: turn.thread,
-        message: turn.assistantMessage
-      },
-      eventRouteHint
-    )
-
-    const runResult = await this.runOperation({ operationId: turn.operation.id }, onEvent)
-
-    return {
-      session: turn.session,
-      topic: turn.topic,
-      thread: turn.thread,
-      operation: runResult.operation,
-      messages: runResult.messages
-    }
+    return this.sendMessageRuntime.send({ input: parsedInput, onEvent })
   }
 
   /**
