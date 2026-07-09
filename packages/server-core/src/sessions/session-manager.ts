@@ -3,8 +3,6 @@
  * 本文件属于可复用 server-core 边界，只依赖仓储接口，不依赖 Electron、IPC 或 renderer。
  */
 
-import { randomUUID } from 'node:crypto'
-import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 
 import {
@@ -14,7 +12,6 @@ import {
 import type { NormalizedLlmConnection } from '@moon/shared/config'
 import type {
   AgentOperationRecord,
-  ChatAttachmentKind,
   ChatAttachmentRecord,
   ChatOperationEvent,
   CreateMessageTurnResult,
@@ -62,6 +59,7 @@ import type { ProviderId } from '@moon/shared/domain/provider'
 import type { SessionEventRouteHint } from './handlers'
 import { SessionAgentEventApplier } from './session-agent-event-applier'
 import { SessionAgentTargetRuntime } from './session-agent-target-runtime'
+import { SessionAttachmentRuntime } from './session-attachment-runtime'
 import {
   SessionMessageTurnRuntime,
   createChatTitle
@@ -150,31 +148,6 @@ export type SessionOperationEventListener = (
   routeHint?: SessionEventRouteHint
 ) => void
 
-/**
- * 创建当前时间戳，统一聊天落库记录的时间格式。
- */
-function createTimestamp(): string {
-  return new Date().toISOString()
-}
-
-/**
- * 根据 MIME 类型确定附件在聊天域里的粗粒度类型。
- */
-function resolveAttachmentKind(mimeType: string): ChatAttachmentKind {
-  return mimeType.startsWith('image/') ? 'image' : 'file'
-}
-
-/**
- * 把 renderer 传入的二进制附件数据转换成 Node Buffer。
- */
-function toBuffer(data: ArrayBuffer | ArrayBufferView): Buffer {
-  if (data instanceof ArrayBuffer) {
-    return Buffer.from(data)
-  }
-
-  return Buffer.from(data.buffer, data.byteOffset, data.byteLength)
-}
-
 export {
   isOpenAICompatibleProvider,
   isSupportedChatProvider,
@@ -191,6 +164,7 @@ export class SessionManager {
   private readonly agentEventApplier: SessionAgentEventApplier
   private readonly agentTargetRuntime: SessionAgentTargetRuntime
   private readonly agentRuntime: SessionAgentRuntime
+  private readonly attachmentRuntime: SessionAttachmentRuntime
   private readonly attachmentsDirectory: string
   private readonly messagesRepository: MessagesRepositoryPort
   private readonly messageTurnRuntime: SessionMessageTurnRuntime
@@ -258,6 +232,9 @@ export class SessionManager {
         this.toolPermissionRuntime.trackPendingToolPermission(toolInvocation, operationId)
     })
     this.attachmentsDirectory = attachmentsDirectory ?? join(process.cwd(), '.moon-attachments')
+    this.attachmentRuntime = new SessionAttachmentRuntime({
+      attachmentsDirectory: this.attachmentsDirectory
+    })
     this.operationLifecycleRuntime = new SessionOperationLifecycleRuntime({
       agentOperationsRepository,
       messagesRepository,
@@ -360,20 +337,8 @@ export class SessionManager {
    */
   async importAttachment(input: ImportChatAttachmentInput): Promise<ChatAttachmentRecord> {
     const parsedInput = importChatAttachmentInputSchema.parse(input)
-    const id = randomUUID()
-    const createdAt = createTimestamp()
 
-    await mkdir(this.attachmentsDirectory, { recursive: true })
-    await writeFile(join(this.attachmentsDirectory, id), toBuffer(parsedInput.data))
-
-    return {
-      id,
-      name: parsedInput.name,
-      mimeType: parsedInput.mimeType,
-      size: parsedInput.size,
-      kind: resolveAttachmentKind(parsedInput.mimeType),
-      createdAt
-    }
+    return this.attachmentRuntime.importAttachment(parsedInput)
   }
 
   /**
