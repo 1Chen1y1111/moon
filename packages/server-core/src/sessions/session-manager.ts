@@ -60,6 +60,7 @@ import type { SessionEventRouteHint } from './handlers'
 import { SessionAgentEventApplier } from './session-agent-event-applier'
 import { SessionAgentTargetRuntime } from './session-agent-target-runtime'
 import { SessionAttachmentRuntime } from './session-attachment-runtime'
+import { SessionConversationAccessRuntime } from './session-conversation-access-runtime'
 import {
   SessionMessageTurnRuntime,
   createChatTitle
@@ -166,15 +167,12 @@ export class SessionManager {
   private readonly agentRuntime: SessionAgentRuntime
   private readonly attachmentRuntime: SessionAttachmentRuntime
   private readonly attachmentsDirectory: string
-  private readonly messagesRepository: MessagesRepositoryPort
+  private readonly conversationAccessRuntime: SessionConversationAccessRuntime
   private readonly messageTurnRuntime: SessionMessageTurnRuntime
   private readonly operationLifecycleRuntime: SessionOperationLifecycleRuntime
   private readonly operationRunnerRuntime: SessionOperationRunnerRuntime
   private readonly sendMessageRuntime: SessionSendMessageRuntime
-  private readonly sessionsRepository: SessionsRepositoryPort
-  private readonly threadsRepository: ThreadsRepositoryPort
   private readonly toolPermissionRuntime: SessionToolPermissionRuntime
-  private readonly topicsRepository: TopicsRepositoryPort
 
   /**
    * 注入会话运行时所需的持久化端口和 backend 工厂。
@@ -235,6 +233,12 @@ export class SessionManager {
     this.attachmentRuntime = new SessionAttachmentRuntime({
       attachmentsDirectory: this.attachmentsDirectory
     })
+    this.conversationAccessRuntime = new SessionConversationAccessRuntime({
+      messagesRepository,
+      sessionsRepository,
+      threadsRepository,
+      topicsRepository
+    })
     this.operationLifecycleRuntime = new SessionOperationLifecycleRuntime({
       agentOperationsRepository,
       messagesRepository,
@@ -268,17 +272,13 @@ export class SessionManager {
       createMessageTurn: (input) => this.createMessageTurn(input),
       runOperation: (input, onEvent) => this.runOperation(input, onEvent)
     })
-    this.messagesRepository = messagesRepository
-    this.sessionsRepository = sessionsRepository
-    this.threadsRepository = threadsRepository
-    this.topicsRepository = topicsRepository
   }
 
   /**
    * 列出当前 runtime 可见的聊天会话。
    */
   listSessions(): Promise<SessionRecord[]> {
-    return this.sessionsRepository.list()
+    return this.conversationAccessRuntime.listSessions()
   }
 
   /**
@@ -287,7 +287,7 @@ export class SessionManager {
   async listTopics(input: ListChatTopicsInput): Promise<TopicRecord[]> {
     const parsedInput = listChatTopicsInputSchema.parse(input)
 
-    return this.topicsRepository.listBySession(parsedInput.sessionId)
+    return this.conversationAccessRuntime.listTopics(parsedInput.sessionId)
   }
 
   /**
@@ -296,7 +296,7 @@ export class SessionManager {
   async listThreads(input: ListChatThreadsInput): Promise<ThreadRecord[]> {
     const parsedInput = listChatThreadsInputSchema.parse(input)
 
-    return this.threadsRepository.listByTopic(parsedInput.topicId)
+    return this.conversationAccessRuntime.listThreads(parsedInput.topicId)
   }
 
   /**
@@ -305,13 +305,7 @@ export class SessionManager {
   async getMessages(input: GetChatMessagesInput): Promise<MessageRecord[]> {
     const parsedInput = getChatMessagesInputSchema.parse(input)
 
-    if (parsedInput.threadId !== undefined) {
-      return this.messagesRepository.listByThread(parsedInput.threadId)
-    }
-
-    const thread = await this.getDefaultThread(parsedInput.sessionId)
-
-    return thread === null ? [] : this.messagesRepository.listByThread(thread.id)
+    return this.conversationAccessRuntime.getMessages(parsedInput)
   }
 
   /**
@@ -329,7 +323,7 @@ export class SessionManager {
   async deleteSession(input: DeleteChatSessionInput): Promise<void> {
     const parsedInput = deleteChatSessionInputSchema.parse(input)
 
-    await this.sessionsRepository.deleteById(parsedInput.sessionId)
+    await this.conversationAccessRuntime.deleteSession(parsedInput.sessionId)
   }
 
   /**
@@ -409,14 +403,5 @@ export class SessionManager {
       toolInvocationId: parsedInput.toolInvocationId,
       reason: parsedInput.reason
     })
-  }
-
-  /**
-   * 读取会话默认 thread，当前策略使用列表首项作为默认值。
-   */
-  private async getDefaultThread(sessionId: string): Promise<ThreadRecord | null> {
-    const threads = await this.threadsRepository.listBySession(sessionId)
-
-    return threads[0] ?? null
   }
 }
