@@ -5,9 +5,18 @@
  * 测试只覆盖已启动 operation 的 backend 执行、事件应用和 done/error 收尾。
  */
 
+import { mkdtemp, writeFile } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+
 import { describe, expect, it, vi } from 'vitest'
 
-import type { AgentBackend, AgentBackendConfig, AgentEvent } from '@moon/shared/agent'
+import type {
+  AgentBackend,
+  AgentBackendConfig,
+  AgentEvent,
+  MessageAttachment
+} from '@moon/shared/agent'
 import { createDefaultLlmConnection } from '@moon/shared/config'
 import type {
   AgentOperationRecord,
@@ -141,10 +150,12 @@ function createBackend(events: AgentEvent[], throwError?: Error): AgentBackend {
  * 创建 operation runtime 测试使用的内存仓储和协作者。
  */
 function createRuntimeFixture(input: {
+  attachmentsDirectory?: string
   backend?: AgentBackend
   events?: AgentEvent[]
   operation?: AgentOperationRecord
   throwError?: Error
+  userMessage?: MessageRecord
 } = {}): {
   agentRuntime: SessionAgentRuntime
   assistantMessage: MessageRecord
@@ -163,7 +174,7 @@ function createRuntimeFixture(input: {
 } {
   const scope = createScope()
   const operation = input.operation ?? createOperation()
-  const userMessage = createMessage('user')
+  const userMessage = input.userMessage ?? createMessage('user')
   const assistantMessage = createMessage('assistant')
   const operations = new Map([[operation.id, operation]])
   const messages = new Map([
@@ -261,7 +272,7 @@ function createRuntimeFixture(input: {
       }
     },
     agentRuntime,
-    attachmentsDirectory: '/tmp/moon-attachments',
+    attachmentsDirectory: input.attachmentsDirectory ?? '/tmp/moon-attachments',
     messagesRepository: {
       listByOperation: async (operationId) =>
         [...messages.values()].filter((message) => message.operationId === operationId),
@@ -366,6 +377,105 @@ describe('SessionOperationRuntime', () => {
     expect(releaseBackendSpy).toHaveBeenCalledWith('operation-1')
     expect(releaseListenerSpy).toHaveBeenCalledWith('operation-1')
     expect(releaseCallbacksSpy).toHaveBeenCalledWith('session-1')
+  })
+
+  it('passes stored current-turn attachments to the backend with provider-ready content', async () => {
+    const attachmentsDirectory = await mkdtemp(join(tmpdir(), 'moon-operation-attachments-'))
+    const textId = 'text-attachment'
+    const imageId = 'image-attachment'
+    const pdfId = 'pdf-attachment'
+    const imageData = Buffer.from([1, 2, 3, 4])
+    const pdfData = Buffer.from('pdf bytes')
+
+    await Promise.all([
+      writeFile(join(attachmentsDirectory, textId), 'hello attachment'),
+      writeFile(join(attachmentsDirectory, imageId), imageData),
+      writeFile(join(attachmentsDirectory, pdfId), pdfData)
+    ])
+
+    const chatInputs: Array<{ message: string; attachments?: MessageAttachment[] }> = []
+    const backend = createBackend([])
+
+    backend.chat = async function* (message, attachments) {
+      chatInputs.push({ message, attachments })
+      yield { type: 'text_delta', text: 'attachments received' }
+    }
+
+    const fixture = createRuntimeFixture({
+      attachmentsDirectory,
+      backend,
+      userMessage: createMessage('user', {
+        content: 'inspect these files',
+        attachments: [
+          {
+            id: textId,
+            name: 'note.txt',
+            mimeType: 'text/plain',
+            size: 16,
+            kind: 'file',
+            createdAt: timestamp
+          },
+          {
+            id: imageId,
+            name: 'diagram.png',
+            mimeType: 'image/png',
+            size: imageData.byteLength,
+            kind: 'image',
+            createdAt: timestamp
+          },
+          {
+            id: pdfId,
+            name: 'spec.pdf',
+            mimeType: 'application/pdf',
+            size: pdfData.byteLength,
+            kind: 'file',
+            createdAt: timestamp
+          }
+        ]
+      })
+    })
+
+    await executeRuntime(fixture)
+
+    expect(chatInputs).toHaveLength(1)
+    expect(chatInputs[0]?.message).toContain(
+      'inspect these files\n\n[Attachment: note.txt]\nhello attachment'
+    )
+    expect(chatInputs[0]?.message).toContain(
+      `[Attachment: diagram.png]\n[Stored at: ${join(attachmentsDirectory, imageId)}]`
+    )
+    expect(chatInputs[0]?.message).toContain(
+      `[Attachment: spec.pdf]\n[Stored at: ${join(attachmentsDirectory, pdfId)}]`
+    )
+    expect(chatInputs[0]?.attachments).toEqual([
+      {
+        id: textId,
+        type: 'text',
+        name: 'note.txt',
+        mimeType: 'text/plain',
+        size: 16,
+        path: join(attachmentsDirectory, textId)
+      },
+      {
+        id: imageId,
+        type: 'image',
+        name: 'diagram.png',
+        mimeType: 'image/png',
+        size: imageData.byteLength,
+        path: join(attachmentsDirectory, imageId),
+        base64: imageData.toString('base64')
+      },
+      {
+        id: pdfId,
+        type: 'pdf',
+        name: 'spec.pdf',
+        mimeType: 'application/pdf',
+        size: pdfData.byteLength,
+        path: join(attachmentsDirectory, pdfId),
+        base64: pdfData.toString('base64')
+      }
+    ])
+    expect(fixture.capturedConfigs[0]?.messages.at(-1)?.content).toBe(chatInputs[0]?.message)
   })
 
   it('marks operation and assistant as error when backend emits error', async () => {

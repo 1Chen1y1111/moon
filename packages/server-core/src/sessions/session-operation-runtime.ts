@@ -1,6 +1,6 @@
 /**
  * 负责执行已经启动的单次 agent operation。
- * 它只处理 backend message 构造、事件消费和 done/error 收尾，不拥有会话创建或取消入口。
+ * 它只处理 backend 输入构造、事件消费和 done/error 收尾，不拥有会话创建或取消入口。
  */
 
 import { readFile } from 'node:fs/promises'
@@ -9,7 +9,8 @@ import { join } from 'node:path'
 import {
   createAgentBackendMessage,
   type AgentBackendMessage,
-  type AgentBackendWorkspace
+  type AgentBackendWorkspace,
+  type MessageAttachment
 } from '@moon/shared/agent'
 import type { NormalizedLlmConnection } from '@moon/shared/config'
 import type {
@@ -118,18 +119,68 @@ async function toAgentBackendMessage(
   if (message.role === 'user') {
     if ((message.attachments?.length ?? 0) > 0) {
       for (const attachment of message.attachments ?? []) {
-        const data = await readFile(join(attachmentsDirectory, attachment.id))
+        const attachmentPath = join(attachmentsDirectory, attachment.id)
 
         if (isTextAttachment(attachment)) {
+          const data = await readFile(attachmentPath)
+
           content = `${content}\n\n[Attachment: ${attachment.name}]\n${data.toString('utf8')}`
         } else {
-          content = `${content}\n\n[Attachment: ${attachment.name}]\n非文本附件暂未注入 backend prompt。`
+          content = `${content}\n\n[Attachment: ${attachment.name}]\n[Stored at: ${attachmentPath}]\n非文本附件内容未序列化到文本历史。`
         }
       }
     }
   }
 
   return createAgentBackendMessage({ ...message, content })
+}
+
+/**
+ * 根据聊天附件元数据确定统一 agent attachment 类型，具体 provider 格式由 backend 再适配。
+ */
+function resolveAgentAttachmentType(
+  attachment: ChatAttachmentRecord
+): MessageAttachment['type'] {
+  if (attachment.mimeType.startsWith('image/')) {
+    return 'image'
+  }
+
+  if (attachment.mimeType === 'application/pdf') {
+    return 'pdf'
+  }
+
+  if (isTextAttachment(attachment)) {
+    return 'text'
+  }
+
+  if (attachment.mimeType.startsWith('audio/')) {
+    return 'audio'
+  }
+
+  return 'unknown'
+}
+
+/**
+ * 将当前用户消息的持久化附件转换成 backend 输入；图片和 PDF 额外携带 base64 内容。
+ */
+async function createAgentMessageAttachment(
+  attachment: ChatAttachmentRecord,
+  attachmentsDirectory: string
+): Promise<MessageAttachment> {
+  const type = resolveAgentAttachmentType(attachment)
+  const path = join(attachmentsDirectory, attachment.id)
+  const shouldInlineBinary = type === 'image' || type === 'pdf'
+  const base64 = shouldInlineBinary ? (await readFile(path)).toString('base64') : undefined
+
+  return {
+    id: attachment.id,
+    type,
+    name: attachment.name,
+    mimeType: attachment.mimeType,
+    size: attachment.size,
+    path,
+    ...(base64 === undefined ? {} : { base64 })
+  }
 }
 
 /**
@@ -203,8 +254,21 @@ export class SessionOperationRuntime {
           .map((message) => toAgentBackendMessage(message, this.attachmentsDirectory))
       )
     ).filter((message): message is AgentBackendMessage => message !== null)
-    const currentUserMessage =
-      [...previousMessages].reverse().find((message) => message.role === 'user')?.content ?? ''
+    const currentUserRecord = [...previousMessages]
+      .reverse()
+      .find((message) => message.role === 'user')
+    const currentUserMessage = currentUserRecord?.content ?? ''
+    const currentProviderMessage =
+      [...backendMessages].reverse().find((message) => message.role === 'user')?.content ??
+      currentUserMessage
+    const currentAttachments =
+      currentUserRecord === undefined
+        ? []
+        : await Promise.all(
+            (currentUserRecord.attachments ?? []).map((attachment) =>
+              createAgentMessageAttachment(attachment, this.attachmentsDirectory)
+            )
+          )
     const { agentBackend } = await this.agentRuntime.createBackend({
       connection,
       messages: backendMessages,
@@ -220,10 +284,14 @@ export class SessionOperationRuntime {
     }
 
     try {
-      const agentEvents = agentBackend.chat(currentUserMessage, undefined, {
-        abortSignal,
-        turnId: operation.id
-      })
+      const agentEvents = agentBackend.chat(
+        currentProviderMessage,
+        currentAttachments.length === 0 ? undefined : currentAttachments,
+        {
+          abortSignal,
+          turnId: operation.id
+        }
+      )
       let agentEventResult = await agentEvents.next()
 
       while (!agentEventResult.done) {

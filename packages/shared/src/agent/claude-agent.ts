@@ -1,9 +1,9 @@
 /**
  * 负责把 Claude Agent SDK 适配成 Moon 的统一 agent 实现。
- * 它处理 Claude query、resume 失效恢复和事件流，不负责会话持久化、IPC 或 renderer 状态。
+ * 它处理 Claude query、多模态输入、resume 失效恢复和事件流，不负责持久化或 IPC。
  */
 
-import { query } from '@anthropic-ai/claude-agent-sdk'
+import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 
 import { BaseAgent } from './base-agent'
 import { ClaudeEventAdapter } from './backend/claude/event-adapter'
@@ -81,6 +81,95 @@ function isAssistantContentEvent(event: AgentEvent): boolean {
   return false
 }
 
+type ClaudeImageMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp'
+
+type ClaudeUserContentBlock =
+  | { type: 'text'; text: string }
+  | {
+      type: 'image'
+      source: { type: 'base64'; media_type: ClaudeImageMediaType; data: string }
+    }
+  | {
+      type: 'document'
+      source: { type: 'base64'; media_type: 'application/pdf'; data: string }
+    }
+
+/**
+ * 将常见图片 MIME 映射成 Claude SDK 支持的 image media type。
+ */
+function resolveClaudeImageMediaType(mimeType: string): ClaudeImageMediaType | null {
+  if (
+    mimeType === 'image/jpeg' ||
+    mimeType === 'image/png' ||
+    mimeType === 'image/gif' ||
+    mimeType === 'image/webp'
+  ) {
+    return mimeType
+  }
+
+  return null
+}
+
+/**
+ * 创建只产出一次用户消息的 SDK 输入流，供图片和 PDF content blocks 使用。
+ */
+async function* createClaudeUserMessageStream(
+  message: SDKUserMessage
+): AsyncGenerator<SDKUserMessage, void, void> {
+  yield message
+}
+
+/**
+ * 将 provider prompt 和当前 turn 二进制附件组合成 Claude query 输入。
+ * 没有可内联的图片或 PDF 时保持字符串 prompt，避免改变普通文本调用路径。
+ */
+function createClaudeQueryPrompt(
+  textPrompt: string,
+  attachments?: MessageAttachment[]
+): string | AsyncIterable<SDKUserMessage> {
+  const content: ClaudeUserContentBlock[] = [{ type: 'text', text: textPrompt }]
+
+  for (const attachment of attachments ?? []) {
+    if (attachment.type === 'image' && attachment.base64 !== undefined) {
+      const mediaType = resolveClaudeImageMediaType(attachment.mimeType)
+
+      if (mediaType !== null) {
+        content.push({
+          type: 'image',
+          source: {
+            type: 'base64',
+            media_type: mediaType,
+            data: attachment.base64
+          }
+        })
+      }
+    } else if (attachment.type === 'pdf' && attachment.base64 !== undefined) {
+      content.push({
+        type: 'document',
+        source: {
+          type: 'base64',
+          media_type: 'application/pdf',
+          data: attachment.base64
+        }
+      })
+    }
+  }
+
+  if (content.length === 1) {
+    return textPrompt
+  }
+
+  return createClaudeUserMessageStream({
+    type: 'user',
+    message: {
+      role: 'user',
+      content
+    },
+    parent_tool_use_id: null,
+    session_id: ''
+  } as SDKUserMessage)
+}
+
 export class ClaudeAgent extends BaseAgent {
   private readonly apiKey?: string
   private readonly baseUrl?: string
@@ -119,8 +208,6 @@ export class ClaudeAgent extends BaseAgent {
     attachments?: MessageAttachment[],
     options: AgentChatOptions = {}
   ): AsyncGenerator<AgentEvent, void, void> {
-    void attachments
-
     const turn = this.startTurn(options)
     const { abortController, eventQueue } = turn
 
@@ -136,6 +223,7 @@ export class ClaudeAgent extends BaseAgent {
         const wasResuming = resumeSessionId !== undefined
         const promptMessages = wasResuming ? [] : this.messages
         const prompt = this.buildPrompt(message, promptMessages)
+        const queryPrompt = createClaudeQueryPrompt(prompt, attachments)
         let stderrBuffer: ClaudeQueryRuntime['stderrBuffer'] | undefined
         let runtimeSummary: string | undefined
         let hasAssistantContent = false
@@ -166,7 +254,7 @@ export class ClaudeAgent extends BaseAgent {
           runtimeSummary = queryRuntime.runtimeSummary
 
           const runner = new ClaudeTurnStreamRunner({
-            sdkEvents: this.queryClaude({ prompt, options: queryOptions }),
+            sdkEvents: this.queryClaude({ prompt: queryPrompt, options: queryOptions }),
             eventQueue,
             eventAdapter: this.eventAdapter,
             normalizeAgentEvent: (agentEvent) => {

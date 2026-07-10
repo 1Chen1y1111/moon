@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it, vi } from 'vitest'
-import type { Options } from '@anthropic-ai/claude-agent-sdk'
+import type { Options, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 
 import {
   ClaudeAgent,
@@ -21,6 +21,25 @@ class SourceActivationTestClaudeAgent extends ClaudeAgent {
   setPendingSourceActivationRestartForTest(pending: PendingSourceActivationRestart): void {
     this.setPendingSourceActivationRestart(pending)
   }
+}
+
+/**
+ * 读取 Claude query 的流式用户输入；字符串 prompt 在调用该 helper 时视为测试失败。
+ */
+async function collectSdkUserMessages(
+  prompt: string | AsyncIterable<SDKUserMessage>
+): Promise<SDKUserMessage[]> {
+  if (typeof prompt === 'string') {
+    throw new Error('Expected an SDK user message stream.')
+  }
+
+  const messages: SDKUserMessage[] = []
+
+  for await (const message of prompt) {
+    messages.push(message)
+  }
+
+  return messages
 }
 
 /**
@@ -450,6 +469,202 @@ describe('ClaudeAgent', () => {
     expect(queryCalls[1]?.[0].prompt).toContain('second turn')
     expect(queryCalls[1]?.[0].prompt).not.toContain('previous turn')
     expect(queryCalls[1]?.[0].options).toMatchObject({ resume: 'sdk-session-1' })
+  })
+
+  it('builds Claude image and PDF content blocks from current-turn attachments', async () => {
+    const capturedMessages: SDKUserMessage[][] = []
+    const queryClaude = vi.fn(async function* ({
+      prompt
+    }: {
+      prompt: string | AsyncIterable<SDKUserMessage>
+    }) {
+      capturedMessages.push(await collectSdkUserMessages(prompt))
+      yield {
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: 'attachments understood' }] }
+      }
+    })
+    const agent = new ClaudeAgent({
+      model: 'claude-sonnet',
+      messages: [],
+      queryClaude: queryClaude as never
+    })
+
+    for await (const _event of agent.chat('inspect attachments', [
+      {
+        type: 'image',
+        name: 'diagram.png',
+        mimeType: 'image/png',
+        size: 4,
+        base64: 'AQIDBA=='
+      },
+      {
+        type: 'pdf',
+        name: 'spec.pdf',
+        mimeType: 'application/pdf',
+        size: 9,
+        base64: 'cGRmIGJ5dGVz'
+      }
+    ])) {
+      // 消费事件流以触发 SDK query mock。
+    }
+
+    expect(capturedMessages).toHaveLength(1)
+    expect(capturedMessages[0]).toEqual([
+      {
+        type: 'user',
+        message: {
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: expect.stringContaining('inspect attachments')
+            },
+            {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: 'image/png',
+                data: 'AQIDBA=='
+              }
+            },
+            {
+              type: 'document',
+              source: {
+                type: 'base64',
+                media_type: 'application/pdf',
+                data: 'cGRmIGJ5dGVz'
+              }
+            }
+          ]
+        },
+        parent_tool_use_id: null,
+        session_id: ''
+      }
+    ])
+  })
+
+  it('keeps text-only attachments on the normal string prompt path', async () => {
+    const prompts: Array<string | AsyncIterable<SDKUserMessage>> = []
+    const queryClaude = vi.fn(async function* ({
+      prompt
+    }: {
+      prompt: string | AsyncIterable<SDKUserMessage>
+    }) {
+      prompts.push(prompt)
+      yield {
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: 'text attachment understood' }] }
+      }
+    })
+    const agent = new ClaudeAgent({
+      model: 'claude-sonnet',
+      messages: [],
+      queryClaude: queryClaude as never
+    })
+
+    for await (const _event of agent.chat('read attached text', [
+      {
+        type: 'text',
+        name: 'note.txt',
+        mimeType: 'text/plain',
+        size: 5,
+        path: '/tmp/note.txt'
+      }
+    ])) {
+      // 消费事件流以触发 SDK query mock。
+    }
+
+    expect(prompts).toHaveLength(1)
+    expect(typeof prompts[0]).toBe('string')
+    expect(prompts[0]).toEqual(expect.stringContaining('read attached text'))
+  })
+
+  it('recreates the same binary attachment input when resume recovery retries fresh', async () => {
+    let attempt = 0
+    const capturedMessages: SDKUserMessage[][] = []
+    const queryClaude = vi.fn(async function* ({
+      prompt
+    }: {
+      prompt: string | AsyncIterable<SDKUserMessage>
+    }) {
+      attempt += 1
+      capturedMessages.push(await collectSdkUserMessages(prompt))
+
+      if (attempt === 1) {
+        yield {
+          type: 'result',
+          subtype: 'error_during_execution',
+          is_error: true,
+          session_id: 'sdk-session-expired',
+          errors: ['No conversation found with session ID: sdk-session-expired']
+        }
+        return
+      }
+
+      yield {
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: 'restored with image' }] }
+      }
+    })
+    const agentSessionState = createAgentSessionRuntimeState()
+    const agent = new ClaudeAgent({
+      agentSessionState,
+      model: 'claude-sonnet',
+      messages: [
+        { role: 'user', content: 'previous question' },
+        { role: 'assistant', content: 'previous answer' },
+        { role: 'user', content: 'inspect image' }
+      ],
+      queryClaude: queryClaude as never
+    })
+    const imageAttachment = {
+      type: 'image' as const,
+      name: 'diagram.png',
+      mimeType: 'image/png',
+      size: 4,
+      base64: 'AQIDBA=='
+    }
+
+    setProviderSessionId(agentSessionState, 'sdk-session-expired')
+
+    for await (const _event of agent.chat('inspect image', [imageAttachment])) {
+      // 消费恢复前后的两次 query。
+    }
+
+    const firstContent = capturedMessages[0]?.[0]?.message.content
+    const secondContent = capturedMessages[1]?.[0]?.message.content
+
+    expect(queryClaude).toHaveBeenCalledTimes(2)
+    expect(capturedMessages).toHaveLength(2)
+    expect(firstContent).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'image' }),
+        expect.objectContaining({
+          type: 'text',
+          text: expect.not.stringContaining('previous question')
+        })
+      ])
+    )
+    expect(secondContent).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'image' }),
+        expect.objectContaining({
+          type: 'text',
+          text: expect.stringContaining('previous question')
+        })
+      ])
+    )
+    expect(
+      Array.isArray(firstContent)
+        ? firstContent.filter((block) => block.type === 'image')
+        : []
+    ).toHaveLength(1)
+    expect(
+      Array.isArray(secondContent)
+        ? secondContent.filter((block) => block.type === 'image')
+        : []
+    ).toHaveLength(1)
   })
 
   it('clears an expired resumed session and retries once with Moon message history', async () => {
