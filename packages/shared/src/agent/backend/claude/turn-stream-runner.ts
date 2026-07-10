@@ -1,6 +1,6 @@
 /**
- * 负责把 Claude SDK 事件流和 Moon 内部事件队列合流为单轮 AgentEvent。
- * 它不构造 prompt、SDK options 或权限规则，只处理 turn 内事件编排。
+ * 负责把单次 Claude SDK query 事件流和 Moon 内部事件队列合流为 AgentEvent。
+ * 它不构造 prompt、SDK options 或恢复策略，只处理 attempt 内事件编排。
  */
 
 import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
@@ -12,6 +12,7 @@ import type { AgentEvent } from '../types'
 import type { ClaudeEventAdapter } from './event-adapter'
 
 type ToolResultAgentEvent = Extract<AgentEvent, { type: 'tool_result' }>
+type CompleteAgentEvent = Extract<AgentEvent, { type: 'complete' }>
 
 type SdkEventResult = IteratorResult<SDKMessage, void>
 type QueuedEventResult = IteratorResult<AgentEvent, void>
@@ -23,6 +24,10 @@ export type ClaudeTurnStreamRunnerInput = {
   normalizeAgentEvent: (event: AgentEvent) => AgentEvent
   handleToolResultError: (event: ToolResultAgentEvent) => void | Promise<void>
   consumePendingSourceActivationRestart: () => PendingSourceActivationRestart | null
+}
+
+export type ClaudeTurnStreamResult = {
+  completionEvent: CompleteAgentEvent | null
 }
 
 /**
@@ -56,11 +61,12 @@ export class ClaudeTurnStreamRunner {
   }
 
   /**
-   * 运行单轮事件合流；SDK 流结束时关闭队列、flush 队列事件，并在需要时补 complete。
+   * 运行单次 query 的事件合流；complete 暂存在返回值中，由调用方确认无需恢复后再发出。
    */
-  async *run(): AsyncGenerator<AgentEvent, void, void> {
-    let hasCompleteEvent = false
+  async *run(): AsyncGenerator<AgentEvent, ClaudeTurnStreamResult, void> {
+    let completionEvent: CompleteAgentEvent | null = null
     let eventQueueCompleted = false
+    let sdkEventsCompleted = false
     const sourceActivationDrain = new SourceActivationDrainController('batch-boundary')
     const sdkEvents = this.sdkEvents[Symbol.asyncIterator]()
     const queuedEvents = this.eventQueue.drain()
@@ -97,15 +103,17 @@ export class ClaudeTurnStreamRunner {
           }
 
           if (result.result.value.type === 'complete') {
-            hasCompleteEvent = true
+            completionEvent = this.selectCompletionEvent(completionEvent, result.result.value)
+          } else {
+            yield result.result.value
           }
 
-          yield result.result.value
           queuedEventResultPromise = queuedEvents.next()
           continue
         }
 
         if (result.result.done) {
+          sdkEventsCompleted = true
           completeEventQueue()
           break
         }
@@ -116,7 +124,8 @@ export class ClaudeTurnStreamRunner {
           const normalizedEvent = this.normalizeAgentEvent(agentEvent)
 
           if (normalizedEvent.type === 'complete') {
-            hasCompleteEvent = true
+            completionEvent = this.selectCompletionEvent(completionEvent, normalizedEvent)
+            continue
           }
 
           if (normalizedEvent.type === 'tool_result' && normalizedEvent.isError) {
@@ -139,7 +148,7 @@ export class ClaudeTurnStreamRunner {
         if (sourceActivatedEvent !== null) {
           completeEventQueue()
           yield this.eventAdapter.withCurrentTurnId(sourceActivatedEvent)
-          return
+          return { completionEvent: null }
         }
       }
 
@@ -148,19 +157,36 @@ export class ClaudeTurnStreamRunner {
 
         while (queuedResult.done !== true) {
           if (queuedResult.value.type === 'complete') {
-            hasCompleteEvent = true
+            completionEvent = this.selectCompletionEvent(completionEvent, queuedResult.value)
+          } else {
+            yield queuedResult.value
           }
 
-          yield queuedResult.value
           queuedResult = await queuedEvents.next()
         }
       }
 
-      if (!hasCompleteEvent) {
-        yield { type: 'complete' }
-      }
+      return { completionEvent: completionEvent ?? { type: 'complete' } }
     } finally {
       completeEventQueue()
+
+      if (!sdkEventsCompleted) {
+        try {
+          await sdkEvents.return?.()
+        } catch {
+          // 保留触发流退出的原始错误，SDK iterator 关闭失败不覆盖主流程诊断。
+        }
+      }
     }
+  }
+
+  /**
+   * 合并重复 complete 时优先保留携带 usage 的事件。
+   */
+  private selectCompletionEvent(
+    current: CompleteAgentEvent | null,
+    candidate: CompleteAgentEvent
+  ): CompleteAgentEvent {
+    return current?.usage !== undefined && candidate.usage === undefined ? current : candidate
   }
 }

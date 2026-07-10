@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest'
 
 import {
   addActivatedSourceSlug,
+  clearProviderSessionId,
   createAgentSessionRuntimeState,
   hasActivatedSourceSlug,
   setProviderSessionId
@@ -38,5 +39,14 @@ describe('AgentSessionRuntimeState', () => {
 
     expect(setProviderSessionId(state, 'sdk-session-1')).toBe('sdk-session-1')
     expect(state.providerSessionId).toBe('sdk-session-1')
+  })
+
+  it('clears the provider session id without replacing the runtime state', () => {
+    const state = createAgentSessionRuntimeState()
+
+    setProviderSessionId(state, 'sdk-session-1')
+    clearProviderSessionId(state)
+
+    expect(state.providerSessionId).toBeUndefined()
   })
 })

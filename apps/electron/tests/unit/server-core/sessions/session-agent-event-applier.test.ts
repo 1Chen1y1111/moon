@@ -110,6 +110,7 @@ function createOperation(overrides: Partial<AgentOperationRecord> = {}): AgentOp
  */
 function createApplierFixture(): {
   applier: SessionAgentEventApplier
+  clearProviderSessionId: ReturnType<typeof vi.fn>
   clearPendingToolPermission: ReturnType<typeof vi.fn>
   events: EventCall[]
   messages: Map<string, MessageRecord>
@@ -130,6 +131,7 @@ function createApplierFixture(): {
   const events: EventCall[] = []
   const recordActivatedSource = vi.fn()
   const recordProviderSessionId = vi.fn()
+  const clearProviderSessionId = vi.fn()
   const trackPendingToolPermission = vi.fn()
   const clearPendingToolPermission = vi.fn()
   const input: SessionAgentEventApplierInput = {
@@ -141,6 +143,7 @@ function createApplierFixture(): {
         return operation
       }
     },
+    clearProviderSessionId,
     clearPendingToolPermission,
     messagesRepository: {
       listByOperation: async (operationId) =>
@@ -179,6 +182,7 @@ function createApplierFixture(): {
 
   return {
     applier: new SessionAgentEventApplier(input),
+    clearProviderSessionId,
     clearPendingToolPermission,
     events,
     messages,
@@ -328,6 +332,32 @@ describe('SessionAgentEventApplier', () => {
     expect(operation.metadata?.lastAgentInfo).toMatchObject({
       message: 'Ready',
       level: 'success'
+    })
+  })
+
+  it('clears provider session state and thread metadata without changing operation audit data', async () => {
+    const fixture = createApplierFixture()
+    const operation = createOperation({
+      metadata: {
+        providerSessionId: 'claude-session-expired',
+        auditMarker: 'preserved'
+      }
+    })
+
+    fixture.scope.thread.metadata = {
+      providerSessionId: 'claude-session-expired',
+      workspaceMarker: 'preserved'
+    }
+    fixture.threads.set(fixture.scope.thread.id, fixture.scope.thread)
+
+    const result = await applyEvent(fixture, { type: 'session_id_clear' }, { operation })
+    const persistedThread = fixture.threads.get(fixture.scope.thread.id)
+
+    expect(fixture.clearProviderSessionId).toHaveBeenCalledWith('thread-1')
+    expect(persistedThread?.metadata).toEqual({ workspaceMarker: 'preserved' })
+    expect(result.operation.metadata).toEqual({
+      providerSessionId: 'claude-session-expired',
+      auditMarker: 'preserved'
     })
   })
 

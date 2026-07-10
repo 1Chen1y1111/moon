@@ -184,6 +184,21 @@ describe('SessionAgentRuntime', () => {
     expect(second.agentSessionState.providerSessionId).toBe('sdk-session-current')
   })
 
+  it('clears provider session state for only the requested thread', () => {
+    const runtime = new SessionAgentRuntime({
+      createAgentBackend: vi.fn(() => createBackend())
+    })
+
+    runtime.recordProviderSessionId('thread-1', 'sdk-session-1')
+    runtime.recordProviderSessionId('thread-2', 'sdk-session-2')
+    runtime.clearProviderSessionId('thread-1')
+
+    expect(runtime.resolveAgentSessionRuntimeState('thread-1').providerSessionId).toBeUndefined()
+    expect(runtime.resolveAgentSessionRuntimeState('thread-2').providerSessionId).toBe(
+      'sdk-session-2'
+    )
+  })
+
   it('ignores missing, empty, or non-string provider session metadata', async () => {
     const runtime = new SessionAgentRuntime({
       createAgentBackend: vi.fn(() => createBackend())

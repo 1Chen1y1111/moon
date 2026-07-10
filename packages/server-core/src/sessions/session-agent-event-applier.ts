@@ -48,6 +48,7 @@ export type SessionAgentEventApplicationResult = {
  */
 export type SessionAgentEventApplierInput = {
   agentOperationsRepository: AgentOperationsRepositoryPort
+  clearProviderSessionId: (threadId: string) => void
   clearPendingToolPermission: (toolInvocationId: string) => void
   messagesRepository: MessagesRepositoryPort
   recordActivatedSource: (threadId: string, sourceSlug: string) => void
@@ -236,6 +237,21 @@ function applyProviderSessionIdToThread(
 }
 
 /**
+ * 从 thread metadata 删除失效的 provider session id，同时保留其他 thread 状态。
+ */
+function clearProviderSessionIdFromThread(thread: ThreadRecord, timestamp: string): ThreadRecord {
+  const metadata = { ...(thread.metadata ?? {}) }
+
+  delete metadata.providerSessionId
+
+  return {
+    ...thread,
+    metadata,
+    updatedAt: timestamp
+  }
+}
+
+/**
  * 把 agent 状态事件记录到 operation metadata，只保存最后一次状态快照。
  */
 function applyAgentStatusToOperation(
@@ -284,6 +300,7 @@ function applyAgentInfoToOperation(
  */
 export class SessionAgentEventApplier {
   private readonly agentOperationsRepository: AgentOperationsRepositoryPort
+  private readonly clearProviderSessionId: (threadId: string) => void
   private readonly clearPendingToolPermission: (toolInvocationId: string) => void
   private readonly messagesRepository: MessagesRepositoryPort
   private readonly recordActivatedSource: (threadId: string, sourceSlug: string) => void
@@ -300,6 +317,7 @@ export class SessionAgentEventApplier {
    */
   constructor({
     agentOperationsRepository,
+    clearProviderSessionId,
     clearPendingToolPermission,
     messagesRepository,
     recordActivatedSource,
@@ -309,6 +327,7 @@ export class SessionAgentEventApplier {
     trackPendingToolPermission
   }: SessionAgentEventApplierInput) {
     this.agentOperationsRepository = agentOperationsRepository
+    this.clearProviderSessionId = clearProviderSessionId
     this.clearPendingToolPermission = clearPendingToolPermission
     this.messagesRepository = messagesRepository
     this.recordActivatedSource = recordActivatedSource
@@ -329,6 +348,15 @@ export class SessionAgentEventApplier {
     routeHint,
     scope
   }: SessionAgentEventApplyInput): Promise<SessionAgentEventApplicationResult> {
+    if (event.type === 'session_id_clear') {
+      this.clearProviderSessionId(scope.thread.id)
+      await this.threadsRepository.save(
+        clearProviderSessionIdFromThread(scope.thread, createTimestamp())
+      )
+
+      return { message, operation }
+    }
+
     if (event.type === 'session_id_update') {
       const timestamp = createTimestamp()
 

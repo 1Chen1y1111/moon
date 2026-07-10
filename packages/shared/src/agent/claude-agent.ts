@@ -1,6 +1,6 @@
 /**
  * 负责把 Claude Agent SDK 适配成 Moon 的统一 agent 实现。
- * 它只处理 Claude SDK 调用和生命周期状态，不负责会话持久化、IPC 或 renderer 状态。
+ * 它处理 Claude query、resume 失效恢复和事件流，不负责会话持久化、IPC 或 renderer 状态。
  */
 
 import { query } from '@anthropic-ai/claude-agent-sdk'
@@ -11,11 +11,17 @@ import {
   createClaudeQueryRuntime,
   type ClaudeQueryRuntime
 } from './backend/claude/query-runtime'
-import { createClaudeSdkErrorMessage } from './backend/claude/sdk-diagnostics'
+import {
+  createClaudeSdkErrorMessage,
+  isClaudeSessionExpiredError
+} from './backend/claude/sdk-diagnostics'
 import { handleClaudeSourceActivationToolResult } from './backend/claude/source-activation-handler'
 import { ClaudeTurnStreamRunner } from './backend/claude/turn-stream-runner'
 import type { AgentSourceRecord } from './core/source-manager'
-import type { AgentSessionRuntimeState } from './core/session-runtime-state'
+import {
+  clearProviderSessionId,
+  type AgentSessionRuntimeState
+} from './core/session-runtime-state'
 import type { ThinkingLevel } from '../config'
 import type {
   AgentBackendMessage,
@@ -44,6 +50,35 @@ export type ClaudeAgentInput = {
  */
 function stringifyError(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+/**
+ * 标记已经被识别并拦截的 Claude resume 过期事件，避免错误先泄漏到会话层。
+ */
+class ClaudeResumeExpiredError extends Error {
+  constructor() {
+    super('Claude SDK resume session expired.')
+    this.name = 'ClaudeResumeExpiredError'
+  }
+}
+
+/**
+ * 判断统一事件是否表示 Claude 已经开始产生本轮 assistant 内容。
+ */
+function isAssistantContentEvent(event: AgentEvent): boolean {
+  if (event.type === 'tool_start') {
+    return true
+  }
+
+  if (
+    event.type === 'text_delta' ||
+    event.type === 'text_complete' ||
+    event.type === 'reasoning_delta'
+  ) {
+    return event.text.length > 0
+  }
+
+  return false
 }
 
 export class ClaudeAgent extends BaseAgent {
@@ -88,79 +123,149 @@ export class ClaudeAgent extends BaseAgent {
 
     const turn = this.startTurn(options)
     const { abortController, eventQueue } = turn
-    let stderrBuffer: ClaudeQueryRuntime['stderrBuffer'] | undefined
-    let runtimeSummary: string | undefined
 
     try {
-      this.eventAdapter.startTurn(options.turnId)
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        if (attempt > 0 && abortController.signal.aborted) {
+          yield { type: 'error', message: 'Cancelled by user.' }
+          return
+        }
 
-      // SDK resume 已经恢复上一轮 transcript，后续 turn 只发送当前消息，避免历史重复注入。
-      const promptMessages =
-        this.agentSessionState.providerSessionId === undefined ? this.messages : []
-      const prompt = this.buildPrompt(message, promptMessages)
-      const queryRuntime = createClaudeQueryRuntime({
-        abortController,
-        apiKey: this.apiKey,
-        baseUrl: this.baseUrl,
-        checkToolUse: (input) => this.checkClaudeToolUse(input),
-        model: this.getModel(),
-        onToolUseBlocked: (input, reason) =>
-          this.eventAdapter.setBlockReason(input.toolUseId, reason),
-        requestPermission: (request) => this.requestPermission(request),
-        requestSourceActivation: this.onSourceActivationRequest,
-        resumeSessionId: this.agentSessionState.providerSessionId,
-        thinkingLevel: options.thinkingOverride ?? this.thinkingLevel,
-        workspace: this.workspace
-      })
-      const { queryOptions } = queryRuntime
+        const resumeSessionId =
+          attempt === 0 ? this.agentSessionState.providerSessionId : undefined
+        const wasResuming = resumeSessionId !== undefined
+        const promptMessages = wasResuming ? [] : this.messages
+        const prompt = this.buildPrompt(message, promptMessages)
+        let stderrBuffer: ClaudeQueryRuntime['stderrBuffer'] | undefined
+        let runtimeSummary: string | undefined
+        let hasAssistantContent = false
+        let hasProviderError = false
+        let shouldRecoverSession = false
+        let completionEvent: Extract<AgentEvent, { type: 'complete' }> | null = null
 
-      stderrBuffer = queryRuntime.stderrBuffer
-      runtimeSummary = queryRuntime.runtimeSummary
+        try {
+          this.eventAdapter.startTurn(options.turnId)
 
-      const runner = new ClaudeTurnStreamRunner({
-        sdkEvents: this.queryClaude({ prompt, options: queryOptions }),
-        eventQueue,
-        eventAdapter: this.eventAdapter,
-        normalizeAgentEvent: (agentEvent) =>
-          agentEvent.type === 'error'
-            ? {
-                ...agentEvent,
-                message: createClaudeSdkErrorMessage({
-                  apiKey: this.apiKey,
-                  message: agentEvent.message,
-                  stderr: stderrBuffer?.read() ?? '',
-                  runtimeSummary
-                })
-              }
-            : agentEvent,
-        handleToolResultError: (normalizedEvent) =>
-          handleClaudeSourceActivationToolResult({
-            event: normalizedEvent,
-            originalMessage: message,
+          const queryRuntime = createClaudeQueryRuntime({
+            abortController,
+            apiKey: this.apiKey,
+            baseUrl: this.baseUrl,
+            checkToolUse: (input) => this.checkClaudeToolUse(input),
+            model: this.getModel(),
+            onToolUseBlocked: (input, reason) =>
+              this.eventAdapter.setBlockReason(input.toolUseId, reason),
+            requestPermission: (request) => this.requestPermission(request),
             requestSourceActivation: this.onSourceActivationRequest,
-            setPendingSourceActivationRestart: (pending) =>
-              this.setPendingSourceActivationRestart(pending),
-            sourceRuntime: this.sourceRuntime
-          }),
-        consumePendingSourceActivationRestart: () =>
-          this.consumePendingSourceActivationRestart()
-      })
+            resumeSessionId,
+            thinkingLevel: options.thinkingOverride ?? this.thinkingLevel,
+            workspace: this.workspace
+          })
+          const { queryOptions } = queryRuntime
 
-      yield* runner.run()
-    } catch (error) {
-      if (abortController.signal.aborted) {
-        yield { type: 'error', message: 'Cancelled by user.' }
+          stderrBuffer = queryRuntime.stderrBuffer
+          runtimeSummary = queryRuntime.runtimeSummary
+
+          const runner = new ClaudeTurnStreamRunner({
+            sdkEvents: this.queryClaude({ prompt, options: queryOptions }),
+            eventQueue,
+            eventAdapter: this.eventAdapter,
+            normalizeAgentEvent: (agentEvent) => {
+              hasAssistantContent ||= isAssistantContentEvent(agentEvent)
+
+              if (agentEvent.type === 'error') {
+                if (
+                  wasResuming &&
+                  !hasAssistantContent &&
+                  isClaudeSessionExpiredError({
+                    message: agentEvent.message,
+                    stderr: stderrBuffer?.read() ?? ''
+                  })
+                ) {
+                  throw new ClaudeResumeExpiredError()
+                }
+
+                hasProviderError = true
+
+                return {
+                  ...agentEvent,
+                  message: createClaudeSdkErrorMessage({
+                    apiKey: this.apiKey,
+                    message: agentEvent.message,
+                    stderr: stderrBuffer?.read() ?? '',
+                    runtimeSummary
+                  })
+                }
+              }
+
+              if (agentEvent.type === 'typed_error') {
+                hasProviderError = true
+              }
+
+              return agentEvent
+            },
+            handleToolResultError: (normalizedEvent) =>
+              handleClaudeSourceActivationToolResult({
+                event: normalizedEvent,
+                originalMessage: message,
+                requestSourceActivation: this.onSourceActivationRequest,
+                setPendingSourceActivationRestart: (pending) =>
+                  this.setPendingSourceActivationRestart(pending),
+                sourceRuntime: this.sourceRuntime
+              }),
+            consumePendingSourceActivationRestart: () =>
+              this.consumePendingSourceActivationRestart()
+          })
+          const result = yield* runner.run()
+
+          completionEvent = result.completionEvent
+          shouldRecoverSession = wasResuming && !hasAssistantContent && !hasProviderError
+        } catch (error) {
+          if (abortController.signal.aborted) {
+            yield { type: 'error', message: 'Cancelled by user.' }
+            return
+          }
+
+          shouldRecoverSession =
+            wasResuming &&
+            !hasAssistantContent &&
+            (error instanceof ClaudeResumeExpiredError ||
+              isClaudeSessionExpiredError({
+                message: stringifyError(error),
+                stderr: stderrBuffer?.read() ?? ''
+              }))
+
+          if (!shouldRecoverSession) {
+            yield {
+              type: 'error',
+              message: createClaudeSdkErrorMessage({
+                apiKey: this.apiKey,
+                message: stringifyError(error),
+                stderr: stderrBuffer?.read() ?? '',
+                runtimeSummary
+              })
+            }
+            return
+          }
+        }
+
+        if (shouldRecoverSession) {
+          if (abortController.signal.aborted) {
+            yield { type: 'error', message: 'Cancelled by user.' }
+            return
+          }
+
+          clearProviderSessionId(this.agentSessionState)
+          eventQueue.reset()
+          yield { type: 'session_id_clear' }
+          yield { type: 'info', message: 'Restoring conversation context...' }
+          continue
+        }
+
+        if (completionEvent !== null) {
+          yield completionEvent
+        }
+
         return
-      }
-
-      yield {
-        type: 'error',
-        message: createClaudeSdkErrorMessage({
-          apiKey: this.apiKey,
-          message: stringifyError(error),
-          stderr: stderrBuffer?.read() ?? '',
-          runtimeSummary
-        })
       }
     } finally {
       this.endTurn(turn)

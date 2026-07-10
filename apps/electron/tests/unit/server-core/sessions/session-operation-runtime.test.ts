@@ -171,6 +171,7 @@ function createRuntimeFixture(input: {
     [assistantMessage.id, assistantMessage]
   ])
   const sessions = new Map([[scope.session.id, scope.session]])
+  const threads = new Map([[scope.thread.id, scope.thread]])
   const tools = new Map<string, ToolInvocationRecord>()
   const events: EventCall[] = []
   const capturedConfigs: AgentBackendConfig[] = []
@@ -210,6 +211,7 @@ function createRuntimeFixture(input: {
         return nextOperation
       }
     },
+    clearProviderSessionId: (threadId) => agentRuntime.clearProviderSessionId(threadId),
     clearPendingToolPermission: (toolInvocationId) =>
       toolPermissionRuntime.clearPendingToolPermission(toolInvocationId),
     messagesRepository: {
@@ -224,6 +226,19 @@ function createRuntimeFixture(input: {
       }
     },
     recordActivatedSource,
+    recordProviderSessionId: (threadId, providerSessionId) =>
+      agentRuntime.recordProviderSessionId(threadId, providerSessionId),
+    threadsRepository: {
+      findById: async (id) => threads.get(id) ?? null,
+      listBySession: async () => [...threads.values()],
+      listByTopic: async (topicId) =>
+        [...threads.values()].filter((thread) => thread.topicId === topicId),
+      save: async (thread) => {
+        threads.set(thread.id, thread)
+
+        return thread
+      }
+    },
     toolInvocationsRepository: {
       findById: async (id) => tools.get(id) ?? null,
       save: async (toolInvocation) => {

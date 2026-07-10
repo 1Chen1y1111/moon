@@ -1,6 +1,6 @@
 /**
- * 负责 Claude SDK 运行时错误诊断的内部边界。
- * 它只处理 stderr 短缓冲、运行时摘要和错误详情脱敏，不参与事件流或权限判断。
+ * 负责 Claude SDK 运行时错误诊断和已知 session 失效识别。
+ * 它只处理 stderr、运行时摘要和错误分类，不参与事件流或权限判断。
  */
 
 import type { createClaudeQueryOptions } from '../internal/runtime-resolver'
@@ -10,6 +10,26 @@ export type CreateClaudeSdkErrorMessageInput = {
   message: string
   runtimeSummary?: string
   stderr: string
+}
+
+export type ClaudeSessionExpiredErrorInput = {
+  message: string
+  stderr: string
+}
+
+const CLAUDE_SESSION_EXPIRED_MARKER = 'No conversation found with session ID'
+
+/**
+ * 判断 Claude SDK 的显式错误或 stderr 是否表明 resume 指向的服务端会话已经失效。
+ */
+export function isClaudeSessionExpiredError({
+  message,
+  stderr
+}: ClaudeSessionExpiredErrorInput): boolean {
+  return (
+    message.includes(CLAUDE_SESSION_EXPIRED_MARKER) ||
+    stderr.includes(CLAUDE_SESSION_EXPIRED_MARKER)
+  )
 }
 
 /**

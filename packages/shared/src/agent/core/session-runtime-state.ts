@@ -49,6 +49,13 @@ export function setProviderSessionId(
 }
 
 /**
+ * 清除当前 thread 对应的 provider session id，使后续 backend turn 从本地历史重新开始。
+ */
+export function clearProviderSessionId(state: AgentSessionRuntimeState): void {
+  delete state.providerSessionId
+}
+
+/**
  * 判断当前会话是否已经激活指定 source。
  */
 export function hasActivatedSourceSlug(

@@ -86,4 +86,5 @@ export type AgentEvent =
   | { type: 'error'; message: string; code?: string; turnId?: string }
   | { type: 'typed_error'; error: AgentTypedError; turnId?: string }
   | { type: 'session_id_update'; sessionId: string }
+  | { type: 'session_id_clear' }
   | { type: 'complete'; usage?: AgentEventUsage }

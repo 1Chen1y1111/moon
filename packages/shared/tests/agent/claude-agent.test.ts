@@ -1,12 +1,17 @@
 /**
- * 负责验证 ClaudeAgent 对 SDK query 的最小参数传递。
+ * 负责验证 ClaudeAgent 的 SDK query 参数、事件流和 resume 失效恢复。
  * 测试使用 mock query，不触发真实 Claude SDK 进程或网络调用。
  */
 
 import { describe, expect, it, vi } from 'vitest'
 import type { Options } from '@anthropic-ai/claude-agent-sdk'
 
-import { ClaudeAgent, createAgentSessionRuntimeState, setProviderSessionId } from '../../src/agent'
+import {
+  ClaudeAgent,
+  clearProviderSessionId,
+  createAgentSessionRuntimeState,
+  setProviderSessionId
+} from '../../src/agent'
 import type { AgentEvent, AgentSourceRecord, PendingSourceActivationRestart } from '../../src/agent'
 
 /**
@@ -445,6 +450,328 @@ describe('ClaudeAgent', () => {
     expect(queryCalls[1]?.[0].prompt).toContain('second turn')
     expect(queryCalls[1]?.[0].prompt).not.toContain('previous turn')
     expect(queryCalls[1]?.[0].options).toMatchObject({ resume: 'sdk-session-1' })
+  })
+
+  it('clears an expired resumed session and retries once with Moon message history', async () => {
+    let attempt = 0
+    const queryClaude = vi.fn(async function* () {
+      attempt += 1
+
+      if (attempt === 1) {
+        yield {
+          type: 'result',
+          subtype: 'error_during_execution',
+          is_error: true,
+          session_id: 'sdk-session-expired',
+          errors: ['No conversation found with session ID: sdk-session-expired']
+        }
+        return
+      }
+
+      yield {
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: 'restored answer' }] }
+      }
+      yield {
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        session_id: 'sdk-session-fresh'
+      }
+    })
+    const agentSessionState = createAgentSessionRuntimeState()
+    const agent = new ClaudeAgent({
+      agentSessionState,
+      model: 'claude-sonnet',
+      messages: [
+        { role: 'user', content: 'previous question' },
+        { role: 'assistant', content: 'previous answer' },
+        { role: 'user', content: 'current question' }
+      ],
+      queryClaude: queryClaude as never
+    })
+    const events: AgentEvent[] = []
+
+    setProviderSessionId(agentSessionState, 'sdk-session-expired')
+
+    for await (const event of agent.chat('current question')) {
+      events.push(event)
+
+      if (event.type === 'session_id_update') {
+        setProviderSessionId(agentSessionState, event.sessionId)
+      } else if (event.type === 'session_id_clear') {
+        clearProviderSessionId(agentSessionState)
+      }
+    }
+
+    const queryCalls = queryClaude.mock.calls as unknown as Array<[
+      { options?: Options; prompt?: string }
+    ]>
+
+    expect(queryClaude).toHaveBeenCalledTimes(2)
+    expect(queryCalls[0]?.[0].options).toMatchObject({ resume: 'sdk-session-expired' })
+    expect(queryCalls[0]?.[0].prompt).not.toContain('previous question')
+    expect(queryCalls[1]?.[0].options).not.toHaveProperty('resume')
+    expect(queryCalls[1]?.[0].prompt).toContain('previous question')
+    expect(queryCalls[1]?.[0].prompt).toContain('current question')
+    expect(events.filter((event) => event.type === 'complete')).toEqual([{ type: 'complete' }])
+    expect(events).toEqual(
+      expect.arrayContaining([
+        { type: 'session_id_clear' },
+        { type: 'info', message: 'Restoring conversation context...' },
+        { type: 'text_complete', text: 'restored answer' },
+        { type: 'session_id_update', sessionId: 'sdk-session-fresh' }
+      ])
+    )
+    expect(events.some((event) => event.type === 'error')).toBe(false)
+    expect(agentSessionState.providerSessionId).toBe('sdk-session-fresh')
+  })
+
+  it('recognizes an expired resumed session reported through stderr and a thrown error', async () => {
+    let attempt = 0
+    const queryClaude = vi.fn(async function* ({ options }: { options?: Options }) {
+      attempt += 1
+
+      if (attempt === 1) {
+        options?.stderr?.('No conversation found with session ID: sdk-session-expired')
+        throw new Error('process exited with code 1')
+      }
+
+      yield {
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: 'restored from stderr' }] }
+      }
+    })
+    const agentSessionState = createAgentSessionRuntimeState()
+    const agent = new ClaudeAgent({
+      agentSessionState,
+      model: 'claude-sonnet',
+      messages: [{ role: 'user', content: 'current question' }],
+      queryClaude: queryClaude as never
+    })
+    const events: AgentEvent[] = []
+
+    setProviderSessionId(agentSessionState, 'sdk-session-expired')
+
+    for await (const event of agent.chat('current question')) {
+      events.push(event)
+    }
+
+    expect(queryClaude).toHaveBeenCalledTimes(2)
+    expect(events).toEqual([
+      { type: 'session_id_clear' },
+      { type: 'info', message: 'Restoring conversation context...' },
+      { type: 'text_complete', text: 'restored from stderr' },
+      { type: 'complete' }
+    ])
+  })
+
+  it('retries a resumed query that completes without assistant content and discards its complete', async () => {
+    let attempt = 0
+    const queryClaude = vi.fn(async function* () {
+      attempt += 1
+
+      if (attempt === 1) {
+        yield {
+          type: 'result',
+          subtype: 'success',
+          is_error: false,
+          session_id: 'sdk-session-empty'
+        }
+        return
+      }
+
+      yield {
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: 'fresh response' }] }
+      }
+    })
+    const agentSessionState = createAgentSessionRuntimeState()
+    const agent = new ClaudeAgent({
+      agentSessionState,
+      model: 'claude-sonnet',
+      messages: [{ role: 'user', content: 'current question' }],
+      queryClaude: queryClaude as never
+    })
+    const events: AgentEvent[] = []
+
+    setProviderSessionId(agentSessionState, 'sdk-session-expired')
+
+    for await (const event of agent.chat('current question')) {
+      events.push(event)
+    }
+
+    expect(queryClaude).toHaveBeenCalledTimes(2)
+    expect(events.filter((event) => event.type === 'complete')).toEqual([{ type: 'complete' }])
+    expect(events).toEqual(
+      expect.arrayContaining([
+        { type: 'session_id_update', sessionId: 'sdk-session-empty' },
+        { type: 'session_id_clear' },
+        { type: 'text_complete', text: 'fresh response' }
+      ])
+    )
+  })
+
+  it('does not retry an empty first query when no provider session was resumed', async () => {
+    const queryClaude = vi.fn(async function* () {
+      yield {
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        session_id: 'sdk-session-first'
+      }
+    })
+    const agent = new ClaudeAgent({
+      model: 'claude-sonnet',
+      messages: [{ role: 'user', content: 'first question' }],
+      queryClaude: queryClaude as never
+    })
+    const events: AgentEvent[] = []
+
+    for await (const event of agent.chat('first question')) {
+      events.push(event)
+    }
+
+    expect(queryClaude).toHaveBeenCalledTimes(1)
+    expect(events).toEqual([
+      { type: 'session_id_update', sessionId: 'sdk-session-first' },
+      { type: 'complete' }
+    ])
+  })
+
+  it('does not retry authentication errors from a resumed query', async () => {
+    const queryClaude = createAuthenticationFailedQueryClaudeMock()
+    const agentSessionState = createAgentSessionRuntimeState()
+    const agent = new ClaudeAgent({
+      agentSessionState,
+      model: 'claude-sonnet',
+      messages: [{ role: 'user', content: 'current question' }],
+      queryClaude: queryClaude as never
+    })
+    const events: AgentEvent[] = []
+
+    setProviderSessionId(agentSessionState, 'sdk-session-1')
+
+    for await (const event of agent.chat('current question')) {
+      events.push(event)
+    }
+
+    expect(queryClaude).toHaveBeenCalledTimes(1)
+    expect(events.some((event) => event.type === 'session_id_clear')).toBe(false)
+    expect(events).toContainEqual({
+      type: 'error',
+      message: expect.stringContaining('authentication_failed')
+    })
+    expect(agentSessionState.providerSessionId).toBe('sdk-session-1')
+  })
+
+  it('does not retry an expired-session marker after assistant content has started', async () => {
+    const queryClaude = vi.fn(async function* () {
+      yield {
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: 'partial response' }] }
+      }
+      yield {
+        type: 'result',
+        subtype: 'error_during_execution',
+        is_error: true,
+        session_id: 'sdk-session-1',
+        errors: ['No conversation found with session ID: sdk-session-1']
+      }
+    })
+    const agentSessionState = createAgentSessionRuntimeState()
+    const agent = new ClaudeAgent({
+      agentSessionState,
+      model: 'claude-sonnet',
+      messages: [{ role: 'user', content: 'current question' }],
+      queryClaude: queryClaude as never
+    })
+    const events: AgentEvent[] = []
+
+    setProviderSessionId(agentSessionState, 'sdk-session-1')
+
+    for await (const event of agent.chat('current question')) {
+      events.push(event)
+    }
+
+    expect(queryClaude).toHaveBeenCalledTimes(1)
+    expect(events.some((event) => event.type === 'session_id_clear')).toBe(false)
+    expect(events).toContainEqual({ type: 'text_complete', text: 'partial response' })
+    expect(events).toContainEqual({
+      type: 'error',
+      message: 'No conversation found with session ID: sdk-session-1'
+    })
+  })
+
+  it('does not retry when cancellation wins before an empty resume recovery', async () => {
+    const abortController = new AbortController()
+    const queryClaude = vi.fn(async function* () {
+      abortController.abort('cancelled')
+      yield {
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        session_id: 'sdk-session-empty'
+      }
+    })
+    const agentSessionState = createAgentSessionRuntimeState()
+    const agent = new ClaudeAgent({
+      agentSessionState,
+      model: 'claude-sonnet',
+      messages: [{ role: 'user', content: 'current question' }],
+      queryClaude: queryClaude as never
+    })
+    const events: AgentEvent[] = []
+
+    setProviderSessionId(agentSessionState, 'sdk-session-1')
+
+    for await (const event of agent.chat('current question', undefined, {
+      abortSignal: abortController.signal
+    })) {
+      events.push(event)
+    }
+
+    expect(queryClaude).toHaveBeenCalledTimes(1)
+    expect(events.some((event) => event.type === 'session_id_clear')).toBe(false)
+    expect(events.at(-1)).toEqual({ type: 'error', message: 'Cancelled by user.' })
+  })
+
+  it('surfaces a fresh retry failure without starting a third query', async () => {
+    let attempt = 0
+    const queryClaude = vi.fn(async function* () {
+      attempt += 1
+
+      if (attempt === 1) {
+        yield {
+          type: 'result',
+          subtype: 'error_during_execution',
+          is_error: true,
+          session_id: 'sdk-session-expired',
+          errors: ['No conversation found with session ID: sdk-session-expired']
+        }
+        return
+      }
+
+      throw new Error('network unavailable')
+    })
+    const agentSessionState = createAgentSessionRuntimeState()
+    const agent = new ClaudeAgent({
+      agentSessionState,
+      model: 'claude-sonnet',
+      messages: [{ role: 'user', content: 'current question' }],
+      queryClaude: queryClaude as never
+    })
+    const events: AgentEvent[] = []
+
+    setProviderSessionId(agentSessionState, 'sdk-session-expired')
+
+    for await (const event of agent.chat('current question')) {
+      events.push(event)
+    }
+
+    expect(queryClaude).toHaveBeenCalledTimes(2)
+    expect(events.filter((event) => event.type === 'session_id_clear')).toHaveLength(1)
+    expect(events.at(-1)).toEqual({ type: 'error', message: 'network unavailable' })
   })
 
   it('passes serialized history prompt to Claude SDK when no workspace is configured', async () => {

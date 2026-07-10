@@ -7,21 +7,39 @@ import type { SDKMessage } from '@anthropic-ai/claude-agent-sdk'
 import { describe, expect, it, vi } from 'vitest'
 
 import { ClaudeEventAdapter } from '../../../../src/agent/backend/claude/event-adapter'
-import { ClaudeTurnStreamRunner } from '../../../../src/agent/backend/claude/turn-stream-runner'
+import {
+  ClaudeTurnStreamRunner,
+  type ClaudeTurnStreamResult
+} from '../../../../src/agent/backend/claude/turn-stream-runner'
 import { EventQueue } from '../../../../src/agent/backend/event-queue'
 import type { AgentEvent, PendingSourceActivationRestart } from '../../../../src/agent'
 
 /**
  * 收集 runner 输出的全部 AgentEvent，方便断言最终事件顺序。
  */
-async function collectEvents(runner: ClaudeTurnStreamRunner): Promise<AgentEvent[]> {
+async function collectRun(runner: ClaudeTurnStreamRunner): Promise<{
+  events: AgentEvent[]
+  result: ClaudeTurnStreamResult
+}> {
   const events: AgentEvent[] = []
+  const eventStream = runner.run()
+  let next = await eventStream.next()
 
-  for await (const event of runner.run()) {
-    events.push(event)
+  while (!next.done) {
+    events.push(next.value)
+    next = await eventStream.next()
   }
 
-  return events
+  return { events, result: next.value }
+}
+
+/**
+ * 模拟 ClaudeAgent 在确认无需恢复后补发 runner 暂存的 complete。
+ */
+async function collectEvents(runner: ClaudeTurnStreamRunner): Promise<AgentEvent[]> {
+  const { events, result } = await collectRun(runner)
+
+  return result.completionEvent === null ? events : [...events, result.completionEvent]
 }
 
 /**
@@ -86,6 +104,24 @@ describe('ClaudeTurnStreamRunner', () => {
       { type: 'session_id_update', sessionId: 'sdk-session-1' },
       { type: 'complete' }
     ])
+  })
+
+  it('returns completion separately so the caller can decide whether to recover first', async () => {
+    const runner = createRunner({
+      sdkEvents: createSdkEvents([
+        {
+          type: 'result',
+          subtype: 'success',
+          is_error: false,
+          session_id: 'sdk-session-1'
+        } as SDKMessage
+      ])
+    })
+
+    await expect(collectRun(runner)).resolves.toEqual({
+      events: [{ type: 'session_id_update', sessionId: 'sdk-session-1' }],
+      result: { completionEvent: { type: 'complete' } }
+    })
   })
 
   it('completes the EventQueue when the SDK iterator finishes', async () => {

@@ -637,6 +637,33 @@ function createService(input: {
   }
 }
 
+/**
+ * 复用同一组仓储创建新的 SessionManager，用来模拟应用重启后的纯运行态重建。
+ */
+function createRestartedService(
+  fixture: CreateServiceResult,
+  agentEvents: AgentEvent[],
+  capturedConfigs: AgentBackendConfig[] = [],
+  capturedProviderSessionIds: Array<string | undefined> = []
+): SessionManager {
+  return new SessionManager({
+    agentOperationsRepository: fixture.agentOperationsRepository as never,
+    createAgentBackend: vi.fn((config: AgentBackendConfig) => {
+      capturedConfigs.push(config)
+      capturedProviderSessionIds.push(config.agentSessionState?.providerSessionId)
+
+      return createMockAgentBackend(agentEvents)
+    }),
+    messagesRepository: fixture.messagesRepository as never,
+    projectsRepository: fixture.projectsRepository as never,
+    sessionsRepository: fixture.sessionsRepository as never,
+    settingsRepository: fixture.settingsRepository as never,
+    threadsRepository: fixture.threadsRepository as never,
+    toolInvocationsRepository: fixture.toolInvocationsRepository as never,
+    topicsRepository: fixture.topicsRepository as never
+  })
+}
+
 describe('SessionScopedToolCallbackRegistry', () => {
   it('registers, merges, reads, and unregisters session callbacks', async () => {
     const registry = new SessionScopedToolCallbackRegistry()
@@ -2102,21 +2129,11 @@ describe('SessionManager.sendMessage', () => {
     const result = await fixture.service.sendMessage({ content: '测试 usage' })
     const persistedThread = await fixture.threadsRepository.findById(result.thread.id)
     const resumedConfigs: AgentBackendConfig[] = []
-    const restartedService = new SessionManager({
-      agentOperationsRepository: fixture.agentOperationsRepository as never,
-      createAgentBackend: vi.fn((config: AgentBackendConfig) => {
-        resumedConfigs.push(config)
-
-        return createMockAgentBackend([{ type: 'text_delta', text: 'resumed' }])
-      }),
-      messagesRepository: fixture.messagesRepository as never,
-      projectsRepository: fixture.projectsRepository as never,
-      sessionsRepository: fixture.sessionsRepository as never,
-      settingsRepository: fixture.settingsRepository as never,
-      threadsRepository: fixture.threadsRepository as never,
-      toolInvocationsRepository: fixture.toolInvocationsRepository as never,
-      topicsRepository: fixture.topicsRepository as never
-    })
+    const restartedService = createRestartedService(
+      fixture,
+      [{ type: 'text_delta', text: 'resumed' }],
+      resumedConfigs
+    )
 
     await restartedService.sendMessage({
       content: '测试 resume',
@@ -2144,6 +2161,94 @@ describe('SessionManager.sendMessage', () => {
     })
     expect(resumedConfigs).toHaveLength(1)
     expect(resumedConfigs[0]?.agentSessionState?.providerSessionId).toBe('sdk-session-1')
+  })
+
+  it('persists provider session clearing and accepts a fresh session after restart', async () => {
+    const settings = createClaudeSettings()
+    const fixture = createService({
+      createAgentBackend: vi.fn(() =>
+        createMockAgentBackend([
+          { type: 'session_id_update', sessionId: 'sdk-session-expired' },
+          { type: 'text_delta', text: 'initial answer' }
+        ])
+      ),
+      settings
+    })
+    const initial = await fixture.service.sendMessage({ content: 'initial turn' })
+    const persistedThread = await fixture.threadsRepository.findById(initial.thread.id)
+
+    await fixture.threadsRepository.save({
+      ...persistedThread!,
+      metadata: {
+        ...(persistedThread?.metadata ?? {}),
+        workspaceMarker: 'preserved'
+      }
+    })
+
+    const clearConfigs: AgentBackendConfig[] = []
+    const clearProviderSessionIds: Array<string | undefined> = []
+    const clearingService = createRestartedService(
+      fixture,
+      [
+        { type: 'session_id_clear' },
+        { type: 'text_delta', text: 'restored answer' }
+      ],
+      clearConfigs,
+      clearProviderSessionIds
+    )
+
+    await clearingService.sendMessage({
+      content: 'recover expired session',
+      sessionId: initial.session.id,
+      topicId: initial.topic.id,
+      threadId: initial.thread.id
+    })
+
+    const clearedThread = await fixture.threadsRepository.findById(initial.thread.id)
+    const freshConfigs: AgentBackendConfig[] = []
+    const freshProviderSessionIds: Array<string | undefined> = []
+    const freshService = createRestartedService(
+      fixture,
+      [
+        { type: 'session_id_update', sessionId: 'sdk-session-fresh' },
+        { type: 'text_delta', text: 'fresh answer' }
+      ],
+      freshConfigs,
+      freshProviderSessionIds
+    )
+
+    await freshService.sendMessage({
+      content: 'start fresh session',
+      sessionId: initial.session.id,
+      topicId: initial.topic.id,
+      threadId: initial.thread.id
+    })
+
+    const refreshedThread = await fixture.threadsRepository.findById(initial.thread.id)
+    const verifyConfigs: AgentBackendConfig[] = []
+    const verifyProviderSessionIds: Array<string | undefined> = []
+    const verifyService = createRestartedService(
+      fixture,
+      [{ type: 'text_delta', text: 'resumed fresh session' }],
+      verifyConfigs,
+      verifyProviderSessionIds
+    )
+
+    await verifyService.sendMessage({
+      content: 'verify fresh resume',
+      sessionId: initial.session.id,
+      topicId: initial.topic.id,
+      threadId: initial.thread.id
+    })
+
+    expect(clearProviderSessionIds).toEqual(['sdk-session-expired'])
+    expect(clearedThread?.metadata).toEqual({ workspaceMarker: 'preserved' })
+    expect(freshProviderSessionIds).toEqual([undefined])
+    expect(refreshedThread?.metadata).toEqual({
+      workspaceMarker: 'preserved',
+      providerSessionId: 'sdk-session-fresh'
+    })
+    expect(verifyProviderSessionIds).toEqual(['sdk-session-fresh'])
   })
 
   it('persists usage carried by complete events', async () => {

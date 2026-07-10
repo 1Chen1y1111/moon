@@ -5,6 +5,7 @@
 
 import {
   addActivatedSourceSlug,
+  clearProviderSessionId as clearAgentProviderSessionId,
   createConnectionAgentBackendConfig,
   createAgentSessionRuntimeState,
   hasActivatedSourceSlug,
@@ -183,6 +184,13 @@ export class SessionAgentRuntime {
    */
   recordProviderSessionId(threadId: string, providerSessionId: string): void {
     setProviderSessionId(this.resolveAgentSessionRuntimeState(threadId), providerSessionId)
+  }
+
+  /**
+   * 清除指定 thread 的 provider session id，避免后续 turn 继续恢复已失效的 SDK 会话。
+   */
+  clearProviderSessionId(threadId: string): void {
+    clearAgentProviderSessionId(this.resolveAgentSessionRuntimeState(threadId))
   }
 
   /**

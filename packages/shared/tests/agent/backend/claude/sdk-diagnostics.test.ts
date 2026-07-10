@@ -8,10 +8,32 @@ import { describe, expect, it } from 'vitest'
 import {
   ClaudeStderrBuffer,
   createClaudeRuntimeSummary,
-  createClaudeSdkErrorMessage
+  createClaudeSdkErrorMessage,
+  isClaudeSessionExpiredError
 } from '../../../../src/agent/backend/claude/sdk-diagnostics'
 
 describe('ClaudeSdkDiagnostics', () => {
+  it('recognizes only the explicit expired resume marker from errors or stderr', () => {
+    expect(
+      isClaudeSessionExpiredError({
+        message: 'No conversation found with session ID: sdk-session-1',
+        stderr: ''
+      })
+    ).toBe(true)
+    expect(
+      isClaudeSessionExpiredError({
+        message: 'process exited with code 1',
+        stderr: 'No conversation found with session ID: sdk-session-1'
+      })
+    ).toBe(true)
+    expect(
+      isClaudeSessionExpiredError({
+        message: 'authentication_failed',
+        stderr: 'network unavailable'
+      })
+    ).toBe(false)
+  })
+
   it('uses stderr details when Claude SDK only reports unknown', () => {
     expect(
       createClaudeSdkErrorMessage({

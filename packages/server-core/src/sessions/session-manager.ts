@@ -220,6 +220,7 @@ export class SessionManager {
     })
     this.agentEventApplier = new SessionAgentEventApplier({
       agentOperationsRepository,
+      clearProviderSessionId: (threadId) => this.agentRuntime.clearProviderSessionId(threadId),
       clearPendingToolPermission: (toolInvocationId) =>
         this.toolPermissionRuntime.clearPendingToolPermission(toolInvocationId),
       messagesRepository,
