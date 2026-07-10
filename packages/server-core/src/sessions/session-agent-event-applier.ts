@@ -49,6 +49,7 @@ export type SessionAgentEventApplierInput = {
   clearPendingToolPermission: (toolInvocationId: string) => void
   messagesRepository: MessagesRepositoryPort
   recordActivatedSource: (threadId: string, sourceSlug: string) => void
+  recordProviderSessionId: (threadId: string, providerSessionId: string) => void
   toolInvocationsRepository: ToolInvocationsRepositoryPort
   trackPendingToolPermission: (
     toolInvocation: ToolInvocationRecord,
@@ -265,6 +266,7 @@ export class SessionAgentEventApplier {
   private readonly clearPendingToolPermission: (toolInvocationId: string) => void
   private readonly messagesRepository: MessagesRepositoryPort
   private readonly recordActivatedSource: (threadId: string, sourceSlug: string) => void
+  private readonly recordProviderSessionId: (threadId: string, providerSessionId: string) => void
   private readonly toolInvocationsRepository: ToolInvocationsRepositoryPort
   private readonly trackPendingToolPermission: (
     toolInvocation: ToolInvocationRecord,
@@ -279,6 +281,7 @@ export class SessionAgentEventApplier {
     clearPendingToolPermission,
     messagesRepository,
     recordActivatedSource,
+    recordProviderSessionId,
     toolInvocationsRepository,
     trackPendingToolPermission
   }: SessionAgentEventApplierInput) {
@@ -286,6 +289,7 @@ export class SessionAgentEventApplier {
     this.clearPendingToolPermission = clearPendingToolPermission
     this.messagesRepository = messagesRepository
     this.recordActivatedSource = recordActivatedSource
+    this.recordProviderSessionId = recordProviderSessionId
     this.toolInvocationsRepository = toolInvocationsRepository
     this.trackPendingToolPermission = trackPendingToolPermission
   }
@@ -302,6 +306,7 @@ export class SessionAgentEventApplier {
     scope
   }: SessionAgentEventApplyInput): Promise<SessionAgentEventApplicationResult> {
     if (event.type === 'session_id_update') {
+      this.recordProviderSessionId(scope.thread.id, event.sessionId)
       const updatedOperation = await this.agentOperationsRepository.save(
         applyProviderSessionIdToOperation(operation, event.sessionId, createTimestamp())
       )

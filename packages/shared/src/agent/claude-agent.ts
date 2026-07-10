@@ -94,7 +94,10 @@ export class ClaudeAgent extends BaseAgent {
     try {
       this.eventAdapter.startTurn(options.turnId)
 
-      const prompt = this.buildPrompt(message, this.messages)
+      // SDK resume 已经恢复上一轮 transcript，后续 turn 只发送当前消息，避免历史重复注入。
+      const promptMessages =
+        this.agentSessionState.providerSessionId === undefined ? this.messages : []
+      const prompt = this.buildPrompt(message, promptMessages)
       const queryRuntime = createClaudeQueryRuntime({
         abortController,
         apiKey: this.apiKey,
@@ -105,6 +108,7 @@ export class ClaudeAgent extends BaseAgent {
           this.eventAdapter.setBlockReason(input.toolUseId, reason),
         requestPermission: (request) => this.requestPermission(request),
         requestSourceActivation: this.onSourceActivationRequest,
+        resumeSessionId: this.agentSessionState.providerSessionId,
         thinkingLevel: options.thinkingOverride ?? this.thinkingLevel,
         workspace: this.workspace
       })

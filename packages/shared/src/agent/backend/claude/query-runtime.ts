@@ -26,6 +26,7 @@ export type ClaudeQueryRuntimeInput = {
   onToolUseBlocked?: ClaudeToolUseBlockedReporter
   requestPermission?: ClaudeToolPermissionRequester
   requestSourceActivation?: ClaudeSourceActivationRequester | null
+  resumeSessionId?: string
   thinkingLevel?: ThinkingLevel
   workspace?: AgentBackendWorkspace
 }
@@ -48,6 +49,7 @@ export function createClaudeQueryRuntime({
   onToolUseBlocked,
   requestPermission,
   requestSourceActivation,
+  resumeSessionId,
   thinkingLevel,
   workspace
 }: ClaudeQueryRuntimeInput): ClaudeQueryRuntime {
@@ -67,6 +69,7 @@ export function createClaudeQueryRuntime({
     baseUrl,
     hooks,
     model,
+    resumeSessionId,
     stderr: (data) => stderrBuffer.append(data),
     thinkingLevel,
     workspace

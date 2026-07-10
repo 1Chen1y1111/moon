@@ -196,6 +196,18 @@ describe('createClaudeQueryOptions', () => {
     })
   })
 
+  it('passes a provider session id as Claude SDK resume option', () => {
+    const options = createClaudeQueryOptions({
+      abortController: new AbortController(),
+      model: 'claude-sonnet',
+      resumeSessionId: 'sdk-session-1'
+    })
+
+    expect(options).toMatchObject({
+      resume: 'sdk-session-1'
+    })
+  })
+
   it('includes resolved env when runtime overrides are present', () => {
     const abortController = new AbortController()
 

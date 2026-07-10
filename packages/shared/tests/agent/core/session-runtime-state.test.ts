@@ -8,7 +8,8 @@ import { describe, expect, it } from 'vitest'
 import {
   addActivatedSourceSlug,
   createAgentSessionRuntimeState,
-  hasActivatedSourceSlug
+  hasActivatedSourceSlug,
+  setProviderSessionId
 } from '../../../src/agent'
 
 describe('AgentSessionRuntimeState', () => {
@@ -30,5 +31,12 @@ describe('AgentSessionRuntimeState', () => {
 
     expect(state.activatedSourceSlugs).toEqual(['linear', 'github'])
     expect(hasActivatedSourceSlug(state.activatedSourceSlugs, 'docs')).toBe(false)
+  })
+
+  it('records the provider session id for later turn resume', () => {
+    const state = createAgentSessionRuntimeState()
+
+    expect(setProviderSessionId(state, 'sdk-session-1')).toBe('sdk-session-1')
+    expect(state.providerSessionId).toBe('sdk-session-1')
   })
 })

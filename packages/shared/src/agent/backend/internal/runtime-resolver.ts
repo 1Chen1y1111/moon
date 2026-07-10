@@ -38,6 +38,7 @@ export type ClaudeQueryOptionsInput = ClaudeRuntimeEnvInput & {
   abortController: AbortController
   hooks?: Options['hooks']
   model: string
+  resumeSessionId?: string
   stderr?: (data: string) => void
   thinkingLevel?: ThinkingLevel
   workspace?: AgentBackendWorkspace
@@ -221,6 +222,7 @@ export function createClaudeQueryOptions({
   baseUrl,
   hooks,
   model,
+  resumeSessionId,
   stderr,
   thinkingLevel,
   workspace
@@ -263,6 +265,7 @@ export function createClaudeQueryOptions({
     ...(stderr === undefined ? {} : { stderr }),
     ...workspaceOptions,
     ...(maxThinkingTokens === undefined ? {} : { maxThinkingTokens }),
+    ...(resumeSessionId === undefined ? {} : { resume: resumeSessionId }),
     ...(env === undefined ? {} : { env })
   }
 }

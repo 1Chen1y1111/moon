@@ -6,7 +6,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import type { Options } from '@anthropic-ai/claude-agent-sdk'
 
-import { ClaudeAgent } from '../../src/agent'
+import { ClaudeAgent, createAgentSessionRuntimeState, setProviderSessionId } from '../../src/agent'
 import type { AgentEvent, AgentSourceRecord, PendingSourceActivationRestart } from '../../src/agent'
 
 /**
@@ -414,6 +414,37 @@ describe('ClaudeAgent', () => {
 
     expect(queryAbortController).toBeInstanceOf(AbortController)
     expect(queryAbortController?.signal.aborted).toBe(true)
+  })
+
+  it('resumes the provider session stored in shared thread runtime state', async () => {
+    const queryClaude = createQueryClaudeMock()
+    const agentSessionState = createAgentSessionRuntimeState()
+    const agent = new ClaudeAgent({
+      agentSessionState,
+      model: 'claude-sonnet',
+      messages: [{ role: 'user', content: 'previous turn' }],
+      queryClaude: queryClaude as never
+    })
+
+    for await (const _event of agent.chat('first turn')) {
+      // 消费首轮事件流以触发 SDK query mock。
+    }
+
+    setProviderSessionId(agentSessionState, 'sdk-session-1')
+
+    for await (const _event of agent.chat('second turn')) {
+      // 消费第二轮事件流以触发 SDK query mock。
+    }
+
+    const queryCalls = queryClaude.mock.calls as unknown as Array<[
+      { options?: Options; prompt?: string }
+    ]>
+
+    expect(queryCalls[0]?.[0].prompt).toContain('previous turn')
+    expect(queryCalls[0]?.[0].options).not.toHaveProperty('resume')
+    expect(queryCalls[1]?.[0].prompt).toContain('second turn')
+    expect(queryCalls[1]?.[0].prompt).not.toContain('previous turn')
+    expect(queryCalls[1]?.[0].options).toMatchObject({ resume: 'sdk-session-1' })
   })
 
   it('passes serialized history prompt to Claude SDK when no workspace is configured', async () => {

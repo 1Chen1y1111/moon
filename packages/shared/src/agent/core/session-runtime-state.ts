@@ -1,6 +1,7 @@
 /**
  * 负责定义 agent 会话内的短生命周期运行时状态。
- * 当前保存权限记忆、source guide 阅读和 source 激活状态，不做持久化或跨线程共享。
+ * 当前保存 provider session、权限记忆、source guide 阅读和 source 激活状态，
+ * 不做持久化或跨线程共享。
  */
 
 import type { AgentPermissionRequest } from '@moon/core/types'
@@ -20,6 +21,7 @@ export type AgentSourceGuideRead = {
 export type AgentSessionRuntimeState = {
   activatedSourceSlugs: string[]
   permissionGrants: AgentPermissionGrant[]
+  providerSessionId?: string
   sourceGuideReads: AgentSourceGuideRead[]
 }
 
@@ -32,6 +34,18 @@ export function createAgentSessionRuntimeState(): AgentSessionRuntimeState {
     permissionGrants: [],
     sourceGuideReads: []
   }
+}
+
+/**
+ * 记录当前 thread 对应的 provider session id，供后续 backend turn 使用 resume。
+ */
+export function setProviderSessionId(
+  state: AgentSessionRuntimeState,
+  providerSessionId: string
+): string {
+  state.providerSessionId = providerSessionId
+
+  return providerSessionId
 }
 
 /**

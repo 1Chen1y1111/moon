@@ -8,6 +8,7 @@ import {
   createConnectionAgentBackendConfig,
   createAgentSessionRuntimeState,
   hasActivatedSourceSlug,
+  setProviderSessionId,
   type AgentBackend,
   type AgentBackendConfig,
   type AgentBackendMessage,
@@ -154,6 +155,13 @@ export class SessionAgentRuntime {
    */
   recordActivatedSource(threadId: string, sourceSlug: string): void {
     addActivatedSourceSlug(this.resolveAgentSessionRuntimeState(threadId), sourceSlug)
+  }
+
+  /**
+   * 记录当前 thread 的 provider session id，供下一次 backend 创建时恢复 SDK 会话。
+   */
+  recordProviderSessionId(threadId: string, providerSessionId: string): void {
+    setProviderSessionId(this.resolveAgentSessionRuntimeState(threadId), providerSessionId)
   }
 
   /**

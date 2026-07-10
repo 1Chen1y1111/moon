@@ -116,6 +116,7 @@ function createApplierFixture(): {
   onEvent: (event: ChatOperationEvent, hint?: SessionEventRouteHint) => void
   operations: Map<string, AgentOperationRecord>
   recordActivatedSource: ReturnType<typeof vi.fn>
+  recordProviderSessionId: ReturnType<typeof vi.fn>
   scope: SessionSourceProviderScope
   tools: Map<string, ToolInvocationRecord>
   trackPendingToolPermission: ReturnType<typeof vi.fn>
@@ -125,6 +126,7 @@ function createApplierFixture(): {
   const tools = new Map<string, ToolInvocationRecord>()
   const events: EventCall[] = []
   const recordActivatedSource = vi.fn()
+  const recordProviderSessionId = vi.fn()
   const trackPendingToolPermission = vi.fn()
   const clearPendingToolPermission = vi.fn()
   const input: SessionAgentEventApplierInput = {
@@ -149,6 +151,7 @@ function createApplierFixture(): {
       }
     },
     recordActivatedSource,
+    recordProviderSessionId,
     toolInvocationsRepository: {
       findById: async (id) => tools.get(id) ?? null,
       save: async (toolInvocation) => {
@@ -170,6 +173,7 @@ function createApplierFixture(): {
     },
     operations,
     recordActivatedSource,
+    recordProviderSessionId,
     scope: createScope(),
     tools,
     trackPendingToolPermission
@@ -284,6 +288,10 @@ describe('SessionAgentEventApplier', () => {
     ).operation
 
     expect(operation.metadata?.providerSessionId).toBe('claude-session-1')
+    expect(fixture.recordProviderSessionId).toHaveBeenCalledWith(
+      'thread-1',
+      'claude-session-1'
+    )
     expect(operation.totalInputTokens).toBe(10)
     expect(operation.totalOutputTokens).toBe(5)
     expect(operation.totalTokens).toBe(20)

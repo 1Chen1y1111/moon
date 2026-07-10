@@ -2076,25 +2076,38 @@ describe('SessionManager.sendMessage', () => {
 
   it('persists provider session ids and usage updates on operations', async () => {
     const settings = createClaudeSettings()
+    const capturedConfigs: AgentBackendConfig[] = []
+    const agentEvents: AgentEvent[] = [
+      { type: 'session_id_update', sessionId: 'sdk-session-1' },
+      {
+        type: 'usage_update',
+        usage: {
+          cacheReadTokens: 2,
+          costUsd: 0.12,
+          inputTokens: 10,
+          outputTokens: 5,
+          totalTokens: 17
+        }
+      },
+      { type: 'text_delta', text: 'ok' }
+    ]
+    const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
+      capturedConfigs.push(config)
+
+      return createMockAgentBackend(agentEvents)
+    })
     const { service } = createService({
-      settings,
-      agentEvents: [
-        { type: 'session_id_update', sessionId: 'sdk-session-1' },
-        {
-          type: 'usage_update',
-          usage: {
-            cacheReadTokens: 2,
-            costUsd: 0.12,
-            inputTokens: 10,
-            outputTokens: 5,
-            totalTokens: 17
-          }
-        },
-        { type: 'text_delta', text: 'ok' }
-      ]
+      createAgentBackend,
+      settings
     })
 
     const result = await service.sendMessage({ content: '测试 usage' })
+    await service.sendMessage({
+      content: '测试 resume',
+      sessionId: result.session.id,
+      topicId: result.topic.id,
+      threadId: result.thread.id
+    })
 
     expect(result.operation).toMatchObject({
       metadata: { providerSessionId: 'sdk-session-1' },
@@ -2110,6 +2123,8 @@ describe('SessionManager.sendMessage', () => {
         totalTokens: 17
       }
     })
+    expect(capturedConfigs).toHaveLength(2)
+    expect(capturedConfigs[1]?.agentSessionState?.providerSessionId).toBe('sdk-session-1')
   })
 
   it('persists usage carried by complete events', async () => {

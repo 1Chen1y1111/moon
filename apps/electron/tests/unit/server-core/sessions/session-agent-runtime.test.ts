@@ -14,6 +14,7 @@ import {
   type SessionSourceProvider,
   type SessionSourceProviderScope
 } from '@moon/server-core/sessions'
+import { setProviderSessionId } from '@moon/shared/agent'
 import type {
   AgentBackend,
   AgentBackendConfig,
@@ -127,6 +128,18 @@ describe('SessionAgentRuntime', () => {
     expect(first.agentSessionState).toBe(second.agentSessionState)
     expect(third.agentSessionState).not.toBe(first.agentSessionState)
     expect(capturedConfigs[0]?.permissionMode).toBe('ask')
+
+    setProviderSessionId(first.agentSessionState, 'sdk-session-1')
+
+    const resumed = await runtime.createBackend({
+      connection,
+      messages: [],
+      originalMessage: 'resumed turn',
+      scope: createScope('thread-1')
+    })
+
+    expect(resumed.agentSessionState.providerSessionId).toBe('sdk-session-1')
+    expect(third.agentSessionState.providerSessionId).toBeUndefined()
   })
 
   it.each(['safe', 'allow-all'] as const)(
