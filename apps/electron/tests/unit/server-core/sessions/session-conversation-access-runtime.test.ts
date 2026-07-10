@@ -196,10 +196,11 @@ describe('SessionConversationAccessRuntime', () => {
     expect(dependencies.messagesRepository.listByThread).not.toHaveBeenCalled()
   })
 
-  it('delegates session deletion to the sessions repository', async () => {
+  it('returns session thread ids after deleting the session', async () => {
     const { dependencies, runtime } = createRuntimeFixture()
 
-    await expect(runtime.deleteSession('session-1')).resolves.toBeUndefined()
+    await expect(runtime.deleteSession('session-1')).resolves.toEqual(['thread-1'])
+    expect(dependencies.threadsRepository.listBySession).toHaveBeenCalledWith('session-1')
     expect(dependencies.sessionsRepository.deleteById).toHaveBeenCalledWith('session-1')
   })
 })

@@ -12,6 +12,7 @@ import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  SessionAgentRuntime,
   SessionManager,
   SessionScopedToolCallbackRegistry,
   type SessionPermissionModeResolver,
@@ -2933,7 +2934,7 @@ describe('SessionManager.sendMessage', () => {
 })
 
 describe('SessionManager.deleteSession', () => {
-  it('deletes a chat session by id', async () => {
+  it('deletes a chat session and releases its runtime state', async () => {
     const session: SessionRecord = {
       id: 'session-1',
       projectId: null,
@@ -2944,14 +2945,66 @@ describe('SessionManager.deleteSession', () => {
       updatedAt: '2026-05-09T00:00:00.000Z'
     }
     const settings = createClaudeSettings()
+    const releaseRuntimeStateSpy = vi.spyOn(
+      SessionAgentRuntime.prototype,
+      'releaseAgentSessionRuntimeState'
+    )
+    const releaseCallbacksSpy = vi.spyOn(SessionAgentRuntime.prototype, 'releaseSessionCallbacks')
     const { service, sessionsRepository } = createService({
       sessions: [session],
       settings
     })
 
-    await service.deleteSession({ sessionId: 'session-1' })
+    try {
+      await service.deleteSession({ sessionId: 'session-1' })
 
-    expect(sessionsRepository.sessions).toEqual([])
+      expect(sessionsRepository.sessions).toEqual([])
+      expect(releaseRuntimeStateSpy).toHaveBeenCalledOnce()
+      expect(releaseRuntimeStateSpy).toHaveBeenCalledWith('thread-session-1')
+      expect(releaseCallbacksSpy).toHaveBeenCalledWith('session-1')
+    } finally {
+      releaseRuntimeStateSpy.mockRestore()
+      releaseCallbacksSpy.mockRestore()
+    }
+  })
+
+  it('keeps runtime state when session persistence deletion fails', async () => {
+    const session: SessionRecord = {
+      id: 'session-1',
+      projectId: null,
+      provider: 'claude',
+      title: 'Plan',
+      status: 'active',
+      createdAt: '2026-05-09T00:00:00.000Z',
+      updatedAt: '2026-05-09T00:00:00.000Z'
+    }
+    const settings = createClaudeSettings()
+    const releaseRuntimeStateSpy = vi.spyOn(
+      SessionAgentRuntime.prototype,
+      'releaseAgentSessionRuntimeState'
+    )
+    const releaseCallbacksSpy = vi.spyOn(SessionAgentRuntime.prototype, 'releaseSessionCallbacks')
+    const { service, sessionsRepository } = createService({
+      sessions: [session],
+      settings
+    })
+    const deleteSessionSpy = vi
+      .spyOn(sessionsRepository, 'deleteById')
+      .mockRejectedValueOnce(new Error('delete failed'))
+
+    try {
+      await expect(service.deleteSession({ sessionId: 'session-1' })).rejects.toThrow(
+        'delete failed'
+      )
+
+      expect(releaseRuntimeStateSpy).not.toHaveBeenCalled()
+      expect(releaseCallbacksSpy).not.toHaveBeenCalled()
+      expect(sessionsRepository.sessions).toEqual([session])
+    } finally {
+      deleteSessionSpy.mockRestore()
+      releaseRuntimeStateSpy.mockRestore()
+      releaseCallbacksSpy.mockRestore()
+    }
   })
 })
 

@@ -159,6 +159,7 @@ function createRuntimeFixture(input: {
 } = {}): {
   agentRuntime: SessionAgentRuntime
   assistantMessage: MessageRecord
+  backend: AgentBackend
   capturedConfigs: AgentBackendConfig[]
   events: EventCall[]
   messages: Map<string, MessageRecord>
@@ -302,6 +303,7 @@ function createRuntimeFixture(input: {
   return {
     agentRuntime,
     assistantMessage,
+    backend,
     capturedConfigs,
     events,
     messages,
@@ -377,6 +379,7 @@ describe('SessionOperationRuntime', () => {
     expect(releaseBackendSpy).toHaveBeenCalledWith('operation-1')
     expect(releaseListenerSpy).toHaveBeenCalledWith('operation-1')
     expect(releaseCallbacksSpy).toHaveBeenCalledWith('session-1')
+    expect(fixture.backend.destroy).toHaveBeenCalledOnce()
   })
 
   it('passes stored current-turn attachments to the backend with provider-ready content', async () => {
@@ -479,8 +482,19 @@ describe('SessionOperationRuntime', () => {
   })
 
   it('marks operation and assistant as error when backend emits error', async () => {
+    const closeEventStream = vi.fn()
+    const backend = createBackend([])
+
+    backend.chat = async function* () {
+      try {
+        yield { type: 'error', message: 'model down' }
+      } finally {
+        closeEventStream()
+      }
+    }
+
     const fixture = createRuntimeFixture({
-      events: [{ type: 'error', message: 'model down' }]
+      backend
     })
     const releaseBackendSpy = vi.spyOn(fixture.toolPermissionRuntime, 'releaseBackend')
     const releaseCallbacksSpy = vi.spyOn(fixture.agentRuntime, 'releaseSessionCallbacks')
@@ -502,6 +516,8 @@ describe('SessionOperationRuntime', () => {
     })
     expect(releaseBackendSpy).toHaveBeenCalledWith('operation-1')
     expect(releaseCallbacksSpy).toHaveBeenCalledWith('session-1')
+    expect(closeEventStream).toHaveBeenCalledOnce()
+    expect(fixture.backend.destroy).toHaveBeenCalledOnce()
   })
 
   it('marks aborted operation as interrupted and assistant as cancelled', async () => {
@@ -526,6 +542,7 @@ describe('SessionOperationRuntime', () => {
       type: 'operation-error',
       error: 'Cancelled by user.'
     })
+    expect(fixture.backend.destroy).toHaveBeenCalledOnce()
   })
 
   it('keeps empty response guard when no source activation happened', async () => {

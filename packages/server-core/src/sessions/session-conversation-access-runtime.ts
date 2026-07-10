@@ -90,10 +90,15 @@ export class SessionConversationAccessRuntime {
   }
 
   /**
-   * 删除指定会话；当前 runtime 不额外清理附件目录或派生文件。
+   * 删除指定会话，并在级联删除前返回其 thread IDs 供上层释放运行态。
+   * 当前 runtime 不额外清理附件目录或派生文件。
    */
-  async deleteSession(sessionId: string): Promise<void> {
+  async deleteSession(sessionId: string): Promise<string[]> {
+    const threads = await this.threadsRepository.listBySession(sessionId)
+
     await this.sessionsRepository.deleteById(sessionId)
+
+    return threads.map((thread) => thread.id)
   }
 
   /**

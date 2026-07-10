@@ -146,6 +146,25 @@ describe('SessionAgentRuntime', () => {
     expect(third.agentSessionState.providerSessionId).toBeUndefined()
   })
 
+  it('releases only the requested thread runtime state', () => {
+    const runtime = new SessionAgentRuntime({
+      createAgentBackend: vi.fn(() => createBackend())
+    })
+    const releasedState = runtime.resolveAgentSessionRuntimeState('thread-1')
+    const retainedState = runtime.resolveAgentSessionRuntimeState('thread-2')
+
+    setProviderSessionId(releasedState, 'sdk-session-1')
+    setProviderSessionId(retainedState, 'sdk-session-2')
+    runtime.releaseAgentSessionRuntimeState('thread-1')
+
+    const recreatedState = runtime.resolveAgentSessionRuntimeState('thread-1')
+
+    expect(recreatedState).not.toBe(releasedState)
+    expect(recreatedState.providerSessionId).toBeUndefined()
+    expect(runtime.resolveAgentSessionRuntimeState('thread-2')).toBe(retainedState)
+    expect(retainedState.providerSessionId).toBe('sdk-session-2')
+  })
+
   it('hydrates provider session state from thread metadata without overwriting newer memory', async () => {
     const capturedConfigs: AgentBackendConfig[] = []
     const runtime = new SessionAgentRuntime({

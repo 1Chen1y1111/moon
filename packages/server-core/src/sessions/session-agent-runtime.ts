@@ -58,6 +58,9 @@ export type SessionSourceActivator = {
   activateSource: (scope: SessionSourceProviderScope, sourceSlug: string) => Promise<boolean>
 }
 
+/**
+ * 为单次 operation 创建独立 backend，实例生命周期由 operation runtime 负责结束。
+ */
 export type AgentBackendFactory = (config: AgentBackendConfig) => AgentBackend
 
 export type SessionAgentRuntimeInput = {
@@ -170,6 +173,13 @@ export class SessionAgentRuntime {
     this.agentSessionRuntimeStates.set(threadId, state)
 
     return state
+  }
+
+  /**
+   * 释放指定 thread 的 agent session runtime state，供会话删除后回收进程内状态。
+   */
+  releaseAgentSessionRuntimeState(threadId: string): void {
+    this.agentSessionRuntimeStates.delete(threadId)
   }
 
   /**

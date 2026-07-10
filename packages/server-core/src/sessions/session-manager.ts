@@ -5,10 +5,7 @@
 
 import { join } from 'node:path'
 
-import {
-  createBackend,
-  type AgentBackend
-} from '@moon/shared/agent'
+import { createBackend } from '@moon/shared/agent'
 import type { NormalizedLlmConnection } from '@moon/shared/config'
 import type {
   AgentOperationRecord,
@@ -129,7 +126,6 @@ export type TopicsRepositoryPort = {
 
 export type SessionManagerDependencies = {
   agentOperationsRepository: AgentOperationsRepositoryPort
-  agentBackend?: AgentBackend
   attachmentsDirectory?: string
   createAgentBackend?: AgentBackendFactory
   messagesRepository: MessagesRepositoryPort
@@ -179,7 +175,6 @@ export class SessionManager {
    */
   constructor({
     agentOperationsRepository,
-    agentBackend,
     attachmentsDirectory,
     createAgentBackend,
     messagesRepository,
@@ -193,8 +188,7 @@ export class SessionManager {
     toolInvocationsRepository,
     topicsRepository
   }: SessionManagerDependencies) {
-    const resolvedCreateAgentBackend: AgentBackendFactory =
-      createAgentBackend ?? ((config) => agentBackend ?? createBackend(config))
+    const resolvedCreateAgentBackend: AgentBackendFactory = createAgentBackend ?? createBackend
 
     this.agentTargetRuntime = new SessionAgentTargetRuntime({
       sessionsRepository,
@@ -322,12 +316,17 @@ export class SessionManager {
   }
 
   /**
-   * 删除指定会话；当前 runtime 不额外清理附件目录。
+   * 删除指定会话，并在持久化成功后释放其 thread 运行态和 session callbacks。
    */
   async deleteSession(input: DeleteChatSessionInput): Promise<void> {
     const parsedInput = deleteChatSessionInputSchema.parse(input)
+    const threadIds = await this.conversationAccessRuntime.deleteSession(parsedInput.sessionId)
 
-    await this.conversationAccessRuntime.deleteSession(parsedInput.sessionId)
+    for (const threadId of threadIds) {
+      this.agentRuntime.releaseAgentSessionRuntimeState(threadId)
+    }
+
+    this.agentRuntime.releaseSessionCallbacks(parsedInput.sessionId)
   }
 
   /**

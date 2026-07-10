@@ -1,6 +1,6 @@
 /**
  * 负责执行已经启动的单次 agent operation。
- * 它只处理 backend 输入构造、事件消费和 done/error 收尾，不拥有会话创建或取消入口。
+ * 它处理 backend 输入构造、事件流消费与资源释放，不拥有会话创建或取消入口。
  */
 
 import { readFile } from 'node:fs/promises'
@@ -198,7 +198,7 @@ function createBackendWorkspace(
 }
 
 /**
- * 执行单次 operation，并把 backend 事件应用到消息、工具和 operation 状态。
+ * 执行单次 operation，把 backend 事件应用到会话状态，并在结束时释放事件流和 backend。
  */
 export class SessionOperationRuntime {
   private readonly agentEventApplier: SessionAgentEventApplier
@@ -276,6 +276,7 @@ export class SessionOperationRuntime {
       scope,
       workspace: createBackendWorkspace(scope)
     })
+    let agentEvents: ReturnType<typeof agentBackend.chat> | null = null
 
     this.toolPermissionRuntime.registerBackend(operation.id, agentBackend)
 
@@ -284,7 +285,7 @@ export class SessionOperationRuntime {
     }
 
     try {
-      const agentEvents = agentBackend.chat(
+      agentEvents = agentBackend.chat(
         currentProviderMessage,
         currentAttachments.length === 0 ? undefined : currentAttachments,
         {
@@ -334,6 +335,14 @@ export class SessionOperationRuntime {
       this.toolPermissionRuntime.releaseBackend(operation.id)
       this.toolPermissionRuntime.releaseOperationListener(operation.id)
       this.agentRuntime.releaseSessionCallbacks(scope.session.id)
+
+      try {
+        await agentEvents?.return(undefined)
+      } catch {
+        // 保留 operation 主流程结果，事件流关闭失败不能覆盖原始完成或错误状态。
+      } finally {
+        agentBackend.destroy()
+      }
     }
   }
 
