@@ -377,7 +377,9 @@ type CreateServiceResult = {
     saveLlmConnection: (connection: NormalizedLlmConnection) => Promise<NormalizedLlmConnection>
     selectDefaultLlmConnection: () => Promise<NormalizedLlmConnection | null>
   }
+  threadsRepository: ThreadsRepositoryMock
   toolInvocationsRepository: ToolInvocationsRepositoryMock
+  topicsRepository: TopicsRepositoryMock
 }
 
 function createMockAgentBackend(events: AgentEvent[]): AgentBackend {
@@ -629,7 +631,9 @@ function createService(input: {
     sessionsRepository,
     projectsRepository,
     settingsRepository,
-    toolInvocationsRepository
+    threadsRepository,
+    toolInvocationsRepository,
+    topicsRepository
   }
 }
 
@@ -2074,9 +2078,8 @@ describe('SessionManager.sendMessage', () => {
     ])
   })
 
-  it('persists provider session ids and usage updates on operations', async () => {
+  it('persists provider session ids across SessionManager recreation and keeps operation usage', async () => {
     const settings = createClaudeSettings()
-    const capturedConfigs: AgentBackendConfig[] = []
     const agentEvents: AgentEvent[] = [
       { type: 'session_id_update', sessionId: 'sdk-session-1' },
       {
@@ -2091,18 +2094,31 @@ describe('SessionManager.sendMessage', () => {
       },
       { type: 'text_delta', text: 'ok' }
     ]
-    const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
-      capturedConfigs.push(config)
-
-      return createMockAgentBackend(agentEvents)
-    })
-    const { service } = createService({
-      createAgentBackend,
+    const fixture = createService({
+      createAgentBackend: vi.fn(() => createMockAgentBackend(agentEvents)),
       settings
     })
 
-    const result = await service.sendMessage({ content: '测试 usage' })
-    await service.sendMessage({
+    const result = await fixture.service.sendMessage({ content: '测试 usage' })
+    const persistedThread = await fixture.threadsRepository.findById(result.thread.id)
+    const resumedConfigs: AgentBackendConfig[] = []
+    const restartedService = new SessionManager({
+      agentOperationsRepository: fixture.agentOperationsRepository as never,
+      createAgentBackend: vi.fn((config: AgentBackendConfig) => {
+        resumedConfigs.push(config)
+
+        return createMockAgentBackend([{ type: 'text_delta', text: 'resumed' }])
+      }),
+      messagesRepository: fixture.messagesRepository as never,
+      projectsRepository: fixture.projectsRepository as never,
+      sessionsRepository: fixture.sessionsRepository as never,
+      settingsRepository: fixture.settingsRepository as never,
+      threadsRepository: fixture.threadsRepository as never,
+      toolInvocationsRepository: fixture.toolInvocationsRepository as never,
+      topicsRepository: fixture.topicsRepository as never
+    })
+
+    await restartedService.sendMessage({
       content: '测试 resume',
       sessionId: result.session.id,
       topicId: result.topic.id,
@@ -2123,8 +2139,11 @@ describe('SessionManager.sendMessage', () => {
         totalTokens: 17
       }
     })
-    expect(capturedConfigs).toHaveLength(2)
-    expect(capturedConfigs[1]?.agentSessionState?.providerSessionId).toBe('sdk-session-1')
+    expect(persistedThread?.metadata).toMatchObject({
+      providerSessionId: 'sdk-session-1'
+    })
+    expect(resumedConfigs).toHaveLength(1)
+    expect(resumedConfigs[0]?.agentSessionState?.providerSessionId).toBe('sdk-session-1')
   })
 
   it('persists usage carried by complete events', async () => {

@@ -8,6 +8,7 @@ import type {
   ChatJsonObject,
   ChatOperationEvent,
   MessageRecord,
+  ThreadRecord,
   ToolInvocationRecord
 } from '@moon/shared/domain/chat'
 import type { AgentEvent } from '@moon/shared/agent'
@@ -15,6 +16,7 @@ import type { SessionEventRouteHint } from './handlers'
 import type {
   AgentOperationsRepositoryPort,
   MessagesRepositoryPort,
+  ThreadsRepositoryPort,
   ToolInvocationsRepositoryPort
 } from './session-manager'
 import type { SessionSourceProviderScope } from './session-agent-runtime'
@@ -50,6 +52,7 @@ export type SessionAgentEventApplierInput = {
   messagesRepository: MessagesRepositoryPort
   recordActivatedSource: (threadId: string, sourceSlug: string) => void
   recordProviderSessionId: (threadId: string, providerSessionId: string) => void
+  threadsRepository: ThreadsRepositoryPort
   toolInvocationsRepository: ToolInvocationsRepositoryPort
   trackPendingToolPermission: (
     toolInvocation: ToolInvocationRecord,
@@ -215,6 +218,24 @@ function applyProviderSessionIdToOperation(
 }
 
 /**
+ * 把最新 provider session id 写入 thread metadata，作为应用重启后的恢复来源。
+ */
+function applyProviderSessionIdToThread(
+  thread: ThreadRecord,
+  providerSessionId: string,
+  timestamp: string
+): ThreadRecord {
+  return {
+    ...thread,
+    metadata: {
+      ...(thread.metadata ?? {}),
+      providerSessionId
+    },
+    updatedAt: timestamp
+  }
+}
+
+/**
  * 把 agent 状态事件记录到 operation metadata，只保存最后一次状态快照。
  */
 function applyAgentStatusToOperation(
@@ -267,6 +288,7 @@ export class SessionAgentEventApplier {
   private readonly messagesRepository: MessagesRepositoryPort
   private readonly recordActivatedSource: (threadId: string, sourceSlug: string) => void
   private readonly recordProviderSessionId: (threadId: string, providerSessionId: string) => void
+  private readonly threadsRepository: ThreadsRepositoryPort
   private readonly toolInvocationsRepository: ToolInvocationsRepositoryPort
   private readonly trackPendingToolPermission: (
     toolInvocation: ToolInvocationRecord,
@@ -282,6 +304,7 @@ export class SessionAgentEventApplier {
     messagesRepository,
     recordActivatedSource,
     recordProviderSessionId,
+    threadsRepository,
     toolInvocationsRepository,
     trackPendingToolPermission
   }: SessionAgentEventApplierInput) {
@@ -290,6 +313,7 @@ export class SessionAgentEventApplier {
     this.messagesRepository = messagesRepository
     this.recordActivatedSource = recordActivatedSource
     this.recordProviderSessionId = recordProviderSessionId
+    this.threadsRepository = threadsRepository
     this.toolInvocationsRepository = toolInvocationsRepository
     this.trackPendingToolPermission = trackPendingToolPermission
   }
@@ -306,10 +330,17 @@ export class SessionAgentEventApplier {
     scope
   }: SessionAgentEventApplyInput): Promise<SessionAgentEventApplicationResult> {
     if (event.type === 'session_id_update') {
+      const timestamp = createTimestamp()
+
       this.recordProviderSessionId(scope.thread.id, event.sessionId)
-      const updatedOperation = await this.agentOperationsRepository.save(
-        applyProviderSessionIdToOperation(operation, event.sessionId, createTimestamp())
-      )
+      const [updatedOperation] = await Promise.all([
+        this.agentOperationsRepository.save(
+          applyProviderSessionIdToOperation(operation, event.sessionId, timestamp)
+        ),
+        this.threadsRepository.save(
+          applyProviderSessionIdToThread(scope.thread, event.sessionId, timestamp)
+        )
+      ])
 
       return { message, operation: updatedOperation }
     }

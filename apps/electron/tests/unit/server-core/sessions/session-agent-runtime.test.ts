@@ -54,7 +54,10 @@ function createBackend(overrides: Partial<AgentBackend> = {}): AgentBackend {
 /**
  * 创建会话运行态测试所需的最小 scope。
  */
-function createScope(threadId = 'thread-1'): SessionSourceProviderScope {
+function createScope(
+  threadId = 'thread-1',
+  metadata?: ThreadRecord['metadata']
+): SessionSourceProviderScope {
   const project: ProjectRecord = {
     id: 'project-1',
     name: 'moon',
@@ -83,6 +86,7 @@ function createScope(threadId = 'thread-1'): SessionSourceProviderScope {
     topicId: topic.id,
     title: '主线',
     type: 'standalone',
+    ...(metadata === undefined ? {} : { metadata }),
     createdAt: timestamp,
     updatedAt: timestamp
   }
@@ -140,6 +144,73 @@ describe('SessionAgentRuntime', () => {
 
     expect(resumed.agentSessionState.providerSessionId).toBe('sdk-session-1')
     expect(third.agentSessionState.providerSessionId).toBeUndefined()
+  })
+
+  it('hydrates provider session state from thread metadata without overwriting newer memory', async () => {
+    const capturedConfigs: AgentBackendConfig[] = []
+    const runtime = new SessionAgentRuntime({
+      createAgentBackend: vi.fn((config) => {
+        capturedConfigs.push(config)
+
+        return createBackend()
+      })
+    })
+
+    const first = await runtime.createBackend({
+      connection,
+      messages: [],
+      originalMessage: 'resume after restart',
+      scope: createScope('thread-persisted', {
+        providerSessionId: 'sdk-session-persisted'
+      })
+    })
+
+    expect(first.agentSessionState.providerSessionId).toBe('sdk-session-persisted')
+    expect(capturedConfigs[0]?.agentSessionState?.providerSessionId).toBe(
+      'sdk-session-persisted'
+    )
+
+    runtime.recordProviderSessionId('thread-persisted', 'sdk-session-current')
+
+    const second = await runtime.createBackend({
+      connection,
+      messages: [],
+      originalMessage: 'keep current state',
+      scope: createScope('thread-persisted', {
+        providerSessionId: 'sdk-session-stale'
+      })
+    })
+
+    expect(second.agentSessionState.providerSessionId).toBe('sdk-session-current')
+  })
+
+  it('ignores missing, empty, or non-string provider session metadata', async () => {
+    const runtime = new SessionAgentRuntime({
+      createAgentBackend: vi.fn(() => createBackend())
+    })
+
+    const missing = await runtime.createBackend({
+      connection,
+      messages: [],
+      originalMessage: 'missing metadata',
+      scope: createScope('thread-missing')
+    })
+    const empty = await runtime.createBackend({
+      connection,
+      messages: [],
+      originalMessage: 'empty metadata',
+      scope: createScope('thread-empty', { providerSessionId: '   ' })
+    })
+    const invalid = await runtime.createBackend({
+      connection,
+      messages: [],
+      originalMessage: 'invalid metadata',
+      scope: createScope('thread-invalid', { providerSessionId: 42 })
+    })
+
+    expect(missing.agentSessionState.providerSessionId).toBeUndefined()
+    expect(empty.agentSessionState.providerSessionId).toBeUndefined()
+    expect(invalid.agentSessionState.providerSessionId).toBeUndefined()
   })
 
   it.each(['safe', 'allow-all'] as const)(

@@ -227,6 +227,7 @@ export class SessionManager {
         this.agentRuntime.recordActivatedSource(threadId, sourceSlug),
       recordProviderSessionId: (threadId, providerSessionId) =>
         this.agentRuntime.recordProviderSessionId(threadId, providerSessionId),
+      threadsRepository,
       toolInvocationsRepository,
       trackPendingToolPermission: (toolInvocation, operationId) =>
         this.toolPermissionRuntime.trackPendingToolPermission(toolInvocation, operationId)

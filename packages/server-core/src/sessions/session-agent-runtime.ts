@@ -108,6 +108,27 @@ function applySessionActivatedSources(
 }
 
 /**
+ * 用 thread metadata 中持久化的 provider session 初始化新 runtime state。
+ * 已有内存值优先，避免旧 metadata 覆盖本进程刚收到的 session id。
+ */
+function hydrateProviderSessionId(
+  agentSessionState: AgentSessionRuntimeState,
+  thread: ThreadRecord
+): void {
+  if (agentSessionState.providerSessionId !== undefined) {
+    return
+  }
+
+  const providerSessionId = thread.metadata?.providerSessionId
+
+  if (typeof providerSessionId !== 'string' || providerSessionId.trim().length === 0) {
+    return
+  }
+
+  setProviderSessionId(agentSessionState, providerSessionId.trim())
+}
+
+/**
  * 维护会话运行时里和 agent backend 创建相关的短生命周期状态。
  */
 export class SessionAgentRuntime {
@@ -175,6 +196,9 @@ export class SessionAgentRuntime {
     workspace
   }: SessionAgentRuntimeCreateBackendInput): Promise<SessionAgentRuntimeCreateBackendResult> {
     const agentSessionState = this.resolveAgentSessionRuntimeState(scope.thread.id)
+
+    hydrateProviderSessionId(agentSessionState, scope.thread)
+
     const permissionMode = await this.resolvePermissionModeForScope(scope)
     const sources = await this.resolveSourcesForScope(scope, agentSessionState)
     const agentBackend = this.createAgentBackend(
