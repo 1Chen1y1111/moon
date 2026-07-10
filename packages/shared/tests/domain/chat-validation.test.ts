@@ -30,6 +30,55 @@ describe('chat input validation', () => {
     })
   })
 
+  it('accepts complete branch lineage and rejects ambiguous branch inputs', () => {
+    expect(
+      sendChatMessageInputSchema.parse({
+        sessionId: ' session-1 ',
+        parentThreadId: ' thread-parent ',
+        sourceMessageId: ' message-source ',
+        content: ' branch question '
+      })
+    ).toEqual({
+      sessionId: 'session-1',
+      parentThreadId: 'thread-parent',
+      sourceMessageId: 'message-source',
+      content: 'branch question'
+    })
+
+    expect(() =>
+      sendChatMessageInputSchema.parse({
+        sessionId: 'session-1',
+        parentThreadId: 'thread-parent',
+        content: 'missing source'
+      })
+    ).toThrow()
+    expect(() =>
+      sendChatMessageInputSchema.parse({
+        parentThreadId: 'thread-parent',
+        sourceMessageId: 'message-source',
+        content: 'missing session'
+      })
+    ).toThrow()
+    expect(() =>
+      sendChatMessageInputSchema.parse({
+        sessionId: 'session-1',
+        threadId: 'thread-current',
+        parentThreadId: 'thread-parent',
+        sourceMessageId: 'message-source',
+        content: 'ambiguous thread'
+      })
+    ).toThrow()
+    expect(() =>
+      sendChatMessageInputSchema.parse({
+        sessionId: 'session-1',
+        parentThreadId: 'thread-parent',
+        sourceMessageId: 'message-source',
+        provider: 'deepseek',
+        content: 'ambiguous provider'
+      })
+    ).toThrow()
+  })
+
   it('requires non-empty session ids for message loading', () => {
     expect(getChatMessagesInputSchema.parse({ sessionId: ' session-1 ' })).toEqual({
       sessionId: 'session-1'

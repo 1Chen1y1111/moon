@@ -219,17 +219,21 @@ function applyProviderSessionIdToOperation(
 }
 
 /**
- * 把最新 provider session id 写入 thread metadata，作为应用重启后的恢复来源。
+ * 把最新 provider session id 写入 thread metadata，并消费一次性 provider fork 标记。
  */
 function applyProviderSessionIdToThread(
   thread: ThreadRecord,
   providerSessionId: string,
   timestamp: string
 ): ThreadRecord {
+  const metadata = { ...(thread.metadata ?? {}) }
+
+  delete metadata.providerSessionFork
+
   return {
     ...thread,
     metadata: {
-      ...(thread.metadata ?? {}),
+      ...metadata,
       providerSessionId
     },
     updatedAt: timestamp
@@ -237,16 +241,37 @@ function applyProviderSessionIdToThread(
 }
 
 /**
- * 从 thread metadata 删除失效的 provider session id，同时保留其他 thread 状态。
+ * 从 thread metadata 删除失效的 provider session 和 fork 标记，同时保留其他 thread 状态。
  */
 function clearProviderSessionIdFromThread(thread: ThreadRecord, timestamp: string): ThreadRecord {
   const metadata = { ...(thread.metadata ?? {}) }
 
   delete metadata.providerSessionId
+  delete metadata.providerSessionFork
 
   return {
     ...thread,
     metadata,
+    updatedAt: timestamp
+  }
+}
+
+/**
+ * 记录当前 Moon assistant 消息对应的 provider session/message 坐标，供历史消息分支使用。
+ */
+function applyProviderMessageIdToMessage(
+  message: MessageRecord,
+  providerMessageId: string,
+  providerSessionId: string,
+  timestamp: string
+): MessageRecord {
+  return {
+    ...message,
+    metadata: {
+      ...(message.metadata ?? {}),
+      providerMessageId,
+      providerSessionId
+    },
     updatedAt: timestamp
   }
 }
@@ -371,6 +396,19 @@ export class SessionAgentEventApplier {
       ])
 
       return { message, operation: updatedOperation }
+    }
+
+    if (event.type === 'provider_message_id_update') {
+      const updatedMessage = await this.messagesRepository.save(
+        applyProviderMessageIdToMessage(
+          message,
+          event.providerMessageId,
+          event.providerSessionId,
+          createTimestamp()
+        )
+      )
+
+      return { message: updatedMessage, operation }
     }
 
     if (event.type === 'usage_update') {

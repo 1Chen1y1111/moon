@@ -2164,6 +2164,93 @@ describe('SessionManager.sendMessage', () => {
     expect(resumedConfigs[0]?.agentSessionState?.providerSessionId).toBe('sdk-session-1')
   })
 
+  it('forks a provider session into an isolated thread and continues on the child session', async () => {
+    const settings = createClaudeSettings()
+    const capturedConfigs: AgentBackendConfig[] = []
+    const eventSets: AgentEvent[][] = [
+      [
+        { type: 'session_id_update', sessionId: 'sdk-session-parent' },
+        {
+          type: 'provider_message_id_update',
+          providerMessageId: 'sdk-message-source',
+          providerSessionId: 'sdk-session-parent'
+        },
+        { type: 'text_delta', text: 'parent answer' }
+      ],
+      [
+        { type: 'session_id_update', sessionId: 'sdk-session-child' },
+        {
+          type: 'provider_message_id_update',
+          providerMessageId: 'sdk-message-child',
+          providerSessionId: 'sdk-session-child'
+        },
+        { type: 'text_delta', text: 'branch answer' }
+      ],
+      [{ type: 'text_delta', text: 'child continuation' }]
+    ]
+    const createAgentBackend = vi.fn((config: AgentBackendConfig) => {
+      capturedConfigs.push(config)
+
+      return createMockAgentBackend(eventSets[capturedConfigs.length - 1] ?? [])
+    })
+    const fixture = createService({ createAgentBackend, settings })
+    const parent = await fixture.service.sendMessage({ content: 'parent question' })
+    const sourceMessage = parent.messages.find((message) => message.role === 'assistant')
+
+    expect(sourceMessage?.metadata).toMatchObject({
+      providerMessageId: 'sdk-message-source',
+      providerSessionId: 'sdk-session-parent'
+    })
+
+    const branch = await fixture.service.sendMessage({
+      sessionId: parent.session.id,
+      parentThreadId: parent.thread.id,
+      sourceMessageId: sourceMessage!.id,
+      content: 'branch question'
+    })
+    const persistedParent = await fixture.threadsRepository.findById(parent.thread.id)
+    const persistedBranch = await fixture.threadsRepository.findById(branch.thread.id)
+
+    expect(branch.thread).toMatchObject({
+      parentThreadId: parent.thread.id,
+      sourceMessageId: sourceMessage!.id,
+      type: 'continuation'
+    })
+    expect(branch.operation.appContext?.sourceMessageId).toBe(sourceMessage!.id)
+    expect(capturedConfigs[1]?.providerSessionFork).toEqual({
+      providerSessionId: 'sdk-session-parent',
+      providerMessageId: 'sdk-message-source'
+    })
+    expect(capturedConfigs[1]?.messages).toEqual([
+      { role: 'user', content: 'parent question' },
+      { role: 'assistant', content: 'parent answer' },
+      { role: 'user', content: 'branch question' }
+    ])
+    expect(persistedParent?.metadata).toMatchObject({
+      providerSessionId: 'sdk-session-parent'
+    })
+    expect(persistedBranch?.metadata).toMatchObject({
+      providerSessionId: 'sdk-session-child'
+    })
+    expect(persistedBranch?.metadata).not.toHaveProperty('providerSessionFork')
+
+    await fixture.service.sendMessage({
+      sessionId: parent.session.id,
+      threadId: branch.thread.id,
+      content: 'continue child'
+    })
+
+    expect(capturedConfigs[2]?.providerSessionFork).toBeUndefined()
+    expect(capturedConfigs[2]?.agentSessionState?.providerSessionId).toBe('sdk-session-child')
+    expect(capturedConfigs[2]?.messages).toEqual([
+      { role: 'user', content: 'parent question' },
+      { role: 'assistant', content: 'parent answer' },
+      { role: 'user', content: 'branch question' },
+      { role: 'assistant', content: 'branch answer' },
+      { role: 'user', content: 'continue child' }
+    ])
+  })
+
   it('persists provider session clearing and accepts a fresh session after restart', async () => {
     const settings = createClaudeSettings()
     const fixture = createService({

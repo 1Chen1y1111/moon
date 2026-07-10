@@ -63,6 +63,17 @@ function readSessionId(message: SDKMessage): string | null {
 }
 
 /**
+ * 从 Claude assistant 消息中读取可供 resumeSessionAt 使用的 provider message UUID。
+ */
+function readProviderMessageId(message: SDKMessage): string | null {
+  if (message.type !== 'assistant') {
+    return null
+  }
+
+  return typeof message.uuid === 'string' && message.uuid.length > 0 ? message.uuid : null
+}
+
+/**
  * 读取 Claude SDK usage payload，并映射到 Moon 的用量语义。
  */
 function readUsagePayload(usage: unknown, costUsd?: number): AgentEventUsage | null {
@@ -351,9 +362,18 @@ function adaptSdkMessage(message: SDKMessage): AgentEvent[] {
       return events
     }
 
+    const providerMessageId = readProviderMessageId(message)
     const text = readAssistantText(message)
     const toolEvents = readAssistantToolEvents(message)
     const usage = readAssistantUsage(message)
+
+    if (providerMessageId !== null && sessionId !== null) {
+      events.push({
+        type: 'provider_message_id_update',
+        providerMessageId,
+        providerSessionId: sessionId
+      })
+    }
 
     if (text.length > 0) {
       events.push({ type: 'text_complete', text })

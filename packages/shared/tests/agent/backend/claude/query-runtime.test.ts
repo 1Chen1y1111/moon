@@ -115,6 +115,24 @@ describe('createClaudeQueryRuntime', () => {
     })
   })
 
+  it('maps provider session fork context to SDK options', () => {
+    const runtime = createClaudeQueryRuntime(
+      createRuntimeInput({
+        providerSessionFork: {
+          providerSessionId: 'sdk-session-parent',
+          providerMessageId: 'sdk-message-source'
+        },
+        resumeSessionId: 'sdk-session-parent'
+      })
+    )
+
+    expect(runtime.queryOptions).toMatchObject({
+      resume: 'sdk-session-parent',
+      forkSession: true,
+      resumeSessionAt: 'sdk-message-source'
+    })
+  })
+
   it('writes stderr callback data into the returned stderr buffer', () => {
     const runtime = createClaudeQueryRuntime(createRuntimeInput())
 

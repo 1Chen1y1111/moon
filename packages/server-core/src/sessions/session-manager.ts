@@ -249,6 +249,7 @@ export class SessionManager {
       attachmentsDirectory: this.attachmentsDirectory,
       messagesRepository,
       sessionsRepository,
+      threadsRepository,
       toolPermissionRuntime: this.toolPermissionRuntime
     })
     const sourceActivationRetryRuntime = new SessionSourceActivationRetryRuntime({

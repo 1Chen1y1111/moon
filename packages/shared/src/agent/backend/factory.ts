@@ -46,6 +46,7 @@ function createBackendFromRuntimeContext(context: AgentBackendRuntimeContext): A
       messages: context.messages,
       model: context.model,
       permissionMode: context.permissionMode,
+      providerSessionFork: context.providerSessionFork,
       sources: context.sources,
       thinkingLevel: context.thinkingLevel,
       workspace: context.workspace

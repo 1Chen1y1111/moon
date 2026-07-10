@@ -148,6 +148,27 @@ describe('ClaudeEventAdapter', () => {
     ).toEqual([{ type: 'session_id_update', sessionId: 'sdk-session-1' }])
   })
 
+  it('emits provider message ids for successful assistant messages', () => {
+    expect(
+      adaptWithAdapter(
+        sdkMessage({
+          type: 'assistant',
+          session_id: 'sdk-session-1',
+          uuid: 'sdk-message-1',
+          message: { content: [{ type: 'text', text: 'hello' }] }
+        })
+      )
+    ).toEqual([
+      { type: 'session_id_update', sessionId: 'sdk-session-1' },
+      {
+        type: 'provider_message_id_update',
+        providerMessageId: 'sdk-message-1',
+        providerSessionId: 'sdk-session-1'
+      },
+      { type: 'text_complete', text: 'hello' }
+    ])
+  })
+
   it('converts assistant usage snapshots to usage_update events', () => {
     expect(
       adaptWithAdapter(

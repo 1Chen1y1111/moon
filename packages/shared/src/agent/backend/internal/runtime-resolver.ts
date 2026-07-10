@@ -12,7 +12,12 @@ import type { ThinkingLevel } from '../../../config'
 import type { AgentSessionRuntimeState } from '../../core/session-runtime-state'
 import type { AgentPermissionMode } from '../../core/types'
 import type { AgentSourceRecord } from '../../core/source-manager'
-import type { AgentBackendConfig, AgentBackendMessage, AgentBackendWorkspace } from '../types'
+import type {
+  AgentBackendConfig,
+  AgentBackendMessage,
+  AgentBackendWorkspace,
+  AgentProviderSessionFork
+} from '../types'
 import { resolveClaudeCodeExecutablePath } from './claude-code-executable'
 import type { ProviderRuntimeResolution } from './driver-types'
 
@@ -36,9 +41,11 @@ export type ClaudeRuntimeEnvInput = {
 
 export type ClaudeQueryOptionsInput = ClaudeRuntimeEnvInput & {
   abortController: AbortController
+  forkSession?: boolean
   hooks?: Options['hooks']
   model: string
   resumeSessionId?: string
+  resumeSessionAt?: string
   stderr?: (data: string) => void
   thinkingLevel?: ThinkingLevel
   workspace?: AgentBackendWorkspace
@@ -55,6 +62,7 @@ export type AgentBackendRuntimeContext = {
   baseUrl?: string
   messages: AgentBackendMessage[]
   permissionMode?: AgentPermissionMode
+  providerSessionFork?: AgentProviderSessionFork
   sources?: AgentSourceRecord[]
   thinkingLevel?: ThinkingLevel
   workspace?: AgentBackendWorkspace
@@ -206,6 +214,7 @@ export function resolveAgentBackendRuntimeContext({
     messages: config.messages ?? [],
     model: providerRuntime.model,
     permissionMode: config.permissionMode,
+    providerSessionFork: config.providerSessionFork,
     sources: config.sources,
     thinkingLevel: config.thinkingLevel,
     workspace: config.workspace
@@ -220,9 +229,11 @@ export function createClaudeQueryOptions({
   apiKey,
   baseEnv,
   baseUrl,
+  forkSession,
   hooks,
   model,
   resumeSessionId,
+  resumeSessionAt,
   stderr,
   thinkingLevel,
   workspace
@@ -266,6 +277,8 @@ export function createClaudeQueryOptions({
     ...workspaceOptions,
     ...(maxThinkingTokens === undefined ? {} : { maxThinkingTokens }),
     ...(resumeSessionId === undefined ? {} : { resume: resumeSessionId }),
+    ...(forkSession === undefined ? {} : { forkSession }),
+    ...(resumeSessionAt === undefined ? {} : { resumeSessionAt }),
     ...(env === undefined ? {} : { env })
   }
 }

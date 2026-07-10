@@ -203,6 +203,35 @@ describe('SessionAgentRuntime', () => {
     expect(second.agentSessionState.providerSessionId).toBe('sdk-session-current')
   })
 
+  it('passes one-shot provider fork metadata without treating the parent as the child session', async () => {
+    const capturedConfigs: AgentBackendConfig[] = []
+    const runtime = new SessionAgentRuntime({
+      createAgentBackend: vi.fn((config) => {
+        capturedConfigs.push(config)
+
+        return createBackend()
+      })
+    })
+
+    const result = await runtime.createBackend({
+      connection,
+      messages: [],
+      originalMessage: 'branch question',
+      scope: createScope('thread-branch', {
+        providerSessionFork: {
+          providerSessionId: 'sdk-session-parent',
+          providerMessageId: 'sdk-message-source'
+        }
+      })
+    })
+
+    expect(capturedConfigs[0]?.providerSessionFork).toEqual({
+      providerSessionId: 'sdk-session-parent',
+      providerMessageId: 'sdk-message-source'
+    })
+    expect(result.agentSessionState.providerSessionId).toBeUndefined()
+  })
+
   it('clears provider session state for only the requested thread', () => {
     const runtime = new SessionAgentRuntime({
       createAgentBackend: vi.fn(() => createBackend())

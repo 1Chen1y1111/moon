@@ -87,4 +87,9 @@ export type AgentEvent =
   | { type: 'typed_error'; error: AgentTypedError; turnId?: string }
   | { type: 'session_id_update'; sessionId: string }
   | { type: 'session_id_clear' }
+  | {
+      type: 'provider_message_id_update'
+      providerMessageId: string
+      providerSessionId: string
+    }
   | { type: 'complete'; usage?: AgentEventUsage }

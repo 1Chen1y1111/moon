@@ -297,6 +297,17 @@ function createRuntimeFixture(input: {
         sessions.delete(id)
       }
     },
+    threadsRepository: {
+      findById: async (id) => threads.get(id) ?? null,
+      listBySession: async () => [...threads.values()],
+      listByTopic: async (topicId) =>
+        [...threads.values()].filter((thread) => thread.topicId === topicId),
+      save: async (thread) => {
+        threads.set(thread.id, thread)
+
+        return thread
+      }
+    },
     toolPermissionRuntime
   })
 

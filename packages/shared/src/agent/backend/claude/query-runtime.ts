@@ -6,7 +6,7 @@
 import type { Options } from '@anthropic-ai/claude-agent-sdk'
 
 import type { ThinkingLevel } from '../../../config'
-import type { AgentBackendWorkspace } from '../types'
+import type { AgentBackendWorkspace, AgentProviderSessionFork } from '../types'
 import { createClaudeQueryOptions } from '../internal/runtime-resolver'
 import {
   createClaudePreToolUseHooks,
@@ -24,6 +24,7 @@ export type ClaudeQueryRuntimeInput = {
   checkToolUse: ClaudeToolUseChecker
   model: string
   onToolUseBlocked?: ClaudeToolUseBlockedReporter
+  providerSessionFork?: AgentProviderSessionFork
   requestPermission?: ClaudeToolPermissionRequester
   requestSourceActivation?: ClaudeSourceActivationRequester | null
   resumeSessionId?: string
@@ -47,6 +48,7 @@ export function createClaudeQueryRuntime({
   checkToolUse,
   model,
   onToolUseBlocked,
+  providerSessionFork,
   requestPermission,
   requestSourceActivation,
   resumeSessionId,
@@ -67,9 +69,11 @@ export function createClaudeQueryRuntime({
     abortController,
     apiKey,
     baseUrl,
+    forkSession: providerSessionFork === undefined ? undefined : true,
     hooks,
     model,
     resumeSessionId,
+    resumeSessionAt: providerSessionFork?.providerMessageId,
     stderr: (data) => stderrBuffer.append(data),
     thinkingLevel,
     workspace

@@ -1,6 +1,6 @@
 /**
  * 负责会话层创建 agent backend 前后的运行时上下文组装。
- * 它只管理 thread 级 agent session state、source/权限解析和 backend 回调注入。
+ * 它管理 thread 级 agent session state、provider fork、source/权限解析和 backend 回调注入。
  */
 
 import {
@@ -15,6 +15,7 @@ import {
   type AgentBackendMessage,
   type AgentBackendWorkspace,
   type AgentPermissionMode,
+  type AgentProviderSessionFork,
   type AgentSessionRuntimeState,
   type AgentSourceRecord
 } from '@moon/shared/agent'
@@ -133,6 +134,34 @@ function hydrateProviderSessionId(
 }
 
 /**
+ * 从 branch thread metadata 读取一次性 provider fork 描述；损坏数据回退到本地历史链路。
+ */
+function readProviderSessionFork(thread: ThreadRecord): AgentProviderSessionFork | undefined {
+  const value = thread.metadata?.providerSessionFork
+
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) {
+    return undefined
+  }
+
+  const providerSessionId = (value as Record<string, unknown>).providerSessionId
+  const providerMessageId = (value as Record<string, unknown>).providerMessageId
+
+  if (
+    typeof providerSessionId !== 'string' ||
+    providerSessionId.trim().length === 0 ||
+    typeof providerMessageId !== 'string' ||
+    providerMessageId.trim().length === 0
+  ) {
+    return undefined
+  }
+
+  return {
+    providerSessionId: providerSessionId.trim(),
+    providerMessageId: providerMessageId.trim()
+  }
+}
+
+/**
  * 维护会话运行时里和 agent backend 创建相关的短生命周期状态。
  */
 export class SessionAgentRuntime {
@@ -218,6 +247,7 @@ export class SessionAgentRuntime {
     hydrateProviderSessionId(agentSessionState, scope.thread)
 
     const permissionMode = await this.resolvePermissionModeForScope(scope)
+    const providerSessionFork = readProviderSessionFork(scope.thread)
     const sources = await this.resolveSourcesForScope(scope, agentSessionState)
     const agentBackend = this.createAgentBackend(
       createConnectionAgentBackendConfig({
@@ -225,6 +255,7 @@ export class SessionAgentRuntime {
         connection,
         messages,
         permissionMode,
+        providerSessionFork,
         sources,
         workspace
       })

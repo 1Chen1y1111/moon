@@ -190,6 +190,28 @@ describe('createConnectionAgentBackendConfig', () => {
       agentSessionState
     })
   })
+
+  it('passes provider session fork context without interpreting provider ids', () => {
+    const connection = llmConnectionSchema.parse({
+      id: 'anthropic-main',
+      name: 'Claude Main',
+      backend: 'anthropic',
+      model: 'claude-sonnet-4-5',
+      apiKey: 'stored-key'
+    })
+    const providerSessionFork = {
+      providerSessionId: 'sdk-session-parent',
+      providerMessageId: 'sdk-message-source'
+    }
+
+    expect(
+      createConnectionAgentBackendConfig({
+        connection,
+        messages: [],
+        providerSessionFork
+      })
+    ).toMatchObject({ providerSessionFork })
+  })
 })
 
 describe('assertLlmConnectionReadyForAgent', () => {

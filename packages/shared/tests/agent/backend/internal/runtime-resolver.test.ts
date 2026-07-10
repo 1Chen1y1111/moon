@@ -110,6 +110,10 @@ describe('resolveAgentBackendRuntimeContext', () => {
       permissionGrants: [{ type: 'bash' as const, toolName: 'Bash', command: 'pnpm test' }],
       sourceGuideReads: []
     }
+    const providerSessionFork = {
+      providerSessionId: 'sdk-session-parent',
+      providerMessageId: 'sdk-message-source'
+    }
     const config = {
       agentSessionState,
       provider: 'anthropic' as const,
@@ -118,6 +122,7 @@ describe('resolveAgentBackendRuntimeContext', () => {
       baseUrl: 'https://api.example.com',
       messages: [{ role: 'user' as const, content: 'hello' }],
       permissionMode: 'ask' as const,
+      providerSessionFork,
       sources: sourceRecords,
       thinkingLevel: 'high' as const,
       workspace: { name: 'moon', path: '/workspace/moon' }
@@ -136,6 +141,7 @@ describe('resolveAgentBackendRuntimeContext', () => {
       messages: [{ role: 'user', content: 'hello' }],
       model: 'claude-sonnet-4-5',
       permissionMode: 'ask',
+      providerSessionFork,
       sources: sourceRecords,
       thinkingLevel: 'high',
       workspace: { name: 'moon', path: '/workspace/moon' }
@@ -205,6 +211,22 @@ describe('createClaudeQueryOptions', () => {
 
     expect(options).toMatchObject({
       resume: 'sdk-session-1'
+    })
+  })
+
+  it('maps provider fork inputs to Claude SDK fork options', () => {
+    const options = createClaudeQueryOptions({
+      abortController: new AbortController(),
+      forkSession: true,
+      model: 'claude-sonnet',
+      resumeSessionAt: 'sdk-message-source',
+      resumeSessionId: 'sdk-session-parent'
+    })
+
+    expect(options).toMatchObject({
+      resume: 'sdk-session-parent',
+      forkSession: true,
+      resumeSessionAt: 'sdk-message-source'
     })
   })
 

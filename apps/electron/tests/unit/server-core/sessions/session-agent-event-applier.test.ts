@@ -269,6 +269,15 @@ describe('SessionAgentEventApplier', () => {
     const message = createMessage()
     let operation = createOperation()
 
+    fixture.scope.thread.metadata = {
+      providerSessionFork: {
+        providerSessionId: 'claude-session-parent',
+        providerMessageId: 'claude-message-source'
+      },
+      workspaceMarker: 'preserved'
+    }
+    fixture.threads.set(fixture.scope.thread.id, fixture.scope.thread)
+
     operation = (
       await applyEvent(fixture, { type: 'session_id_update', sessionId: 'claude-session-1' }, {
         message,
@@ -312,8 +321,10 @@ describe('SessionAgentEventApplier', () => {
       'claude-session-1'
     )
     expect(fixture.threads.get('thread-1')?.metadata).toMatchObject({
-      providerSessionId: 'claude-session-1'
+      providerSessionId: 'claude-session-1',
+      workspaceMarker: 'preserved'
     })
+    expect(fixture.threads.get('thread-1')?.metadata).not.toHaveProperty('providerSessionFork')
     expect(operation.totalInputTokens).toBe(10)
     expect(operation.totalOutputTokens).toBe(5)
     expect(operation.totalTokens).toBe(20)
@@ -346,6 +357,10 @@ describe('SessionAgentEventApplier', () => {
 
     fixture.scope.thread.metadata = {
       providerSessionId: 'claude-session-expired',
+      providerSessionFork: {
+        providerSessionId: 'claude-session-parent',
+        providerMessageId: 'claude-message-source'
+      },
       workspaceMarker: 'preserved'
     }
     fixture.threads.set(fixture.scope.thread.id, fixture.scope.thread)
@@ -359,6 +374,26 @@ describe('SessionAgentEventApplier', () => {
       providerSessionId: 'claude-session-expired',
       auditMarker: 'preserved'
     })
+  })
+
+  it('stores provider message ids on the current assistant message', async () => {
+    const fixture = createApplierFixture()
+
+    const result = await applyEvent(fixture, {
+      type: 'provider_message_id_update',
+      providerMessageId: 'claude-message-1',
+      providerSessionId: 'claude-session-1'
+    })
+
+    expect(result.message.metadata).toEqual({
+      providerMessageId: 'claude-message-1',
+      providerSessionId: 'claude-session-1'
+    })
+    expect(fixture.messages.get(result.message.id)?.metadata).toEqual({
+      providerMessageId: 'claude-message-1',
+      providerSessionId: 'claude-session-1'
+    })
+    expect(fixture.events).toEqual([])
   })
 
   it('records source activation, emits source event, and returns retry signal', async () => {

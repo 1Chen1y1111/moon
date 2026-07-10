@@ -297,6 +297,8 @@ export const sendChatMessageInputSchema = z
     sessionId: z.string().trim().min(1, 'Session ID is required.').optional(),
     topicId: z.string().trim().min(1, 'Topic ID is required.').optional(),
     threadId: z.string().trim().min(1, 'Thread ID is required.').optional(),
+    parentThreadId: z.string().trim().min(1, 'Parent thread ID is required.').optional(),
+    sourceMessageId: z.string().trim().min(1, 'Source message ID is required.').optional(),
     projectId: z.string().trim().min(1, 'Project ID is required.').nullable().optional(),
     llmConnectionId: z.string().trim().min(1, 'LLM connection ID is required.').optional(),
     provider: providerIdSchema.optional(),
@@ -307,6 +309,56 @@ export const sendChatMessageInputSchema = z
     (input) => input.content.length > 0 || (input.attachments?.length ?? 0) > 0,
     'Message or attachment is required.'
   )
+  .superRefine((input, context) => {
+    const hasParentThread = input.parentThreadId !== undefined
+    const hasSourceMessage = input.sourceMessageId !== undefined
+
+    if (hasParentThread !== hasSourceMessage) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Parent thread ID and source message ID must be provided together.',
+        path: hasParentThread ? ['sourceMessageId'] : ['parentThreadId']
+      })
+    }
+
+    if (!hasParentThread || !hasSourceMessage) {
+      return
+    }
+
+    if (input.sessionId === undefined) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Session ID is required when creating a branch.',
+        path: ['sessionId']
+      })
+    }
+
+    if (input.threadId !== undefined || input.topicId !== undefined) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Branch input cannot include thread ID or topic ID.',
+        path: [input.threadId === undefined ? 'topicId' : 'threadId']
+      })
+    }
+
+    if (
+      input.provider !== undefined ||
+      input.llmConnectionId !== undefined ||
+      input.projectId !== undefined
+    ) {
+      context.addIssue({
+        code: 'custom',
+        message: 'Branch input cannot override provider, connection, or project.',
+        path: [
+          input.provider !== undefined
+            ? 'provider'
+            : input.llmConnectionId !== undefined
+              ? 'llmConnectionId'
+              : 'projectId'
+        ]
+      })
+    }
+  })
 
 export type SendChatMessageInput = z.infer<typeof sendChatMessageInputSchema>
 

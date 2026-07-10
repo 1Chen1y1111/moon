@@ -38,6 +38,14 @@ export type AgentBackendWorkspace = {
   path: string
 }
 
+/**
+ * 描述新 provider session 应从既有 session 的哪条消息处分叉。
+ */
+export type AgentProviderSessionFork = {
+  providerMessageId: string
+  providerSessionId: string
+}
+
 export type AgentBackendConfig = {
   agentSessionState?: AgentSessionRuntimeState
   provider: AgentBackendProvider
@@ -49,6 +57,7 @@ export type AgentBackendConfig = {
   }
   messages?: AgentBackendMessage[]
   permissionMode?: AgentPermissionMode
+  providerSessionFork?: AgentProviderSessionFork
   sources?: AgentSourceRecord[]
   thinkingLevel?: ThinkingLevel
   workspace?: AgentBackendWorkspace

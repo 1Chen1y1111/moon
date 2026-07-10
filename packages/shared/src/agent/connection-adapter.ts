@@ -7,6 +7,7 @@ import type { NormalizedLlmConnection } from '../config'
 import type {
   AgentBackendConfig,
   AgentBackendMessage,
+  AgentProviderSessionFork,
   AgentBackendWorkspace
 } from './backend/types'
 import type { AgentSessionRuntimeState } from './core/session-runtime-state'
@@ -24,6 +25,7 @@ export type CreateConnectionAgentBackendConfigInput = {
   connection: NormalizedLlmConnection
   messages: AgentBackendMessage[]
   permissionMode?: AgentPermissionMode
+  providerSessionFork?: AgentProviderSessionFork
   sources?: AgentSourceRecord[]
   workspace?: AgentBackendWorkspace
 }
@@ -66,6 +68,7 @@ export function createConnectionAgentBackendConfig({
   connection,
   messages,
   permissionMode,
+  providerSessionFork,
   sources,
   workspace
 }: CreateConnectionAgentBackendConfigInput): AgentBackendConfig {
@@ -84,6 +87,7 @@ export function createConnectionAgentBackendConfig({
     ...(connection.baseUrl === undefined ? {} : { baseUrl: connection.baseUrl }),
     ...(agentSessionState === undefined ? {} : { agentSessionState }),
     ...(permissionMode === undefined ? {} : { permissionMode }),
+    ...(providerSessionFork === undefined ? {} : { providerSessionFork }),
     ...(sources === undefined ? {} : { sources }),
     ...(workspace === undefined ? {} : { workspace })
   }

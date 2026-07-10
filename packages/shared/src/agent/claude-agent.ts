@@ -1,6 +1,6 @@
 /**
  * 负责把 Claude Agent SDK 适配成 Moon 的统一 agent 实现。
- * 它处理 Claude query、多模态输入、resume 失效恢复和事件流，不负责持久化或 IPC。
+ * 它处理 Claude query、多模态输入、session resume/fork、失效恢复和事件流，不负责持久化或 IPC。
  */
 
 import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
@@ -28,6 +28,7 @@ import type {
   AgentBackendWorkspace,
   AgentChatOptions,
   AgentEvent,
+  AgentProviderSessionFork,
   MessageAttachment
 } from './backend/types'
 import type { AgentPermissionMode } from './core/types'
@@ -39,6 +40,7 @@ export type ClaudeAgentInput = {
   messages: AgentBackendMessage[]
   model: string
   permissionMode?: AgentPermissionMode
+  providerSessionFork?: AgentProviderSessionFork
   queryClaude?: typeof query
   sources?: AgentSourceRecord[]
   thinkingLevel?: ThinkingLevel
@@ -175,6 +177,7 @@ export class ClaudeAgent extends BaseAgent {
   private readonly baseUrl?: string
   private readonly eventAdapter = new ClaudeEventAdapter()
   private readonly messages: AgentBackendMessage[]
+  private readonly providerSessionFork?: AgentProviderSessionFork
   private readonly queryClaude: typeof query
 
   /**
@@ -187,6 +190,7 @@ export class ClaudeAgent extends BaseAgent {
     messages,
     model,
     permissionMode,
+    providerSessionFork,
     queryClaude = query,
     sources,
     thinkingLevel,
@@ -197,6 +201,7 @@ export class ClaudeAgent extends BaseAgent {
     this.apiKey = apiKey
     this.baseUrl = baseUrl
     this.messages = messages
+    this.providerSessionFork = providerSessionFork
     this.queryClaude = queryClaude
   }
 
@@ -218,8 +223,11 @@ export class ClaudeAgent extends BaseAgent {
           return
         }
 
+        const providerSessionFork = attempt === 0 ? this.providerSessionFork : undefined
         const resumeSessionId =
-          attempt === 0 ? this.agentSessionState.providerSessionId : undefined
+          attempt === 0
+            ? (providerSessionFork?.providerSessionId ?? this.agentSessionState.providerSessionId)
+            : undefined
         const wasResuming = resumeSessionId !== undefined
         const promptMessages = wasResuming ? [] : this.messages
         const prompt = this.buildPrompt(message, promptMessages)
@@ -242,6 +250,7 @@ export class ClaudeAgent extends BaseAgent {
             model: this.getModel(),
             onToolUseBlocked: (input, reason) =>
               this.eventAdapter.setBlockReason(input.toolUseId, reason),
+            providerSessionFork,
             requestPermission: (request) => this.requestPermission(request),
             requestSourceActivation: this.onSourceActivationRequest,
             resumeSessionId,

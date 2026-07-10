@@ -1,10 +1,11 @@
 /**
  * 负责创建聊天消息 turn 的持久化骨架。
- * 它只处理 session/topic/thread/idle operation/message 创建，不启动 backend 执行。
+ * 它处理 session/topic/thread 分支、idle operation 和 message 创建，不启动 backend 执行。
  */
 
 import { randomUUID } from 'node:crypto'
 
+import type { AgentProviderSessionFork } from '@moon/shared/agent'
 import type { NormalizedLlmConnection } from '@moon/shared/config'
 import type {
   AgentOperationRecord,
@@ -19,6 +20,7 @@ import type { ProjectRecord } from '@moon/shared/domain/project'
 import type { ProviderId } from '@moon/shared/domain/provider'
 import type { SessionAgentTargetResult } from './session-agent-target-runtime'
 import type { SessionSourceProviderScope } from './session-agent-runtime'
+import { listSessionThreadHistory } from './session-thread-history'
 import type {
   AgentOperationsRepositoryPort,
   MessagesRepositoryPort,
@@ -55,11 +57,24 @@ export type SessionMessageTurnRuntimeCreateSessionInput = {
 
 export type SessionMessageTurnRuntimeResult = CreateMessageTurnResult
 
+type SessionThreadBranchInput = {
+  parentThreadId: string
+  providerSessionFork: AgentProviderSessionFork
+  sourceMessageId: string
+}
+
 /**
  * 创建当前时间戳，统一消息 turn 落库记录的时间格式。
  */
 function createTimestamp(): string {
   return new Date().toISOString()
+}
+
+/**
+ * 从 metadata 中读取非空字符串，供 provider session lineage 校验复用。
+ */
+function readMetadataString(value: unknown): string | null {
+  return typeof value === 'string' && value.trim().length > 0 ? value.trim() : null
 }
 
 /**
@@ -150,7 +165,11 @@ export class SessionMessageTurnRuntime {
     )
     const attachments = input.attachments ?? []
     const timestamp = createTimestamp()
-    const previousMessages = await this.messagesRepository.listByThread(scope.thread.id)
+    const previousMessages = await listSessionThreadHistory({
+      messagesRepository: this.messagesRepository,
+      thread: scope.thread,
+      threadsRepository: this.threadsRepository
+    })
     const parentMessage = [...previousMessages].reverse().find((message) => message.role !== 'tool')
     const userMessage = await this.messagesRepository.save({
       id: randomUUID(),
@@ -219,6 +238,10 @@ export class SessionMessageTurnRuntime {
       )
     }
 
+    if (input.parentThreadId !== undefined && input.sourceMessageId !== undefined) {
+      return this.createBranchScope(session, input.parentThreadId, input.sourceMessageId, project)
+    }
+
     const thread =
       input.threadId === undefined
         ? await this.getDefaultThread(session.id)
@@ -248,6 +271,64 @@ export class SessionMessageTurnRuntime {
       session,
       topic,
       thread: await this.createThread(topic, defaultThreadTitle)
+    }
+  }
+
+  /**
+   * 从父 thread 的已完成 assistant 消息创建 continuation thread，并保存一次性 provider fork。
+   */
+  private async createBranchScope(
+    session: SessionRecord,
+    parentThreadId: string,
+    sourceMessageId: string,
+    project: ProjectRecord | null
+  ): Promise<ConversationScope> {
+    const parentThread = await this.threadsRepository.findById(parentThreadId)
+
+    if (parentThread === null) {
+      throw new Error('Chat parent thread not found.')
+    }
+
+    const topic = await this.topicsRepository.findById(parentThread.topicId)
+
+    if (topic === null || topic.sessionId !== session.id) {
+      throw new Error('Chat parent thread does not belong to the session.')
+    }
+
+    const parentHistory = await listSessionThreadHistory({
+      messagesRepository: this.messagesRepository,
+      thread: parentThread,
+      threadsRepository: this.threadsRepository
+    })
+    const sourceMessage = parentHistory.find((message) => message.id === sourceMessageId)
+
+    if (
+      sourceMessage === undefined ||
+      sourceMessage.threadId !== parentThread.id ||
+      sourceMessage.role !== 'assistant' ||
+      sourceMessage.status !== 'complete'
+    ) {
+      throw new Error(
+        'Chat branch source must be a completed assistant message in the parent thread.'
+      )
+    }
+
+    const providerSessionId = readMetadataString(sourceMessage.metadata?.providerSessionId)
+    const providerMessageId = readMetadataString(sourceMessage.metadata?.providerMessageId)
+
+    if (providerSessionId === null || providerMessageId === null) {
+      throw new Error('Provider branch context is not available for this message.')
+    }
+
+    return {
+      project,
+      session,
+      topic,
+      thread: await this.createThread(topic, defaultThreadTitle, {
+        parentThreadId,
+        providerSessionFork: { providerSessionId, providerMessageId },
+        sourceMessageId
+      })
     }
   }
 
@@ -315,7 +396,11 @@ export class SessionMessageTurnRuntime {
   /**
    * 在现有 topic 下创建新的 continuation thread。
    */
-  private async createThread(topic: TopicRecord, title: string): Promise<ThreadRecord> {
+  private async createThread(
+    topic: TopicRecord,
+    title: string,
+    branch?: SessionThreadBranchInput
+  ): Promise<ThreadRecord> {
     const timestamp = createTimestamp()
 
     return this.threadsRepository.save({
@@ -324,6 +409,13 @@ export class SessionMessageTurnRuntime {
       title,
       type: 'continuation',
       status: 'active',
+      ...(branch === undefined
+        ? {}
+        : {
+            parentThreadId: branch.parentThreadId,
+            sourceMessageId: branch.sourceMessageId,
+            metadata: { providerSessionFork: branch.providerSessionFork }
+          }),
       userId: defaultChatUserId,
       lastActiveAt: timestamp,
       createdAt: timestamp,
@@ -355,6 +447,9 @@ export class SessionMessageTurnRuntime {
       trigger: 'chat',
       appContext: {
         sessionId: scope.session.id,
+        ...(scope.thread.sourceMessageId == null
+          ? {}
+          : { sourceMessageId: scope.thread.sourceMessageId }),
         ...(persistedLlmConnectionId === null ? {} : { llmConnectionId: persistedLlmConnectionId }),
         llmConnectionBackend: connection.backend,
         ...(scope.project === null

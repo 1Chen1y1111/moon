@@ -411,6 +411,54 @@ describe('SessionMessageTurnRuntime', () => {
     expect(result.userMessage.parentId).toBe(previousAssistant.id)
   })
 
+  it('creates a provider-backed branch from a completed assistant message', async () => {
+    const session = createSession()
+    const topic = createTopic()
+    const parentThread = createThread({
+      metadata: { providerSessionId: 'sdk-session-latest' }
+    })
+    const parentUser = createMessage('user', { id: 'parent-user' })
+    const sourceAssistant = createMessage('assistant', {
+      id: 'source-assistant',
+      parentId: parentUser.id,
+      metadata: {
+        providerMessageId: 'sdk-message-source',
+        providerSessionId: 'sdk-session-parent'
+      }
+    })
+    const fixture = createRuntimeFixture({
+      messages: [parentUser, sourceAssistant],
+      sessions: [session],
+      threads: [parentThread],
+      topics: [topic]
+    })
+
+    const result = await fixture.runtime.create({
+      input: {
+        sessionId: session.id,
+        parentThreadId: parentThread.id,
+        sourceMessageId: sourceAssistant.id,
+        content: 'branch question'
+      },
+      target: createTarget({ session })
+    })
+
+    expect(result.thread).toMatchObject({
+      topicId: topic.id,
+      type: 'continuation',
+      parentThreadId: parentThread.id,
+      sourceMessageId: sourceAssistant.id,
+      metadata: {
+        providerSessionFork: {
+          providerSessionId: 'sdk-session-parent',
+          providerMessageId: 'sdk-message-source'
+        }
+      }
+    })
+    expect(result.userMessage.parentId).toBe(sourceAssistant.id)
+    expect(result.operation.appContext?.sourceMessageId).toBe(sourceAssistant.id)
+  })
+
   it('creates a continuation thread when a topic is selected and no default thread exists', async () => {
     const session = createSession()
     const topic = createTopic({ id: 'topic-selected', title: 'Topic Selected' })

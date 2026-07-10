@@ -1,6 +1,6 @@
 /**
  * 负责执行已经启动的单次 agent operation。
- * 它处理 backend 输入构造、事件流消费与资源释放，不拥有会话创建或取消入口。
+ * 它处理 lineage 历史、backend 输入构造、事件流消费与资源释放，不拥有会话创建或取消入口。
  */
 
 import { readFile } from 'node:fs/promises'
@@ -29,9 +29,11 @@ import type { SessionAgentRuntime, SessionSourceProviderScope } from './session-
 import type {
   AgentOperationsRepositoryPort,
   MessagesRepositoryPort,
-  SessionsRepositoryPort
+  SessionsRepositoryPort,
+  ThreadsRepositoryPort
 } from './session-manager'
 import type { SessionToolPermissionRuntime } from './session-tool-permission-runtime'
+import { listSessionThreadHistory } from './session-thread-history'
 
 export type SessionOperationRuntimeInput = {
   agentEventApplier: SessionAgentEventApplier
@@ -40,6 +42,7 @@ export type SessionOperationRuntimeInput = {
   attachmentsDirectory: string
   messagesRepository: MessagesRepositoryPort
   sessionsRepository: SessionsRepositoryPort
+  threadsRepository: ThreadsRepositoryPort
   toolPermissionRuntime: SessionToolPermissionRuntime
 }
 
@@ -207,6 +210,7 @@ export class SessionOperationRuntime {
   private readonly attachmentsDirectory: string
   private readonly messagesRepository: MessagesRepositoryPort
   private readonly sessionsRepository: SessionsRepositoryPort
+  private readonly threadsRepository: ThreadsRepositoryPort
   private readonly toolPermissionRuntime: SessionToolPermissionRuntime
 
   /**
@@ -219,6 +223,7 @@ export class SessionOperationRuntime {
     attachmentsDirectory,
     messagesRepository,
     sessionsRepository,
+    threadsRepository,
     toolPermissionRuntime
   }: SessionOperationRuntimeInput) {
     this.agentEventApplier = agentEventApplier
@@ -227,6 +232,7 @@ export class SessionOperationRuntime {
     this.attachmentsDirectory = attachmentsDirectory
     this.messagesRepository = messagesRepository
     this.sessionsRepository = sessionsRepository
+    this.threadsRepository = threadsRepository
     this.toolPermissionRuntime = toolPermissionRuntime
   }
 
@@ -246,7 +252,11 @@ export class SessionOperationRuntime {
     let currentOperation = operation
     let sourceActivationSignal: SessionSourceActivationSignal | null = null
 
-    const previousMessages = await this.messagesRepository.listByThread(scope.thread.id)
+    const previousMessages = await listSessionThreadHistory({
+      messagesRepository: this.messagesRepository,
+      thread: scope.thread,
+      threadsRepository: this.threadsRepository
+    })
     const backendMessages = (
       await Promise.all(
         previousMessages
