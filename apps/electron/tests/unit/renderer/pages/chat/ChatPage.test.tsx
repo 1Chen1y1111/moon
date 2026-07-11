@@ -7,13 +7,14 @@ import { act, fireEvent, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it } from 'vitest'
 
 import { ChatPage } from '@renderer/pages/chat'
-import type { ChatState } from '@renderer/store/chat'
+import { useChatStore, type ChatState } from '@renderer/store/chat'
 import { renderWithProviders } from '@tests/helpers/renderer/render-with-providers'
 import { installMockWindowApi, type MockMoonApi } from '@tests/helpers/renderer/mock-window-api'
 import type {
   AgentOperationRecord,
   ChatOperationEvent,
   MessageRecord,
+  ThreadRecord,
   ToolInvocationRecord
 } from '@moon/shared/domain/chat'
 import type { ProjectRecord } from '@moon/shared/domain/project'
@@ -112,9 +113,7 @@ function createModelSwitchSettings(): AppSettings {
   return settings
 }
 
-function createOperationRecord(
-  input: Partial<AgentOperationRecord> = {}
-): AgentOperationRecord {
+function createOperationRecord(input: Partial<AgentOperationRecord> = {}): AgentOperationRecord {
   return {
     id: 'operation-1',
     appContext: { sessionId: 'session-1' },
@@ -127,9 +126,7 @@ function createOperationRecord(
   }
 }
 
-function createToolInvocation(
-  input: Partial<ToolInvocationRecord> = {}
-): ToolInvocationRecord {
+function createToolInvocation(input: Partial<ToolInvocationRecord> = {}): ToolInvocationRecord {
   return {
     id: 'tool-1',
     operationId: 'operation-1',
@@ -368,7 +365,10 @@ describe('ChatPage', () => {
     await user.click(screen.getByRole('button', { name: '发送' }))
 
     await waitFor(() =>
-      expect(api.sessions.createMessageTurn).toHaveBeenCalledWith({ content: '你好', projectId: null })
+      expect(api.sessions.createMessageTurn).toHaveBeenCalledWith({
+        content: '你好',
+        projectId: null
+      })
     )
     expect(await screen.findByText('你好，我在。')).toBeInTheDocument()
   })
@@ -414,6 +414,133 @@ describe('ChatPage', () => {
     expect(screen.getByText('Markdown Title')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /推理/ })).toBeInTheDocument()
     expect(screen.getByText('checked context')).toBeInTheDocument()
+  })
+
+  it('creates a branch from an assistant reply and switches between thread projections', async () => {
+    const sourceMessage: MessageRecord = {
+      ...assistantMessage,
+      metadata: {
+        providerMessageId: 'provider-message-source',
+        providerSessionId: 'provider-session-parent'
+      }
+    }
+    const laterParentUser: MessageRecord = {
+      ...userMessage,
+      id: 'message-parent-later-user',
+      parentId: sourceMessage.id,
+      content: '父线后续问题',
+      createdAt: '2026-05-09T00:00:02.000Z',
+      updatedAt: '2026-05-09T00:00:02.000Z'
+    }
+    const laterParentAssistant: MessageRecord = {
+      ...assistantMessage,
+      id: 'message-parent-later-assistant',
+      parentId: laterParentUser.id,
+      content: '父线后续回答',
+      createdAt: '2026-05-09T00:00:03.000Z',
+      updatedAt: '2026-05-09T00:00:03.000Z'
+    }
+    const parentMessages = [userMessage, sourceMessage, laterParentUser, laterParentAssistant]
+    const childThread: ThreadRecord = {
+      ...thread,
+      id: 'thread-branch',
+      title: '分支问题',
+      type: 'continuation',
+      parentThreadId: thread.id,
+      sourceMessageId: sourceMessage.id
+    }
+    const childOperation: AgentOperationRecord = {
+      ...operation,
+      id: 'operation-branch',
+      appContext: { sessionId: session.id, sourceMessageId: sourceMessage.id },
+      threadId: childThread.id,
+      status: 'idle',
+      completedAt: null
+    }
+    const childUserMessage: MessageRecord = {
+      ...userMessage,
+      id: 'message-branch-user',
+      threadId: childThread.id,
+      parentId: sourceMessage.id,
+      operationId: childOperation.id,
+      content: '换个方向解释'
+    }
+    const childAssistantMessage: MessageRecord = {
+      ...assistantMessage,
+      id: 'message-branch-assistant',
+      threadId: childThread.id,
+      parentId: childUserMessage.id,
+      operationId: childOperation.id,
+      content: '',
+      status: 'pending'
+    }
+    const completedChildAssistant: MessageRecord = {
+      ...childAssistantMessage,
+      content: '这是分支回答',
+      status: 'complete'
+    }
+    const completedChildOperation: AgentOperationRecord = {
+      ...childOperation,
+      status: 'done',
+      completionReason: 'done',
+      completedAt: '2026-05-09T00:00:04.000Z'
+    }
+    const childLineage = [userMessage, sourceMessage, childUserMessage, completedChildAssistant]
+
+    api.sessions.createMessageTurn.mockResolvedValueOnce({
+      session,
+      topic,
+      thread: childThread,
+      operation: childOperation,
+      userMessage: childUserMessage,
+      assistantMessage: childAssistantMessage
+    })
+    api.sessions.runOperation.mockResolvedValueOnce({
+      operation: completedChildOperation,
+      messages: childLineage
+    })
+    api.sessions.getMessages.mockImplementation(async ({ threadId }) =>
+      threadId === childThread.id ? childLineage : parentMessages
+    )
+
+    const { user } = renderActiveChat({
+      ...toMessageState(parentMessages),
+      messagesStatus: 'succeeded'
+    })
+
+    await user.click(screen.getByRole('button', { name: '从这里创建分支' }))
+
+    expect(screen.getByLabelText('分支输入模式')).toHaveTextContent('你好，我在。')
+
+    await user.type(screen.getByRole('textbox', { name: '消息内容' }), '换个方向解释')
+    await user.click(screen.getByRole('button', { name: '发送' }))
+
+    await waitFor(() =>
+      expect(api.sessions.createMessageTurn).toHaveBeenCalledWith({
+        sessionId: session.id,
+        parentThreadId: thread.id,
+        sourceMessageId: sourceMessage.id,
+        content: '换个方向解释'
+      })
+    )
+    await waitFor(() => expect(useChatStore.getState().activeThreadId).toBe(childThread.id))
+    expect(await screen.findByText('这是分支回答')).toBeInTheDocument()
+    expect(screen.queryByText('父线后续问题')).not.toBeInTheDocument()
+
+    const threadSelector = screen.getByRole('combobox', { name: '切换分支' })
+
+    expect(threadSelector).toHaveTextContent('分支问题')
+
+    act(() => useChatStore.getState().switchChatThread(thread.id))
+
+    await waitFor(() => expect(useChatStore.getState().activeThreadId).toBe(thread.id))
+    await waitFor(() =>
+      expect(api.sessions.getMessages).toHaveBeenCalledWith({
+        sessionId: session.id,
+        threadId: thread.id
+      })
+    )
+    expect(await screen.findByText('父线后续问题')).toBeInTheDocument()
   })
 
   it('uploads a text attachment and sends it without message text', async () => {

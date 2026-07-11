@@ -7,6 +7,7 @@ import { useEffect, useMemo } from 'react'
 
 import { useAppRouterContext } from '@renderer/app/router/router-context'
 import { ChatInput, ChatList, ConversationProvider } from '@renderer/features/Conversation'
+import { ThreadSelector } from '@renderer/features/Conversation/components/ThreadSelector'
 import { useProjectsStore } from '@renderer/store/projects'
 import { selectActiveProject } from '@renderer/store/projects/selectors'
 import { useChatStore } from '@renderer/store/chat'
@@ -47,6 +48,7 @@ export function ChatPage(): React.JSX.Element {
   const loadChatTopics = useChatStore((state) => state.loadChatTopics)
   const loadChatThreads = useChatStore((state) => state.loadChatThreads)
   const replaceChatMessages = useChatStore((state) => state.replaceChatMessages)
+  const switchChatThread = useChatStore((state) => state.switchChatThread)
   const applyChatOperationEvent = useChatStore((state) => state.applyChatOperationEvent)
   const clearChatMessages = useChatStore((state) => state.clearChatMessages)
   const activeSession = useMemo(
@@ -182,6 +184,12 @@ export function ChatPage(): React.JSX.Element {
                   {activeSession?.title ?? '新聊天'}
                 </h1>
               </div>
+              <ThreadSelector
+                activeThreadId={activeThreadId}
+                disabled={blockingOperationId !== null}
+                threads={threads}
+                onThreadChange={switchChatThread}
+              />
             </header>
 
             <div className="flex min-h-0 flex-1">

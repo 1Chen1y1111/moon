@@ -141,9 +141,7 @@ async function toAgentBackendMessage(
 /**
  * 根据聊天附件元数据确定统一 agent attachment 类型，具体 provider 格式由 backend 再适配。
  */
-function resolveAgentAttachmentType(
-  attachment: ChatAttachmentRecord
-): MessageAttachment['type'] {
+function resolveAgentAttachmentType(attachment: ChatAttachmentRecord): MessageAttachment['type'] {
   if (attachment.mimeType.startsWith('image/')) {
     return 'image'
   }
@@ -402,7 +400,11 @@ export class SessionOperationRuntime {
       ...scope.session,
       updatedAt: completedTimestamp
     })
-    const messages = await this.messagesRepository.listByThread(scope.thread.id)
+    const messages = await listSessionThreadHistory({
+      messagesRepository: this.messagesRepository,
+      thread: scope.thread,
+      threadsRepository: this.threadsRepository
+    })
 
     onEvent?.(
       {

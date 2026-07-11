@@ -1,9 +1,15 @@
+/**
+ * 负责定义 Conversation 局部 store 的状态结构和初始值。
+ * 状态仅服务当前会话组件树，不承担跨 thread 持久化。
+ */
+
 import type { ChatInputRuntimeInfo } from '@renderer/features/ChatInput'
 import type { MessageRecord } from '@moon/shared/domain/chat'
 
-import type { ConversationContext, OperationState } from '../types'
+import type { ConversationBranchTarget, ConversationContext, OperationState } from '../types'
 
 export type ConversationState = {
+  branchTarget: ConversationBranchTarget | null
   context: ConversationContext
   inputMessage: string
   messages: MessageRecord[]
@@ -23,6 +29,9 @@ export type CreateConversationStoreParams = {
   skipFetch?: boolean
 }
 
+/**
+ * 创建 Conversation store 初始状态，并把可选外部消息标记为已初始化。
+ */
 export function createInitialConversationState({
   context,
   hasInitMessages,
@@ -36,6 +45,7 @@ export function createInitialConversationState({
   skipFetch
 }: CreateConversationStoreParams): ConversationState {
   return {
+    branchTarget: null,
     context,
     inputMessage: '',
     messages,

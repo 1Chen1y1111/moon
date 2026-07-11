@@ -14,6 +14,12 @@ export interface ConversationContext {
   topicId: string | null
 }
 
+export interface ConversationBranchTarget {
+  parentThreadId: string
+  sourceMessageId: string
+  sourcePreview: string
+}
+
 export interface OperationState {
   blockingOperationId: string | null
   error: string | null

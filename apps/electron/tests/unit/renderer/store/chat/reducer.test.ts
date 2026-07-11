@@ -12,6 +12,8 @@ import type {
   TopicRecord
 } from '@moon/shared/domain/chat'
 
+const timestamp = '2026-05-09T00:00:00.000Z'
+
 const sessionOne: SessionRecord = {
   id: 'session-1',
   projectId: null,
@@ -103,9 +105,7 @@ function createOperationRecord(
   }
 }
 
-function createToolInvocation(
-  overrides: Partial<ToolInvocationRecord> = {}
-): ToolInvocationRecord {
+function createToolInvocation(overrides: Partial<ToolInvocationRecord> = {}): ToolInvocationRecord {
   return {
     id: 'tool-1',
     operationId: 'operation-1',
@@ -266,6 +266,116 @@ describe('chat reducer message ownership', () => {
     expect(state.sendStatus).toBe('succeeded')
     expect(state.sessions).toContainEqual(sessionOne)
     expect(state.messages).toEqual([messageTwo])
+  })
+
+  it('switches to a created branch and truncates parent messages after the source', () => {
+    const sourceMessage: MessageRecord = {
+      ...assistantMessage,
+      id: 'source-assistant',
+      content: 'source answer',
+      status: 'complete'
+    }
+    const laterParentMessage: MessageRecord = {
+      ...messageOne,
+      id: 'later-parent-message',
+      content: 'later parent turn'
+    }
+    const childThread: ThreadRecord = {
+      ...threadOne,
+      id: 'thread-branch',
+      parentThreadId: threadOne.id,
+      sourceMessageId: sourceMessage.id,
+      title: 'Branch thread',
+      type: 'continuation'
+    }
+    const childOperation: AgentOperationRecord = {
+      ...operationOne,
+      id: 'operation-branch',
+      appContext: { sessionId: 'session-1', sourceMessageId: sourceMessage.id },
+      threadId: childThread.id,
+      status: 'idle',
+      completedAt: null
+    }
+    const childUserMessage: MessageRecord = {
+      ...messageOne,
+      id: 'branch-user',
+      threadId: childThread.id,
+      parentId: sourceMessage.id,
+      operationId: childOperation.id,
+      content: 'branch question'
+    }
+    const childAssistantMessage: MessageRecord = {
+      ...assistantMessage,
+      id: 'branch-assistant',
+      threadId: childThread.id,
+      parentId: childUserMessage.id,
+      operationId: childOperation.id,
+      status: 'pending'
+    }
+    const pendingUserMessage: MessageRecord = {
+      ...childUserMessage,
+      id: 'pending-branch-request',
+      threadId: 'pending-thread-branch-request'
+    }
+    const pendingAssistantMessage: MessageRecord = {
+      ...childAssistantMessage,
+      id: 'pending-assistant-branch-request',
+      threadId: 'pending-thread-branch-request'
+    }
+    const parentMessages = [messageOne, sourceMessage, laterParentMessage]
+    const pendingMessages = [...parentMessages, pendingUserMessage, pendingAssistantMessage]
+    const state = chatReducer(
+      {
+        ...createInitialChatState(),
+        activeSessionId: sessionOne.id,
+        activeTopicId: topicOne.id,
+        activeThreadId: threadOne.id,
+        sessions: [sessionOne],
+        topics: [topicOne],
+        threads: [threadOne],
+        messages: pendingMessages,
+        messageIds: pendingMessages.map((message) => message.id),
+        messagesMap: Object.fromEntries(pendingMessages.map((message) => [message.id, message])),
+        operationsById: {
+          'pending-operation-branch-request': {
+            id: 'pending-operation-branch-request',
+            status: 'preparing',
+            createdAt: timestamp,
+            updatedAt: timestamp
+          }
+        }
+      },
+      {
+        type: 'createMessageTurnFulfilled',
+        requestId: 'branch-request',
+        result: {
+          session: sessionOne,
+          topic: topicOne,
+          thread: childThread,
+          operation: childOperation,
+          userMessage: childUserMessage,
+          assistantMessage: childAssistantMessage
+        }
+      }
+    )
+
+    expect(state.activeThreadId).toBe(childThread.id)
+    expect(state.messages.map((message) => message.id)).toEqual([
+      messageOne.id,
+      sourceMessage.id,
+      childUserMessage.id,
+      childAssistantMessage.id
+    ])
+    expect(state.threads).toContainEqual(childThread)
+
+    const switchedState = chatReducer(state, {
+      type: 'selectChatThread',
+      threadId: threadOne.id
+    })
+
+    expect(switchedState.activeThreadId).toBe(threadOne.id)
+    expect(switchedState.messages).toEqual([])
+    expect(switchedState.messagesStatus).toBe('idle')
   })
 
   it('removes the optimistic turn when creating a message turn fails', () => {

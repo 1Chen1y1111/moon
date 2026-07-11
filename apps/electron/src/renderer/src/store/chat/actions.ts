@@ -1,3 +1,8 @@
+/**
+ * 负责 renderer chat store 的异步动作与 IPC 编排。
+ * 它把会话、thread、消息和 operation 结果归并为 reducer action，不渲染界面。
+ */
+
 import type {
   AgentOperationRecord,
   ChatOperationEvent,
@@ -215,6 +220,23 @@ export class ChatActionImpl {
 
   sendChatMessage = (input: SendChatMessageInput): Promise<SendMessageResult> =>
     this.internal_sendChatMessage(input)
+
+  /**
+   * 切换当前可见 thread，并清空旧消息投影以触发新 lineage 拉取。
+   */
+  switchChatThread = (threadId: string): void => {
+    const state = this.#get()
+
+    if (
+      state.sendStatus === 'sending' ||
+      state.activeThreadId === threadId ||
+      !state.threads.some((thread) => thread.id === threadId)
+    ) {
+      return
+    }
+
+    this.internal_dispatchChat({ type: 'selectChatThread', threadId })
+  }
 
   cancelChatOperation = (input: CancelAgentOperationInput): Promise<AgentOperationRecord> =>
     this.internal_cancelChatOperation(input)

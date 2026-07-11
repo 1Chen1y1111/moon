@@ -1,6 +1,6 @@
 /**
  * 负责会话目录、消息读取和删除这类访问型操作。
- * 它只封装仓储读取/删除规则，不创建消息 turn、不启动 agent backend。
+ * 它封装仓储读取、thread lineage 投影和删除规则，不创建消息 turn、不启动 agent backend。
  */
 
 import type {
@@ -15,6 +15,7 @@ import type {
   ThreadsRepositoryPort,
   TopicsRepositoryPort
 } from './session-manager'
+import { listSessionThreadHistory } from './session-thread-history'
 
 export type SessionConversationAccessRuntimeInput = {
   messagesRepository: MessagesRepositoryPort
@@ -74,19 +75,26 @@ export class SessionConversationAccessRuntime {
   }
 
   /**
-   * 读取指定线程消息；未传 threadId 时回退到会话默认线程。
+   * 读取指定线程的 lineage 消息投影；未传 threadId 时回退到会话默认线程。
    */
   async getMessages({
     sessionId,
     threadId
   }: SessionConversationMessagesInput): Promise<MessageRecord[]> {
-    if (threadId !== undefined) {
-      return this.messagesRepository.listByThread(threadId)
+    const thread =
+      threadId === undefined
+        ? await this.getDefaultThread(sessionId)
+        : await this.threadsRepository.findById(threadId)
+
+    if (thread === null) {
+      return []
     }
 
-    const thread = await this.getDefaultThread(sessionId)
-
-    return thread === null ? [] : this.messagesRepository.listByThread(thread.id)
+    return listSessionThreadHistory({
+      messagesRepository: this.messagesRepository,
+      thread,
+      threadsRepository: this.threadsRepository
+    })
   }
 
   /**

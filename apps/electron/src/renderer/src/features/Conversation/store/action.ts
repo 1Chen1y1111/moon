@@ -24,6 +24,19 @@ type Setter = StoreSetter<ConversationStore>
 
 const swrFetchMessagesKey = 'moon-conversation-fetch-messages'
 
+/**
+ * 生成分支输入条展示的单行回复摘要，避免完整 markdown 挤占输入区。
+ */
+function createBranchSourcePreview(content: string): string {
+  const preview = content.replace(/\s+/g, ' ').trim()
+
+  if (preview.length === 0) {
+    return '该回复'
+  }
+
+  return preview.length <= 80 ? preview : `${preview.slice(0, 80)}...`
+}
+
 function getTime(value: string): number {
   const time = new Date(value).getTime()
 
@@ -99,8 +112,41 @@ export class ConversationActionImpl {
     this.#set({ inputMessage: '' })
   }
 
+  /**
+   * 取消当前一次性分支输入目标，后续发送恢复到 active thread。
+   */
+  clearBranchTarget = (): void => {
+    this.#set({ branchTarget: null })
+  }
+
   restoreInputMessage = (content: string): void => {
     this.#set({ inputMessage: content })
+  }
+
+  /**
+   * 把已完成 assistant 消息设为下一次发送的 branch source。
+   */
+  startBranch = (message: MessageRecord): void => {
+    const { context, operationState } = this.#get()
+
+    if (
+      context.sessionId === null ||
+      context.threadId === null ||
+      operationState.isSending ||
+      message.threadId !== context.threadId ||
+      message.role !== 'assistant' ||
+      message.status !== 'complete'
+    ) {
+      return
+    }
+
+    this.#set({
+      branchTarget: {
+        parentThreadId: message.threadId,
+        sourceMessageId: message.id,
+        sourcePreview: createBranchSourcePreview(message.content)
+      }
+    })
   }
 
   sendMessage = async ({
@@ -115,7 +161,7 @@ export class ConversationActionImpl {
     restoreContent,
     sendChatMessage
   }: SendConversationMessageParams): Promise<void> => {
-    const { context, operationState } = this.#get()
+    const { branchTarget, context, operationState } = this.#get()
     const trimmedContent = content.trim()
 
     if (
@@ -130,21 +176,36 @@ export class ConversationActionImpl {
     this.clearInputMessage()
 
     try {
-      const result = await sendChatMessage({
-        ...(context.sessionId === null ? {} : { sessionId: context.sessionId }),
-        ...(context.threadId === null ? {} : { threadId: context.threadId }),
-        projectId: context.projectId,
-        ...(activeLlmConnectionId !== undefined ? { llmConnectionId: activeLlmConnectionId } : {}),
-        ...((context.sessionId === null || context.draftProviderId !== null) &&
-        activeLlmConnectionId === undefined &&
-        activeProvider !== undefined
-          ? { provider: activeProvider.provider }
-          : {}),
+      const messageInput = {
         content: trimmedContent,
         ...(readyAttachments.length === 0 ? {} : { attachments: readyAttachments })
-      })
+      }
+      const result = await sendChatMessage(
+        branchTarget !== null && context.sessionId !== null
+          ? {
+              sessionId: context.sessionId,
+              parentThreadId: branchTarget.parentThreadId,
+              sourceMessageId: branchTarget.sourceMessageId,
+              ...messageInput
+            }
+          : {
+              ...(context.sessionId === null ? {} : { sessionId: context.sessionId }),
+              ...(context.threadId === null ? {} : { threadId: context.threadId }),
+              projectId: context.projectId,
+              ...(activeLlmConnectionId === undefined
+                ? {}
+                : { llmConnectionId: activeLlmConnectionId }),
+              ...((context.sessionId === null || context.draftProviderId !== null) &&
+              activeLlmConnectionId === undefined &&
+              activeProvider !== undefined
+                ? { provider: activeProvider.provider }
+                : {}),
+              ...messageInput
+            }
+      )
 
       clearDraftAttachments()
+      this.clearBranchTarget()
       onSessionResolved(result.session.id)
     } catch {
       restoreContent(trimmedContent)

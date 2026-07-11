@@ -22,6 +22,7 @@ import type { ChatDraftAttachment, ChatOperationState, ChatState } from './types
 export type ChatReducerAction =
   | { type: 'clearChatMessages' }
   | { type: 'clearChatError' }
+  | { type: 'selectChatThread'; threadId: string }
   | {
       type: 'replaceChatMessages'
       context: { sessionId: string | null; threadId: string | null; topicId: string | null }
@@ -628,6 +629,24 @@ export function chatReducer(state: ChatState, action: ChatReducerAction): ChatSt
     return { ...state, error: null }
   }
 
+  if (action.type === 'selectChatThread') {
+    if (state.activeThreadId === action.threadId) {
+      return state
+    }
+
+    return {
+      ...state,
+      activeThreadId: action.threadId,
+      activeOperationId: null,
+      messagesStatus: 'idle',
+      messagesRequestId: null,
+      streamingAssistantMessageId: null,
+      pendingToolInvocations: [],
+      error: null,
+      ...toMessageState([])
+    }
+  }
+
   if (action.type === 'replaceChatMessages') {
     const { context } = action
 
@@ -884,6 +903,8 @@ export function chatReducer(state: ChatState, action: ChatReducerAction): ChatSt
 
   if (action.type === 'createMessageTurnFulfilled') {
     const result = action.result
+    const isBranchTurn =
+      result.thread.parentThreadId != null && result.thread.sourceMessageId != null
     const pendingOperationId = `pending-operation-${action.requestId}`
     const previousOperation = state.operationsById[pendingOperationId]
     const { [pendingOperationId]: _pendingOperation, ...operationsById } = state.operationsById
@@ -902,6 +923,23 @@ export function chatReducer(state: ChatState, action: ChatReducerAction): ChatSt
           assistantMessageId: result.assistantMessage.id,
           userMessageId: result.userMessage.id
         })
+      }
+    }
+
+    if (isBranchTurn) {
+      const sourceMessageIndex = state.messages.findIndex(
+        (message) => message.id === result.thread.sourceMessageId
+      )
+      const branchHistory =
+        sourceMessageIndex === -1 ? [] : state.messages.slice(0, sourceMessageIndex + 1)
+
+      return {
+        ...stateWithEntities,
+        activeSessionId: result.session.id,
+        activeTopicId: result.topic.id,
+        activeThreadId: result.thread.id,
+        messagesStatus: 'succeeded',
+        ...toMessageState([...branchHistory, result.userMessage, result.assistantMessage])
       }
     }
 

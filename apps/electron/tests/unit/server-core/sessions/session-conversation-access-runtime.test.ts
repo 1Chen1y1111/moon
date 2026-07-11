@@ -2,7 +2,7 @@
 
 /**
  * 负责验证 SessionConversationAccessRuntime 的会话访问型操作。
- * 测试只覆盖仓储委托和默认 thread 消息读取规则，不触发完整 SessionManager。
+ * 测试覆盖仓储委托、默认 thread 和 branch lineage 读取，不触发完整 SessionManager。
  */
 
 import { describe, expect, it, vi } from 'vitest'
@@ -86,12 +86,14 @@ function createMessage(overrides: Partial<MessageRecord> = {}): MessageRecord {
 /**
  * 创建访问 runtime 测试需要的内存仓储和 spy。
  */
-function createRuntimeFixture(input: {
-  messages?: MessageRecord[]
-  sessions?: SessionRecord[]
-  threads?: ThreadRecord[]
-  topics?: TopicRecord[]
-} = {}): {
+function createRuntimeFixture(
+  input: {
+    messages?: MessageRecord[]
+    sessions?: SessionRecord[]
+    threads?: ThreadRecord[]
+    topics?: TopicRecord[]
+  } = {}
+): {
   dependencies: SessionConversationAccessRuntimeInput
   runtime: SessionConversationAccessRuntime
 } {
@@ -120,9 +122,7 @@ function createRuntimeFixture(input: {
           topics.some((topic) => topic.id === thread.topicId && topic.sessionId === sessionId)
         )
       ),
-      listByTopic: vi.fn(async (topicId) =>
-        threads.filter((thread) => thread.topicId === topicId)
-      ),
+      listByTopic: vi.fn(async (topicId) => threads.filter((thread) => thread.topicId === topicId)),
       save: vi.fn(async (thread) => thread)
     },
     topicsRepository: {
@@ -187,6 +187,41 @@ describe('SessionConversationAccessRuntime', () => {
     ])
     expect(dependencies.threadsRepository.listBySession).toHaveBeenCalledWith('session-1')
     expect(dependencies.messagesRepository.listByThread).toHaveBeenCalledWith('thread-1')
+  })
+
+  it('returns the ancestor lineage projection for a branch thread', async () => {
+    const parentThread = createThread({ id: 'thread-parent' })
+    const branchThread = createThread({
+      id: 'thread-branch',
+      parentThreadId: parentThread.id,
+      sourceMessageId: 'message-source',
+      type: 'continuation'
+    })
+    const parentUser = createMessage({ id: 'message-parent-user', threadId: parentThread.id })
+    const sourceMessage = createMessage({
+      id: 'message-source',
+      threadId: parentThread.id,
+      role: 'assistant',
+      content: 'source answer'
+    })
+    const skippedParentMessage = createMessage({
+      id: 'message-parent-later',
+      threadId: parentThread.id,
+      content: 'later parent turn'
+    })
+    const branchMessage = createMessage({
+      id: 'message-branch',
+      threadId: branchThread.id,
+      content: 'branch turn'
+    })
+    const { runtime } = createRuntimeFixture({
+      messages: [parentUser, sourceMessage, skippedParentMessage, branchMessage],
+      threads: [parentThread, branchThread]
+    })
+
+    await expect(
+      runtime.getMessages({ sessionId: 'session-1', threadId: branchThread.id })
+    ).resolves.toEqual([parentUser, sourceMessage, branchMessage])
   })
 
   it('returns an empty list when the session has no default thread', async () => {

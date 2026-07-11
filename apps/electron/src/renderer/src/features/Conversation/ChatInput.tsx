@@ -16,7 +16,9 @@ import { useProjectsStore } from '@renderer/store/projects'
 import { selectProjects } from '@renderer/store/projects/selectors'
 import { useSettingsStore } from '@renderer/store/settings'
 import { selectAppSettings } from '@renderer/store/settings/selectors'
+import { Button } from '@moon/ui/ui/button'
 import type { ChatAttachmentRecord } from '@moon/shared/domain/chat'
+import { GitBranch, X } from 'lucide-react'
 
 import { conversationSelectors, useConversationStore } from './store'
 
@@ -64,6 +66,8 @@ export function ChatInput(): React.JSX.Element {
   const context = useConversationStore(conversationSelectors.context)
   const content = useConversationStore(conversationSelectors.inputMessage)
   const operationState = useConversationStore(conversationSelectors.operationState)
+  const branchTarget = useConversationStore((state) => state.branchTarget)
+  const clearBranchTarget = useConversationStore((state) => state.clearBranchTarget)
   const clearInputMessage = useConversationStore((state) => state.clearInputMessage)
   const restoreInputMessage = useConversationStore((state) => state.restoreInputMessage)
   const sendMessage = useConversationStore((state) => state.sendMessage)
@@ -118,36 +122,62 @@ export function ChatInput(): React.JSX.Element {
   }, [runtimeInfo, setRuntimeInfo])
 
   return (
-    <BaseChatInput
-      attachments={attachments}
-      value={content}
-      isSending={isSending}
-      leftContent={<ActionBar />}
-      runtimeInfo={runtimeInfo}
-      onChange={updateInputMessage}
-      onAttachmentRemove={removeChatDraftAttachment}
-      onSend={() => {
-        void sendMessage({
-          activeLlmConnectionId: activeTarget.connection?.id,
-          activeProvider,
-          clearContent: clearInputMessage,
-          clearDraftAttachments: clearChatDraftAttachments,
-          content,
-          hasUnreadyAttachments: hasUnreadyDraftAttachments,
-          onSessionResolved: (sessionId) => {
-            setRouteState((state) => ({
-              ...state,
-              activeChatId: sessionId,
-              draftLlmConnectionId: null,
-              draftProviderId: null
-            }))
-          },
-          readyAttachments: readyDraftAttachments,
-          restoreContent: restoreInputMessage,
-          sendChatMessage
-        })
-      }}
-      onStop={() => stopGenerating(cancelChatOperation)}
-    />
+    <div className="min-w-0">
+      {branchTarget === null ? null : (
+        <div
+          aria-label="分支输入模式"
+          className="mb-2 flex min-h-8 items-center justify-between gap-2 rounded-lg border border-border bg-secondary px-2.5 py-1 text-xs"
+          role="status"
+        >
+          <div className="flex min-w-0 items-center gap-2">
+            <GitBranch aria-hidden="true" className="size-3.5 shrink-0 text-primary" />
+            <span className="shrink-0 font-medium text-foreground">创建分支</span>
+            <span className="truncate text-muted-foreground">{branchTarget.sourcePreview}</span>
+          </div>
+          <Button
+            aria-label="取消创建分支"
+            className="text-muted-foreground"
+            size="icon-xs"
+            type="button"
+            variant="ghost"
+            onClick={clearBranchTarget}
+          >
+            <X aria-hidden="true" />
+          </Button>
+        </div>
+      )}
+      <BaseChatInput
+        attachments={attachments}
+        value={content}
+        isSending={isSending}
+        leftContent={<ActionBar />}
+        placeholder={branchTarget === null ? undefined : '输入新问题以创建分支'}
+        runtimeInfo={runtimeInfo}
+        onChange={updateInputMessage}
+        onAttachmentRemove={removeChatDraftAttachment}
+        onSend={() => {
+          void sendMessage({
+            activeLlmConnectionId: activeTarget.connection?.id,
+            activeProvider,
+            clearContent: clearInputMessage,
+            clearDraftAttachments: clearChatDraftAttachments,
+            content,
+            hasUnreadyAttachments: hasUnreadyDraftAttachments,
+            onSessionResolved: (sessionId) => {
+              setRouteState((state) => ({
+                ...state,
+                activeChatId: sessionId,
+                draftLlmConnectionId: null,
+                draftProviderId: null
+              }))
+            },
+            readyAttachments: readyDraftAttachments,
+            restoreContent: restoreInputMessage,
+            sendChatMessage
+          })
+        }}
+        onStop={() => stopGenerating(cancelChatOperation)}
+      />
+    </div>
   )
 }

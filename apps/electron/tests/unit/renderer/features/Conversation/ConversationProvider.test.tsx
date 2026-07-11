@@ -41,6 +41,17 @@ const message: MessageRecord = {
   updatedAt: '2026-05-09T00:00:00.000Z'
 }
 
+const branchSourceMessage: MessageRecord = {
+  ...message,
+  id: 'message-assistant',
+  role: 'assistant',
+  content: '从这条回复继续',
+  metadata: {
+    providerMessageId: 'provider-message-1',
+    providerSessionId: 'provider-session-1'
+  }
+}
+
 function StoreProbe(): React.JSX.Element {
   const storeContext = useConversationStore(conversationSelectors.context)
   const inputMessage = useConversationStore(conversationSelectors.inputMessage)
@@ -150,5 +161,58 @@ describe('ConversationProvider', () => {
 
     expect(restoreContent).toHaveBeenCalledWith('retry')
     expect(store.getState().inputMessage).toBe('retry')
+  })
+
+  it('sends a one-shot branch target without normal thread or provider overrides', async () => {
+    const store = createConversationStore({ context })
+    const sendChatMessage = vi.fn().mockResolvedValue({ session: { id: 'session-1' } })
+    const clearContent = vi.fn()
+    const clearDraftAttachments = vi.fn()
+    const restoreContent = vi.fn()
+    const onSessionResolved = vi.fn()
+
+    store.getState().startBranch(branchSourceMessage)
+
+    expect(store.getState().branchTarget).toMatchObject({
+      parentThreadId: 'thread-1',
+      sourceMessageId: 'message-assistant'
+    })
+
+    await store.getState().sendMessage({
+      activeLlmConnectionId: 'connection-override',
+      clearContent,
+      clearDraftAttachments,
+      content: 'branch question',
+      hasUnreadyAttachments: false,
+      onSessionResolved,
+      readyAttachments: [],
+      restoreContent,
+      sendChatMessage
+    })
+
+    expect(sendChatMessage).toHaveBeenCalledWith({
+      sessionId: 'session-1',
+      parentThreadId: 'thread-1',
+      sourceMessageId: 'message-assistant',
+      content: 'branch question'
+    })
+    expect(store.getState().branchTarget).toBeNull()
+
+    store.getState().startBranch(branchSourceMessage)
+    sendChatMessage.mockRejectedValueOnce(new Error('branch failed'))
+
+    await store.getState().sendMessage({
+      activeLlmConnectionId: 'connection-override',
+      clearContent,
+      clearDraftAttachments,
+      content: 'retry branch',
+      hasUnreadyAttachments: false,
+      onSessionResolved,
+      readyAttachments: [],
+      restoreContent,
+      sendChatMessage
+    })
+
+    expect(store.getState().branchTarget?.sourceMessageId).toBe('message-assistant')
   })
 })

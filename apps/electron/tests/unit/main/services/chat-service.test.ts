@@ -2226,6 +2226,18 @@ describe('SessionManager.sendMessage', () => {
       { role: 'assistant', content: 'parent answer' },
       { role: 'user', content: 'branch question' }
     ])
+    expect(branch.messages.map((message) => message.content)).toEqual([
+      'parent question',
+      'parent answer',
+      'branch question',
+      'branch answer'
+    ])
+    await expect(
+      fixture.service.getMessages({
+        sessionId: parent.session.id,
+        threadId: branch.thread.id
+      })
+    ).resolves.toEqual(branch.messages)
     expect(persistedParent?.metadata).toMatchObject({
       providerSessionId: 'sdk-session-parent'
     })
@@ -2234,7 +2246,7 @@ describe('SessionManager.sendMessage', () => {
     })
     expect(persistedBranch?.metadata).not.toHaveProperty('providerSessionFork')
 
-    await fixture.service.sendMessage({
+    const childContinuation = await fixture.service.sendMessage({
       sessionId: parent.session.id,
       threadId: branch.thread.id,
       content: 'continue child'
@@ -2248,6 +2260,14 @@ describe('SessionManager.sendMessage', () => {
       { role: 'user', content: 'branch question' },
       { role: 'assistant', content: 'branch answer' },
       { role: 'user', content: 'continue child' }
+    ])
+    expect(childContinuation.messages.map((message) => message.content)).toEqual([
+      'parent question',
+      'parent answer',
+      'branch question',
+      'branch answer',
+      'continue child',
+      'child continuation'
     ])
   })
 
@@ -2277,10 +2297,7 @@ describe('SessionManager.sendMessage', () => {
     const clearProviderSessionIds: Array<string | undefined> = []
     const clearingService = createRestartedService(
       fixture,
-      [
-        { type: 'session_id_clear' },
-        { type: 'text_delta', text: 'restored answer' }
-      ],
+      [{ type: 'session_id_clear' }, { type: 'text_delta', text: 'restored answer' }],
       clearConfigs,
       clearProviderSessionIds
     )

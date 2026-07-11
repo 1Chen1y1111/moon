@@ -83,6 +83,7 @@ function StoreUpdater({
 
     previousContextKeyRef.current = contextKey
     store.setState({
+      branchTarget: null,
       context,
       messages: messages ?? [],
       messagesInit: false,
