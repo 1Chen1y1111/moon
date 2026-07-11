@@ -9,10 +9,32 @@ import {
   ClaudeStderrBuffer,
   createClaudeRuntimeSummary,
   createClaudeSdkErrorMessage,
+  isClaudeBranchAnchorMissingError,
   isClaudeSessionExpiredError
 } from '../../../../src/agent/backend/claude/sdk-diagnostics'
 
 describe('ClaudeSdkDiagnostics', () => {
+  it('recognizes only the explicit missing branch anchor marker from errors or stderr', () => {
+    expect(
+      isClaudeBranchAnchorMissingError({
+        message: 'No message found with message.uuid of: sdk-message-1',
+        stderr: ''
+      })
+    ).toBe(true)
+    expect(
+      isClaudeBranchAnchorMissingError({
+        message: 'process exited with code 1',
+        stderr: 'No message found with message.uuid of: sdk-message-1'
+      })
+    ).toBe(true)
+    expect(
+      isClaudeBranchAnchorMissingError({
+        message: 'No conversation found with session ID: sdk-session-1',
+        stderr: ''
+      })
+    ).toBe(false)
+  })
+
   it('recognizes only the explicit expired resume marker from errors or stderr', () => {
     expect(
       isClaudeSessionExpiredError({

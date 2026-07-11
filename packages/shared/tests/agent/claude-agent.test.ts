@@ -460,9 +460,9 @@ describe('ClaudeAgent', () => {
       // 消费第二轮事件流以触发 SDK query mock。
     }
 
-    const queryCalls = queryClaude.mock.calls as unknown as Array<[
-      { options?: Options; prompt?: string }
-    ]>
+    const queryCalls = queryClaude.mock.calls as unknown as Array<
+      [{ options?: Options; prompt?: string }]
+    >
 
     expect(queryCalls[0]?.[0].prompt).toContain('previous turn')
     expect(queryCalls[0]?.[0].options).not.toHaveProperty('resume')
@@ -689,14 +689,10 @@ describe('ClaudeAgent', () => {
       ])
     )
     expect(
-      Array.isArray(firstContent)
-        ? firstContent.filter((block) => block.type === 'image')
-        : []
+      Array.isArray(firstContent) ? firstContent.filter((block) => block.type === 'image') : []
     ).toHaveLength(1)
     expect(
-      Array.isArray(secondContent)
-        ? secondContent.filter((block) => block.type === 'image')
-        : []
+      Array.isArray(secondContent) ? secondContent.filter((block) => block.type === 'image') : []
     ).toHaveLength(1)
   })
 
@@ -752,9 +748,9 @@ describe('ClaudeAgent', () => {
       }
     }
 
-    const queryCalls = queryClaude.mock.calls as unknown as Array<[
-      { options?: Options; prompt?: string }
-    ]>
+    const queryCalls = queryClaude.mock.calls as unknown as Array<
+      [{ options?: Options; prompt?: string }]
+    >
 
     expect(queryClaude).toHaveBeenCalledTimes(2)
     expect(queryCalls[0]?.[0].options).toMatchObject({ resume: 'sdk-session-expired' })
@@ -834,6 +830,280 @@ describe('ClaudeAgent', () => {
         { type: 'session_id_clear' },
         { type: 'info', message: 'Restoring conversation context...' },
         { type: 'text_complete', text: 'restored branch answer' }
+      ])
+    )
+  })
+
+  it('retries a compacted branch anchor on the established child session without cutoff', async () => {
+    let attempt = 0
+    const queryClaude = vi.fn(async function* () {
+      attempt += 1
+
+      if (attempt === 1) {
+        yield {
+          type: 'result',
+          subtype: 'error_during_execution',
+          is_error: true,
+          session_id: 'sdk-session-child',
+          errors: ['No message found with message.uuid of: sdk-message-source']
+        }
+        return
+      }
+
+      yield {
+        type: 'assistant',
+        session_id: 'sdk-session-child',
+        uuid: 'sdk-message-child',
+        message: { content: [{ type: 'text', text: 'nearest branch context answer' }] }
+      }
+      yield {
+        type: 'result',
+        subtype: 'success',
+        is_error: false,
+        session_id: 'sdk-session-child'
+      }
+    })
+    const agent = new ClaudeAgent({
+      model: 'claude-sonnet',
+      messages: [
+        { role: 'user', content: 'parent question' },
+        { role: 'assistant', content: 'parent answer' },
+        { role: 'user', content: 'branch question' }
+      ],
+      providerSessionFork: {
+        providerSessionId: 'sdk-session-parent',
+        providerMessageId: 'sdk-message-source'
+      },
+      queryClaude: queryClaude as never
+    })
+    const events: AgentEvent[] = []
+
+    for await (const event of agent.chat('branch question')) {
+      events.push(event)
+    }
+
+    const queryCalls = queryClaude.mock.calls as unknown as Array<
+      [{ options?: Options; prompt?: string }]
+    >
+
+    expect(queryClaude).toHaveBeenCalledTimes(2)
+    expect(queryCalls[0]?.[0].options).toMatchObject({
+      resume: 'sdk-session-parent',
+      forkSession: true,
+      resumeSessionAt: 'sdk-message-source'
+    })
+    expect(queryCalls[1]?.[0].options).toMatchObject({ resume: 'sdk-session-child' })
+    expect(queryCalls[1]?.[0].options).not.toHaveProperty('forkSession')
+    expect(queryCalls[1]?.[0].options).not.toHaveProperty('resumeSessionAt')
+    expect(queryCalls[1]?.[0].prompt).toContain('branch question')
+    expect(queryCalls[1]?.[0].prompt).not.toContain('parent question')
+    expect(events).toEqual(
+      expect.arrayContaining([
+        { type: 'session_id_update', sessionId: 'sdk-session-child' },
+        {
+          type: 'info',
+          message: 'Branch point was compacted, retrying with the forked conversation...'
+        },
+        { type: 'text_complete', text: 'nearest branch context answer' }
+      ])
+    )
+    expect(events.filter((event) => event.type === 'complete')).toEqual([{ type: 'complete' }])
+    expect(events.some((event) => event.type === 'session_id_clear')).toBe(false)
+    expect(events.some((event) => event.type === 'error')).toBe(false)
+  })
+
+  it('recognizes a compacted branch anchor from stderr and a thrown process error', async () => {
+    let attempt = 0
+    const queryClaude = vi.fn(async function* ({ options }: { options?: Options }) {
+      attempt += 1
+
+      if (attempt === 1) {
+        yield {
+          type: 'stream_event',
+          session_id: 'sdk-session-child',
+          event: { type: 'content_block_stop' }
+        }
+        options?.stderr?.('No message found with message.uuid of: sdk-message-source')
+        throw new Error('process exited with code 1')
+      }
+
+      yield {
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: 'restored from branch stderr' }] }
+      }
+    })
+    const agent = new ClaudeAgent({
+      model: 'claude-sonnet',
+      messages: [{ role: 'user', content: 'branch question' }],
+      providerSessionFork: {
+        providerSessionId: 'sdk-session-parent',
+        providerMessageId: 'sdk-message-source'
+      },
+      queryClaude: queryClaude as never
+    })
+    const events: AgentEvent[] = []
+
+    for await (const event of agent.chat('branch question')) {
+      events.push(event)
+    }
+
+    const queryCalls = queryClaude.mock.calls as unknown as Array<
+      [{ options?: Options; prompt?: string }]
+    >
+
+    expect(queryClaude).toHaveBeenCalledTimes(2)
+    expect(queryCalls[1]?.[0].options).toMatchObject({ resume: 'sdk-session-child' })
+    expect(queryCalls[1]?.[0].options).not.toHaveProperty('resumeSessionAt')
+    expect(events).toEqual(
+      expect.arrayContaining([{ type: 'text_complete', text: 'restored from branch stderr' }])
+    )
+    expect(events.some((event) => event.type === 'error')).toBe(false)
+  })
+
+  it('falls back to lineage history when a compacted branch anchor has no child session', async () => {
+    let attempt = 0
+    const queryClaude = vi.fn(async function* () {
+      attempt += 1
+
+      if (attempt === 1) {
+        yield {
+          type: 'result',
+          subtype: 'error_during_execution',
+          is_error: true,
+          session_id: 'sdk-session-parent',
+          errors: ['No message found with message.uuid of: sdk-message-source']
+        }
+        return
+      }
+
+      yield {
+        type: 'assistant',
+        message: { content: [{ type: 'text', text: 'fresh branch answer' }] }
+      }
+    })
+    const agent = new ClaudeAgent({
+      model: 'claude-sonnet',
+      messages: [
+        { role: 'user', content: 'parent question' },
+        { role: 'assistant', content: 'parent answer' },
+        { role: 'user', content: 'branch question' }
+      ],
+      providerSessionFork: {
+        providerSessionId: 'sdk-session-parent',
+        providerMessageId: 'sdk-message-source'
+      },
+      queryClaude: queryClaude as never
+    })
+    const events: AgentEvent[] = []
+
+    for await (const event of agent.chat('branch question')) {
+      events.push(event)
+    }
+
+    const queryCalls = queryClaude.mock.calls as unknown as Array<
+      [{ options?: Options; prompt?: string }]
+    >
+
+    expect(queryClaude).toHaveBeenCalledTimes(2)
+    expect(queryCalls[1]?.[0].options).not.toHaveProperty('resume')
+    expect(queryCalls[1]?.[0].options).not.toHaveProperty('forkSession')
+    expect(queryCalls[1]?.[0].options).not.toHaveProperty('resumeSessionAt')
+    expect(queryCalls[1]?.[0].prompt).toContain('parent question')
+    expect(queryCalls[1]?.[0].prompt).toContain('branch question')
+    expect(events).toEqual(
+      expect.arrayContaining([
+        { type: 'session_id_clear' },
+        { type: 'info', message: 'Restoring conversation context...' },
+        { type: 'text_complete', text: 'fresh branch answer' }
+      ])
+    )
+    expect(events.some((event) => event.type === 'error')).toBe(false)
+  })
+
+  it('does not retry a compacted branch anchor after assistant content has started', async () => {
+    const queryClaude = vi.fn(async function* () {
+      yield {
+        type: 'assistant',
+        session_id: 'sdk-session-child',
+        uuid: 'sdk-message-child',
+        message: { content: [{ type: 'text', text: 'partial branch answer' }] }
+      }
+      yield {
+        type: 'result',
+        subtype: 'error_during_execution',
+        is_error: true,
+        session_id: 'sdk-session-child',
+        errors: ['No message found with message.uuid of: sdk-message-source']
+      }
+    })
+    const agent = new ClaudeAgent({
+      model: 'claude-sonnet',
+      messages: [{ role: 'user', content: 'branch question' }],
+      providerSessionFork: {
+        providerSessionId: 'sdk-session-parent',
+        providerMessageId: 'sdk-message-source'
+      },
+      queryClaude: queryClaude as never
+    })
+    const events: AgentEvent[] = []
+
+    for await (const event of agent.chat('branch question')) {
+      events.push(event)
+    }
+
+    expect(queryClaude).toHaveBeenCalledTimes(1)
+    expect(events).toEqual(
+      expect.arrayContaining([
+        { type: 'text_complete', text: 'partial branch answer' },
+        { type: 'error', message: 'No message found with message.uuid of: sdk-message-source' }
+      ])
+    )
+    expect(events.some((event) => event.type === 'session_id_clear')).toBe(false)
+  })
+
+  it('does not make a third query when branch cutoff recovery fails', async () => {
+    let attempt = 0
+    const queryClaude = vi.fn(async function* () {
+      attempt += 1
+
+      if (attempt === 1) {
+        yield {
+          type: 'result',
+          subtype: 'error_during_execution',
+          is_error: true,
+          session_id: 'sdk-session-child',
+          errors: ['No message found with message.uuid of: sdk-message-source']
+        }
+        return
+      }
+
+      yield {
+        type: 'result',
+        subtype: 'error_during_execution',
+        is_error: true,
+        session_id: 'sdk-session-child',
+        errors: ['No conversation found with session ID: sdk-session-child']
+      }
+    })
+    const agent = new ClaudeAgent({
+      model: 'claude-sonnet',
+      messages: [{ role: 'user', content: 'branch question' }],
+      providerSessionFork: {
+        providerSessionId: 'sdk-session-parent',
+        providerMessageId: 'sdk-message-source'
+      },
+      queryClaude: queryClaude as never
+    })
+    const events: AgentEvent[] = []
+
+    for await (const event of agent.chat('branch question')) {
+      events.push(event)
+    }
+
+    expect(queryClaude).toHaveBeenCalledTimes(2)
+    expect(events).toEqual(
+      expect.arrayContaining([
+        { type: 'error', message: 'No conversation found with session ID: sdk-session-child' }
       ])
     )
   })

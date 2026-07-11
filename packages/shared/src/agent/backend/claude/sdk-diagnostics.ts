@@ -18,6 +18,20 @@ export type ClaudeSessionExpiredErrorInput = {
 }
 
 const CLAUDE_SESSION_EXPIRED_MARKER = 'No conversation found with session ID'
+const CLAUDE_BRANCH_ANCHOR_MISSING_MARKER = 'No message found with message.uuid'
+
+/**
+ * 判断 Claude SDK 的显式错误或 stderr 是否表明 branch cutoff 锚点已被服务端清理。
+ */
+export function isClaudeBranchAnchorMissingError({
+  message,
+  stderr
+}: ClaudeSessionExpiredErrorInput): boolean {
+  return (
+    message.includes(CLAUDE_BRANCH_ANCHOR_MISSING_MARKER) ||
+    stderr.includes(CLAUDE_BRANCH_ANCHOR_MISSING_MARKER)
+  )
+}
 
 /**
  * 判断 Claude SDK 的显式错误或 stderr 是否表明 resume 指向的服务端会话已经失效。

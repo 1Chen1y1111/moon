@@ -7,21 +7,16 @@ import { query, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 
 import { BaseAgent } from './base-agent'
 import { ClaudeEventAdapter } from './backend/claude/event-adapter'
-import {
-  createClaudeQueryRuntime,
-  type ClaudeQueryRuntime
-} from './backend/claude/query-runtime'
+import { createClaudeQueryRuntime, type ClaudeQueryRuntime } from './backend/claude/query-runtime'
 import {
   createClaudeSdkErrorMessage,
+  isClaudeBranchAnchorMissingError,
   isClaudeSessionExpiredError
 } from './backend/claude/sdk-diagnostics'
 import { handleClaudeSourceActivationToolResult } from './backend/claude/source-activation-handler'
 import { ClaudeTurnStreamRunner } from './backend/claude/turn-stream-runner'
 import type { AgentSourceRecord } from './core/source-manager'
-import {
-  clearProviderSessionId,
-  type AgentSessionRuntimeState
-} from './core/session-runtime-state'
+import { clearProviderSessionId, type AgentSessionRuntimeState } from './core/session-runtime-state'
 import type { ThinkingLevel } from '../config'
 import type {
   AgentBackendMessage,
@@ -61,6 +56,16 @@ class ClaudeResumeExpiredError extends Error {
   constructor() {
     super('Claude SDK resume session expired.')
     this.name = 'ClaudeResumeExpiredError'
+  }
+}
+
+/**
+ * 标记 branch cutoff 锚点已失效，避免底层错误先泄漏到会话层。
+ */
+class ClaudeBranchAnchorMissingError extends Error {
+  constructor() {
+    super('Claude SDK branch anchor is unavailable.')
+    this.name = 'ClaudeBranchAnchorMissingError'
   }
 }
 
@@ -215,6 +220,7 @@ export class ClaudeAgent extends BaseAgent {
   ): AsyncGenerator<AgentEvent, void, void> {
     const turn = this.startTurn(options)
     const { abortController, eventQueue } = turn
+    let recoveryResumeSessionId: string | undefined
 
     try {
       for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -223,12 +229,13 @@ export class ClaudeAgent extends BaseAgent {
           return
         }
 
-        const providerSessionFork = attempt === 0 ? this.providerSessionFork : undefined
-        const resumeSessionId =
-          attempt === 0
-            ? (providerSessionFork?.providerSessionId ?? this.agentSessionState.providerSessionId)
-            : undefined
+        const canRecover = attempt === 0
+        const providerSessionFork = canRecover ? this.providerSessionFork : undefined
+        const resumeSessionId = canRecover
+          ? (providerSessionFork?.providerSessionId ?? this.agentSessionState.providerSessionId)
+          : recoveryResumeSessionId
         const wasResuming = resumeSessionId !== undefined
+        const attemptedBranchCutoff = providerSessionFork !== undefined
         const promptMessages = wasResuming ? [] : this.messages
         const prompt = this.buildPrompt(message, promptMessages)
         const queryPrompt = createClaudeQueryPrompt(prompt, attachments)
@@ -236,6 +243,8 @@ export class ClaudeAgent extends BaseAgent {
         let runtimeSummary: string | undefined
         let hasAssistantContent = false
         let hasProviderError = false
+        let forkedSessionId: string | undefined
+        let shouldRetryBranchWithoutCutoff = false
         let shouldRecoverSession = false
         let completionEvent: Extract<AgentEvent, { type: 'complete' }> | null = null
 
@@ -267,10 +276,31 @@ export class ClaudeAgent extends BaseAgent {
             eventQueue,
             eventAdapter: this.eventAdapter,
             normalizeAgentEvent: (agentEvent) => {
+              if (
+                agentEvent.type === 'session_id_update' &&
+                attemptedBranchCutoff &&
+                agentEvent.sessionId !== providerSessionFork.providerSessionId
+              ) {
+                forkedSessionId = agentEvent.sessionId
+              }
+
               hasAssistantContent ||= isAssistantContentEvent(agentEvent)
 
               if (agentEvent.type === 'error') {
                 if (
+                  canRecover &&
+                  attemptedBranchCutoff &&
+                  !hasAssistantContent &&
+                  isClaudeBranchAnchorMissingError({
+                    message: agentEvent.message,
+                    stderr: stderrBuffer?.read() ?? ''
+                  })
+                ) {
+                  throw new ClaudeBranchAnchorMissingError()
+                }
+
+                if (
+                  canRecover &&
                   wasResuming &&
                   !hasAssistantContent &&
                   isClaudeSessionExpiredError({
@@ -315,23 +345,37 @@ export class ClaudeAgent extends BaseAgent {
           const result = yield* runner.run()
 
           completionEvent = result.completionEvent
-          shouldRecoverSession = wasResuming && !hasAssistantContent && !hasProviderError
+          shouldRecoverSession =
+            canRecover && wasResuming && !hasAssistantContent && !hasProviderError
         } catch (error) {
           if (abortController.signal.aborted) {
             yield { type: 'error', message: 'Cancelled by user.' }
             return
           }
 
+          const isMissingBranchAnchor =
+            canRecover &&
+            attemptedBranchCutoff &&
+            !hasAssistantContent &&
+            (error instanceof ClaudeBranchAnchorMissingError ||
+              isClaudeBranchAnchorMissingError({
+                message: stringifyError(error),
+                stderr: stderrBuffer?.read() ?? ''
+              }))
+
+          shouldRetryBranchWithoutCutoff = isMissingBranchAnchor && forkedSessionId !== undefined
           shouldRecoverSession =
+            canRecover &&
             wasResuming &&
             !hasAssistantContent &&
-            (error instanceof ClaudeResumeExpiredError ||
+            ((isMissingBranchAnchor && forkedSessionId === undefined) ||
+              error instanceof ClaudeResumeExpiredError ||
               isClaudeSessionExpiredError({
                 message: stringifyError(error),
                 stderr: stderrBuffer?.read() ?? ''
               }))
 
-          if (!shouldRecoverSession) {
+          if (!shouldRetryBranchWithoutCutoff && !shouldRecoverSession) {
             yield {
               type: 'error',
               message: createClaudeSdkErrorMessage({
@@ -343,6 +387,21 @@ export class ClaudeAgent extends BaseAgent {
             }
             return
           }
+        }
+
+        if (shouldRetryBranchWithoutCutoff) {
+          if (abortController.signal.aborted) {
+            yield { type: 'error', message: 'Cancelled by user.' }
+            return
+          }
+
+          recoveryResumeSessionId = forkedSessionId
+          eventQueue.reset()
+          yield {
+            type: 'info',
+            message: 'Branch point was compacted, retrying with the forked conversation...'
+          }
+          continue
         }
 
         if (shouldRecoverSession) {
