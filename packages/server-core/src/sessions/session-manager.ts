@@ -22,6 +22,7 @@ import type {
 } from '@moon/shared/domain/chat'
 import type { ProjectRecord } from '@moon/shared/domain/project'
 import {
+  activateChatThreadInputSchema,
   approveToolCallInputSchema,
   cancelAgentOperationInputSchema,
   createMessageTurnInputSchema,
@@ -33,6 +34,7 @@ import {
   rejectToolCallInputSchema,
   runChatOperationInputSchema,
   sendChatMessageInputSchema,
+  type ActivateChatThreadInput,
   type ApproveToolCallInput,
   type CancelAgentOperationInput,
   type CreateMessageTurnInput,
@@ -58,10 +60,7 @@ import { SessionAgentEventApplier } from './session-agent-event-applier'
 import { SessionAgentTargetRuntime } from './session-agent-target-runtime'
 import { SessionAttachmentRuntime } from './session-attachment-runtime'
 import { SessionConversationAccessRuntime } from './session-conversation-access-runtime'
-import {
-  SessionMessageTurnRuntime,
-  createChatTitle
-} from './session-message-turn-runtime'
+import { SessionMessageTurnRuntime, createChatTitle } from './session-message-turn-runtime'
 import { SessionOperationLifecycleRuntime } from './session-operation-lifecycle-runtime'
 import { SessionOperationRunnerRuntime } from './session-operation-runner-runtime'
 import { SessionOperationRuntime } from './session-operation-runtime'
@@ -296,6 +295,15 @@ export class SessionManager {
     const parsedInput = listChatThreadsInputSchema.parse(input)
 
     return this.conversationAccessRuntime.listThreads(parsedInput.topicId)
+  }
+
+  /**
+   * 记录用户最后选择的 thread，作为跨重启默认 thread。
+   */
+  async activateThread(input: ActivateChatThreadInput): Promise<ThreadRecord> {
+    const parsedInput = activateChatThreadInputSchema.parse(input)
+
+    return this.conversationAccessRuntime.activateThread(parsedInput.threadId)
   }
 
   /**

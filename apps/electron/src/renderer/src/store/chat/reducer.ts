@@ -16,6 +16,7 @@ import type {
   TopicRecord
 } from '@moon/shared/domain/chat'
 import type { SendChatMessageInput } from '@moon/shared/domain/chat-validation'
+import { selectMostRecentlyActiveThread } from '@moon/shared/domain/chat-thread'
 
 import type { ChatDraftAttachment, ChatOperationState, ChatState } from './types'
 
@@ -23,6 +24,8 @@ export type ChatReducerAction =
   | { type: 'clearChatMessages' }
   | { type: 'clearChatError' }
   | { type: 'selectChatThread'; threadId: string }
+  | { type: 'activateChatThreadFulfilled'; thread: ThreadRecord }
+  | { type: 'activateChatThreadRejected'; threadId: string; error: unknown }
   | {
       type: 'replaceChatMessages'
       context: { sessionId: string | null; threadId: string | null; topicId: string | null }
@@ -647,6 +650,20 @@ export function chatReducer(state: ChatState, action: ChatReducerAction): ChatSt
     }
   }
 
+  if (action.type === 'activateChatThreadFulfilled') {
+    return {
+      ...state,
+      threads: upsertById(state.threads, action.thread),
+      ...(state.activeThreadId === action.thread.id ? { error: null } : {})
+    }
+  }
+
+  if (action.type === 'activateChatThreadRejected') {
+    return state.activeThreadId === action.threadId
+      ? { ...state, error: getErrorMessage(action.error) }
+      : state
+  }
+
   if (action.type === 'replaceChatMessages') {
     const { context } = action
 
@@ -756,11 +773,13 @@ export function chatReducer(state: ChatState, action: ChatReducerAction): ChatSt
   }
 
   if (action.type === 'loadChatThreadsFulfilled') {
+    const activeThread = selectMostRecentlyActiveThread(action.threads)
+
     return {
       ...state,
       threadsStatus: 'succeeded',
       threads: action.threads,
-      activeThreadId: action.threads[0]?.id ?? null
+      activeThreadId: activeThread?.id ?? null
     }
   }
 

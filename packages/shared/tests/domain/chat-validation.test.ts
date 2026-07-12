@@ -1,11 +1,19 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  activateChatThreadInputSchema,
   getChatMessagesInputSchema,
   sendChatMessageInputSchema
 } from '@moon/shared/domain/chat-validation'
 
 describe('chat input validation', () => {
+  it('trims active thread ids and rejects empty values', () => {
+    expect(activateChatThreadInputSchema.parse({ threadId: ' thread-1 ' })).toEqual({
+      threadId: 'thread-1'
+    })
+    expect(() => activateChatThreadInputSchema.parse({ threadId: '   ' })).toThrow()
+  })
+
   it('trims message input and rejects empty content', () => {
     expect(
       sendChatMessageInputSchema.parse({ sessionId: ' session-1 ', content: ' hello ' })

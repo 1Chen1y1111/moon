@@ -12,6 +12,10 @@ import { MOON_API_CHANNEL_MAP } from '@preload/channel-map'
 
 describe('MOON_API_CHANNEL_MAP', () => {
   it('uses matching sessions API names for session RPC channels', () => {
+    expect(MOON_API_CHANNEL_MAP['sessions.activateThread']).toEqual({
+      type: 'invoke',
+      channel: RPC_CHANNELS.sessions.activateThread
+    })
     expect(MOON_API_CHANNEL_MAP['sessions.createMessageTurn']).toEqual({
       type: 'invoke',
       channel: RPC_CHANNELS.sessions.createMessageTurn

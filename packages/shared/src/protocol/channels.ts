@@ -12,6 +12,7 @@ export const RPC_CHANNELS = {
     getMessages: 'sessions:getMessages',
     listTopics: 'sessions:listTopics',
     listThreads: 'sessions:listThreads',
+    activateThread: 'sessions:activateThread',
     createSession: 'sessions:createSession',
     deleteSession: 'sessions:deleteSession',
     importAttachment: 'sessions:importAttachment',

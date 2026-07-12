@@ -21,6 +21,7 @@ import type {
   TopicRecord
 } from '@moon/shared/domain/chat'
 import type {
+  ActivateChatThreadInput,
   ApproveToolCallInput,
   CancelAgentOperationInput,
   CreateMessageTurnInput,
@@ -60,6 +61,7 @@ export type MockMoonApi = {
     getMessages: MockFn<(input: GetChatMessagesInput) => Promise<MessageRecord[]>>
     listTopics: MockFn<(input: ListChatTopicsInput) => Promise<TopicRecord[]>>
     listThreads: MockFn<(input: ListChatThreadsInput) => Promise<ThreadRecord[]>>
+    activateThread: MockFn<(input: ActivateChatThreadInput) => Promise<ThreadRecord>>
     createSession: MockFn<() => Promise<SessionRecord>>
     deleteSession: MockFn<(input: DeleteChatSessionInput) => Promise<void>>
     importAttachment: MockFn<(input: ImportChatAttachmentInput) => Promise<ChatAttachmentRecord>>
@@ -278,6 +280,21 @@ function createMockWindowApi(options: MockWindowApiOptions = {}): MockMoonApi {
       listThreads: vi
         .fn<(input: ListChatThreadsInput) => Promise<ThreadRecord[]>>()
         .mockResolvedValue(chatThreads),
+      activateThread: vi
+        .fn<(input: ActivateChatThreadInput) => Promise<ThreadRecord>>()
+        .mockImplementation(async ({ threadId }) => {
+          const thread = chatThreads.find((candidate) => candidate.id === threadId)
+
+          if (thread === undefined) {
+            throw new Error('Chat thread not found.')
+          }
+
+          return {
+            ...thread,
+            lastActiveAt: '2026-05-09T00:00:05.000Z',
+            updatedAt: '2026-05-09T00:00:05.000Z'
+          }
+        }),
       createSession: vi.fn<() => Promise<SessionRecord>>().mockResolvedValue(createdChatSession),
       deleteSession: vi.fn<(input: DeleteChatSessionInput) => Promise<void>>().mockResolvedValue(),
       importAttachment: vi

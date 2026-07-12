@@ -170,6 +170,7 @@ function revokePreviewUrl(attachment: ChatDraftAttachment): void {
 export class ChatActionImpl {
   readonly #get: () => ChatStore
   readonly #set: Setter
+  #threadActivationQueue: Promise<void> = Promise.resolve()
 
   constructor(set: Setter, get: () => ChatStore, _api?: unknown) {
     void _api
@@ -222,9 +223,9 @@ export class ChatActionImpl {
     this.internal_sendChatMessage(input)
 
   /**
-   * 切换当前可见 thread，并清空旧消息投影以触发新 lineage 拉取。
+   * 立即切换当前可见 thread，并按用户选择顺序持久化最后活跃时间。
    */
-  switchChatThread = (threadId: string): void => {
+  switchChatThread = (threadId: string): Promise<void> => {
     const state = this.#get()
 
     if (
@@ -232,10 +233,15 @@ export class ChatActionImpl {
       state.activeThreadId === threadId ||
       !state.threads.some((thread) => thread.id === threadId)
     ) {
-      return
+      return Promise.resolve()
     }
 
     this.internal_dispatchChat({ type: 'selectChatThread', threadId })
+    this.#threadActivationQueue = this.#threadActivationQueue.then(() =>
+      this.internal_activateChatThread(threadId)
+    )
+
+    return this.#threadActivationQueue
   }
 
   cancelChatOperation = (input: CancelAgentOperationInput): Promise<AgentOperationRecord> =>
@@ -316,6 +322,18 @@ export class ChatActionImpl {
     } catch (error) {
       this.internal_dispatchChat({ type: 'loadChatThreadsRejected', error, topicId })
       throw error
+    }
+  }
+
+  /**
+   * 持久化 thread 激活状态，并让较早请求失败时不阻断后续选择写入。
+   */
+  internal_activateChatThread = async (threadId: string): Promise<void> => {
+    try {
+      const thread = await window.api.sessions.activateThread({ threadId })
+      this.internal_dispatchChat({ type: 'activateChatThreadFulfilled', thread })
+    } catch (error) {
+      this.internal_dispatchChat({ type: 'activateChatThreadRejected', error, threadId })
     }
   }
 

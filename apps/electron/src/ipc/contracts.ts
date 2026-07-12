@@ -17,6 +17,7 @@ import type {
   TopicRecord
 } from '@moon/shared/domain/chat'
 import type {
+  ActivateChatThreadInput,
   ApproveToolCallInput,
   CancelAgentOperationInput,
   CreateMessageTurnInput,
@@ -54,6 +55,7 @@ export type MoonApi = {
     getMessages: (input: GetChatMessagesInput) => Promise<MessageRecord[]>
     listTopics: (input: ListChatTopicsInput) => Promise<TopicRecord[]>
     listThreads: (input: ListChatThreadsInput) => Promise<ThreadRecord[]>
+    activateThread: (input: ActivateChatThreadInput) => Promise<ThreadRecord>
     createSession: () => Promise<SessionRecord>
     deleteSession: (input: DeleteChatSessionInput) => Promise<void>
     importAttachment: (input: ImportChatAttachmentInput) => Promise<ChatAttachmentRecord>

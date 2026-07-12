@@ -158,6 +158,7 @@ function createRuntimeFixture(): {
     getMessages: vi.fn(async () => messages),
     listTopics: vi.fn(async () => [topic]),
     listThreads: vi.fn(async () => [thread]),
+    activateThread: vi.fn(async () => thread),
     createSession: vi.fn(async () => session),
     deleteSession: vi.fn(async () => undefined),
     importAttachment: vi.fn(async () => attachment),
@@ -192,11 +193,10 @@ describe('createSessionHandlers', () => {
     const handlers = createSessionHandlers({ sessionManager: runtime })
 
     await expect(handlers.listSessions()).resolves.toEqual([values.session])
-    await expect(handlers.getMessages({ sessionId: 'session-1' })).resolves.toEqual(
-      values.messages
-    )
+    await expect(handlers.getMessages({ sessionId: 'session-1' })).resolves.toEqual(values.messages)
     await expect(handlers.listTopics({ sessionId: 'session-1' })).resolves.toEqual([values.topic])
     await expect(handlers.listThreads({ topicId: 'topic-1' })).resolves.toEqual([values.thread])
+    await expect(handlers.activateThread({ threadId: 'thread-1' })).resolves.toBe(values.thread)
     await expect(handlers.createSession()).resolves.toBe(values.session)
     await expect(handlers.deleteSession({ sessionId: 'session-1' })).resolves.toBeUndefined()
     await expect(
@@ -212,6 +212,7 @@ describe('createSessionHandlers', () => {
     expect(runtime.getMessages).toHaveBeenCalledWith({ sessionId: 'session-1' })
     expect(runtime.listTopics).toHaveBeenCalledWith({ sessionId: 'session-1' })
     expect(runtime.listThreads).toHaveBeenCalledWith({ topicId: 'topic-1' })
+    expect(runtime.activateThread).toHaveBeenCalledWith({ threadId: 'thread-1' })
     expect(runtime.createSession).toHaveBeenCalledOnce()
     expect(runtime.deleteSession).toHaveBeenCalledWith({ sessionId: 'session-1' })
     expect(runtime.importAttachment).toHaveBeenCalledWith({

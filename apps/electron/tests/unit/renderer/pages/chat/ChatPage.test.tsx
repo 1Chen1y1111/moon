@@ -531,9 +531,12 @@ describe('ChatPage', () => {
 
     expect(threadSelector).toHaveTextContent('分支问题')
 
-    act(() => useChatStore.getState().switchChatThread(thread.id))
+    await act(async () => {
+      await useChatStore.getState().switchChatThread(thread.id)
+    })
 
     await waitFor(() => expect(useChatStore.getState().activeThreadId).toBe(thread.id))
+    expect(api.sessions.activateThread).toHaveBeenCalledWith({ threadId: thread.id })
     await waitFor(() =>
       expect(api.sessions.getMessages).toHaveBeenCalledWith({
         sessionId: session.id,

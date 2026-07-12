@@ -64,6 +64,7 @@ function createWorkspaceRpcServerFixture() {
 
 describe('registerIpcHandlers', () => {
   const chatService = {
+    activateThread: vi.fn(),
     approveToolCall: vi.fn(),
     cancelOperation: vi.fn(),
     createMessageTurn: vi.fn(),

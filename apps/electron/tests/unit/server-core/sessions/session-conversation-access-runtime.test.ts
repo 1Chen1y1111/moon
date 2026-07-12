@@ -123,7 +123,17 @@ function createRuntimeFixture(
         )
       ),
       listByTopic: vi.fn(async (topicId) => threads.filter((thread) => thread.topicId === topicId)),
-      save: vi.fn(async (thread) => thread)
+      save: vi.fn(async (thread) => {
+        const index = threads.findIndex((candidate) => candidate.id === thread.id)
+
+        if (index === -1) {
+          threads.push(thread)
+        } else {
+          threads[index] = thread
+        }
+
+        return thread
+      })
     },
     topicsRepository: {
       findById: vi.fn(async (id) => topics.find((topic) => topic.id === id) ?? null),
@@ -172,21 +182,58 @@ describe('SessionConversationAccessRuntime', () => {
     expect(dependencies.threadsRepository.listBySession).not.toHaveBeenCalled()
   })
 
-  it('falls back to the first session thread when thread id is omitted', async () => {
-    const defaultThreadMessage = createMessage({ id: 'message-default', threadId: 'thread-1' })
+  it('falls back to the most recently active session thread when thread id is omitted', async () => {
+    const defaultThreadMessage = createMessage({ id: 'message-default', threadId: 'thread-2' })
     const { dependencies, runtime } = createRuntimeFixture({
       messages: [
-        defaultThreadMessage,
-        createMessage({ id: 'message-other', threadId: 'thread-2' })
+        createMessage({ id: 'message-other', threadId: 'thread-1' }),
+        defaultThreadMessage
       ],
-      threads: [createThread({ id: 'thread-1' }), createThread({ id: 'thread-2' })]
+      threads: [
+        createThread({ id: 'thread-1', lastActiveAt: '2026-05-09T00:00:01.000Z' }),
+        createThread({ id: 'thread-2', lastActiveAt: '2026-05-09T00:00:02.000Z' })
+      ]
     })
 
     await expect(runtime.getMessages({ sessionId: 'session-1' })).resolves.toEqual([
       defaultThreadMessage
     ])
     expect(dependencies.threadsRepository.listBySession).toHaveBeenCalledWith('session-1')
-    expect(dependencies.messagesRepository.listByThread).toHaveBeenCalledWith('thread-1')
+    expect(dependencies.messagesRepository.listByThread).toHaveBeenCalledWith('thread-2')
+  })
+
+  it('persists thread activation and uses it for the next default read', async () => {
+    const rootMessage = createMessage({ id: 'message-root', threadId: 'thread-root' })
+    const branchMessage = createMessage({ id: 'message-branch', threadId: 'thread-branch' })
+    const { dependencies, runtime } = createRuntimeFixture({
+      messages: [rootMessage, branchMessage],
+      threads: [
+        createThread({
+          id: 'thread-root',
+          lastActiveAt: '2026-05-09T00:00:02.000Z'
+        }),
+        createThread({
+          id: 'thread-branch',
+          lastActiveAt: '2026-05-09T00:00:01.000Z'
+        })
+      ]
+    })
+
+    const activated = await runtime.activateThread('thread-branch')
+
+    expect(activated.lastActiveAt).toBe(activated.updatedAt)
+    expect(new Date(activated.lastActiveAt ?? 0).getTime()).toBeGreaterThan(
+      new Date('2026-05-09T00:00:02.000Z').getTime()
+    )
+    expect(dependencies.threadsRepository.save).toHaveBeenCalledWith(activated)
+    await expect(runtime.getMessages({ sessionId: 'session-1' })).resolves.toEqual([branchMessage])
+  })
+
+  it('rejects activation for an unknown thread', async () => {
+    const { dependencies, runtime } = createRuntimeFixture()
+
+    await expect(runtime.activateThread('missing-thread')).rejects.toThrow('Chat thread not found.')
+    expect(dependencies.threadsRepository.save).not.toHaveBeenCalled()
   })
 
   it('returns the ancestor lineage projection for a branch thread', async () => {

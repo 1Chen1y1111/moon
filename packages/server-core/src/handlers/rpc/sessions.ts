@@ -5,6 +5,7 @@
 
 import { RPC_CHANNELS } from '@moon/shared/protocol'
 import type {
+  ActivateChatThreadInput,
   ApproveToolCallInput,
   CancelAgentOperationInput,
   CreateMessageTurnInput,
@@ -30,6 +31,7 @@ export const HANDLED_SESSION_CHANNELS = [
   RPC_CHANNELS.sessions.getMessages,
   RPC_CHANNELS.sessions.listTopics,
   RPC_CHANNELS.sessions.listThreads,
+  RPC_CHANNELS.sessions.activateThread,
   RPC_CHANNELS.sessions.createSession,
   RPC_CHANNELS.sessions.deleteSession,
   RPC_CHANNELS.sessions.importAttachment,
@@ -84,6 +86,9 @@ export function registerSessionHandlers(
   )
   server.handle(RPC_CHANNELS.sessions.listThreads, (_context, input: ListChatThreadsInput) =>
     sessionHandlers.listThreads(input)
+  )
+  server.handle(RPC_CHANNELS.sessions.activateThread, (_context, input: ActivateChatThreadInput) =>
+    sessionHandlers.activateThread(input)
   )
   server.handle(RPC_CHANNELS.sessions.createSession, () => sessionHandlers.createSession())
   server.handle(RPC_CHANNELS.sessions.deleteSession, (_context, input: DeleteChatSessionInput) =>

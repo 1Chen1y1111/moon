@@ -28,6 +28,7 @@ export const MOON_API_CHANNEL_MAP = {
   'sessions.getMessages': invoke(RPC_CHANNELS.sessions.getMessages),
   'sessions.listTopics': invoke(RPC_CHANNELS.sessions.listTopics),
   'sessions.listThreads': invoke(RPC_CHANNELS.sessions.listThreads),
+  'sessions.activateThread': invoke(RPC_CHANNELS.sessions.activateThread),
   'sessions.createSession': invoke(RPC_CHANNELS.sessions.createSession),
   'sessions.deleteSession': invoke(RPC_CHANNELS.sessions.deleteSession),
   'sessions.importAttachment': invoke(RPC_CHANNELS.sessions.importAttachment),

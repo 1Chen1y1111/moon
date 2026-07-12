@@ -17,6 +17,7 @@ import type {
   TopicRecord
 } from '@moon/shared/domain/chat'
 import type {
+  ActivateChatThreadInput,
   ApproveToolCallInput,
   CancelAgentOperationInput,
   CreateMessageTurnInput,
@@ -55,6 +56,7 @@ export type SessionHandlerRuntime = {
   getMessages: (input: GetChatMessagesInput) => Promise<MessageRecord[]>
   listTopics: (input: ListChatTopicsInput) => Promise<TopicRecord[]>
   listThreads: (input: ListChatThreadsInput) => Promise<ThreadRecord[]>
+  activateThread: (input: ActivateChatThreadInput) => Promise<ThreadRecord>
   createSession: () => Promise<SessionRecord>
   deleteSession: (input: DeleteChatSessionInput) => Promise<void>
   importAttachment: (input: ImportChatAttachmentInput) => Promise<ChatAttachmentRecord>
@@ -89,6 +91,7 @@ export function createSessionHandlers({
     getMessages: (input) => sessionManager.getMessages(input),
     listTopics: (input) => sessionManager.listTopics(input),
     listThreads: (input) => sessionManager.listThreads(input),
+    activateThread: (input) => sessionManager.activateThread(input),
     createSession: () => sessionManager.createSession(),
     deleteSession: (input) => sessionManager.deleteSession(input),
     importAttachment: (input) => sessionManager.importAttachment(input),

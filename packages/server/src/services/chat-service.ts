@@ -28,6 +28,7 @@ import type {
   TopicRecord
 } from '@moon/shared/domain/chat'
 import type {
+  ActivateChatThreadInput,
   ApproveToolCallInput,
   CancelAgentOperationInput,
   CreateMessageTurnInput,
@@ -89,6 +90,13 @@ export class ChatService {
    */
   listThreads(input: ListChatThreadsInput): Promise<ThreadRecord[]> {
     return this.sessionHandlers.listThreads(input)
+  }
+
+  /**
+   * 记录用户最后选择的 thread，供后续会话恢复。
+   */
+  activateThread(input: ActivateChatThreadInput): Promise<ThreadRecord> {
+    return this.sessionHandlers.activateThread(input)
   }
 
   /**

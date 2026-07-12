@@ -147,6 +147,45 @@ function createStreamingChatState(message: MessageRecord = assistantMessage): Ch
 }
 
 describe('chat reducer message ownership', () => {
+  it('restores the most recently active thread without reordering the selector list', () => {
+    const branchThread: ThreadRecord = {
+      ...threadOne,
+      id: 'thread-branch',
+      title: 'Branch thread',
+      type: 'continuation',
+      parentThreadId: threadOne.id,
+      sourceMessageId: assistantMessage.id,
+      lastActiveAt: '2026-05-09T00:00:03.000Z'
+    }
+    const rootThread: ThreadRecord = {
+      ...threadOne,
+      lastActiveAt: '2026-05-09T00:00:02.000Z'
+    }
+    let state = chatReducer(createInitialChatState(), {
+      type: 'loadChatThreadsFulfilled',
+      topicId: topicOne.id,
+      threads: [rootThread, branchThread]
+    })
+
+    expect(state.activeThreadId).toBe(branchThread.id)
+    expect(state.threads.map((thread) => thread.id)).toEqual([rootThread.id, branchThread.id])
+
+    state = chatReducer(state, { type: 'selectChatThread', threadId: rootThread.id })
+    state = chatReducer(state, {
+      type: 'activateChatThreadFulfilled',
+      thread: {
+        ...rootThread,
+        lastActiveAt: '2026-05-09T00:00:04.000Z',
+        updatedAt: '2026-05-09T00:00:04.000Z'
+      }
+    })
+
+    expect(state.activeThreadId).toBe(rootThread.id)
+    expect(state.threads.find((thread) => thread.id === rootThread.id)?.lastActiveAt).toBe(
+      '2026-05-09T00:00:04.000Z'
+    )
+  })
+
   it('ignores stale message loads after switching sessions', () => {
     let state = chatReducer(createInitialChatState(), {
       type: 'loadChatMessagesPending',

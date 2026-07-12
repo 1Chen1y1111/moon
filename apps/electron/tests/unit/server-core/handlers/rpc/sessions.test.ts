@@ -165,6 +165,7 @@ function createSessionHandlersFixture(): {
     getMessages: vi.fn(async () => messages),
     listTopics: vi.fn(async () => [topic]),
     listThreads: vi.fn(async () => [thread]),
+    activateThread: vi.fn(async () => thread),
     createSession: vi.fn(async () => session),
     deleteSession: vi.fn(async () => undefined),
     importAttachment: vi.fn(async () => attachment),
@@ -262,6 +263,11 @@ describe('registerSessionHandlers', () => {
       })
     ).resolves.toEqual([values.thread])
     await expect(
+      invokeRegisteredHandler(registeredHandlers, RPC_CHANNELS.sessions.activateThread, {
+        threadId: 'thread-1'
+      })
+    ).resolves.toBe(values.thread)
+    await expect(
       invokeRegisteredHandler(registeredHandlers, RPC_CHANNELS.sessions.createSession)
     ).resolves.toBe(values.session)
     await expect(
@@ -323,6 +329,7 @@ describe('registerSessionHandlers', () => {
     expect(sessionHandlers.getMessages).toHaveBeenCalledWith({ sessionId: 'session-1' })
     expect(sessionHandlers.listTopics).toHaveBeenCalledWith({ sessionId: 'session-1' })
     expect(sessionHandlers.listThreads).toHaveBeenCalledWith({ topicId: 'topic-1' })
+    expect(sessionHandlers.activateThread).toHaveBeenCalledWith({ threadId: 'thread-1' })
     expect(sessionHandlers.createSession).toHaveBeenCalledOnce()
     expect(sessionHandlers.deleteSession).toHaveBeenCalledWith({ sessionId: 'session-1' })
     expect(sessionHandlers.importAttachment).toHaveBeenCalledWith({

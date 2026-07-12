@@ -148,6 +148,7 @@ function createSessionHandlersFixture(): {
       getMessages: vi.fn(async () => [message]),
       listTopics: vi.fn(async () => [topic]),
       listThreads: vi.fn(async () => [thread]),
+      activateThread: vi.fn(async () => thread),
       createSession: vi.fn(async () => session),
       deleteSession: vi.fn(async () => undefined),
       importAttachment: vi.fn(async () => attachment),
